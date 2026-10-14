@@ -13,6 +13,7 @@
 #include "dataread.hpp"
 #include "editloop.hpp"
 #include "gamepad.hpp"
+#include "gamepad_port.hpp"
 #include "itemdata.hpp"
 #include "mainselect.hpp"
 #include "mathutil.hpp"
@@ -26,6 +27,7 @@
 #include "mglib.hpp"
 #include "rect.hpp"
 #include "savedata.hpp"
+#include "shop_menu.hpp"
 #include "snd.hpp"
 #include "stockitem.hpp"
 #include "texture.hpp"
@@ -57,39 +59,6 @@ struct FishMenuWork {
 extern FishMenuWork FishMenu;
 extern CTexture    *FishMenuTex;
 
-// Defined by ps2/src/shop.cpp without a header declaration.
-struct ShopMenuWork {
-    s16            shop_no;
-    s16            side;
-    s16            mode;
-    s16            key_used;
-    PERSONAL_BOARD board;
-    s32            unk_168;
-    float          stock_y;
-    float          stock_scroll;
-    s16            stock_row_offset;
-    u8             stock_top_row;
-    u8             unk_177;
-    float          cursor_x;
-    float          cursor_y;
-    s16            talk_mode;
-    s16            unk_182;
-    s32            step_count;
-    s16            ready;
-    s16            tex_block;
-    s16            unk_18C;
-    s16            alpha;
-    s16            lang;
-    s16            unk_192;
-    s16            person_state;
-    s16            person_tex_block;
-    s16            unk_198;
-    s16            msg_mode;
-    s16            motion;
-    s16            msg_no;
-    s32            draw_delay;
-    s32            idle_count;
-};
 
 extern ShopMenuWork ShopMenu;
 extern CTexture    *ShopBoard;
@@ -238,8 +207,7 @@ void ChargeShopMaxDraw(int max, int x, int y, int alpha) {
 
 } // namespace
 
-// The stock board's 60 cells (12 rows) are filled and drawn; retail drew 128 cells from its 120-cell
-// arrays, reading past them, and the rows past the twelfth lie below the board's clip in any case.
+// Draws the 60 cells it fills; retail drew 128 from 120-cell arrays.
 PORT_OVERRIDE void ChargeShopBoardDraw(int x, int y, int alpha) {
     s16 items[60];
     u8  values[60];
@@ -680,4 +648,28 @@ PORT_OVERRIDE int FishingExchangeKey() {
     }
 
     return result;
+}
+
+// Cross and triangle wait a frame when that frame's press moves the cursor off the stock board (#109).
+PORT_OVERRIDE int CommonShopLoop() {
+    int done = 0;
+
+    ShopMenu.key_used = 0;
+
+    switch (ChargeOrShopFlag) {
+        case SHOP_KIND_CHARGE:
+            done = ChargeShopLoop();
+            break;
+        case SHOP_KIND_ITEM: {
+            int  cursor = ShopMenu.board.cursor;
+            bool leaving = ShopMenu.ready != 0 && ShopMenu.talk_mode == SHOP_TALK_NONE && ShopMenu.side == SHOP_SIDE_STOCK &&
+                           ((GamePad.Down(PAD_RIGHT) && cursor % 5 == 4) || (GamePad.Down(PAD_DOWN) && cursor >= 25));
+            PadHoldDown(leaving ? PAD_CROSS | PAD_TRIANGLE : 0);
+            done = ItemShopLoop2();
+            PadHoldDown(0);
+            break;
+        }
+    }
+
+    return done;
 }
