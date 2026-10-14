@@ -396,7 +396,11 @@ int CSHOT_EFFECT::Set(float *position, float *target, int owner, int sub_id, int
 
     if (effect_data == NULL) {
         printf("******** shot err ***********\n");
+#ifdef PORT
+        return -1;
+#else
         return;
+#endif
     }
 
     for (int i = 0; i < slot_count; i++) {
@@ -407,7 +411,11 @@ int CSHOT_EFFECT::Set(float *position, float *target, int owner, int sub_id, int
     }
 
     if (slot == -1) {
+#ifdef PORT
+        return -1;
+#else
         return;
+#endif
     }
 
     // An effect with no first-phase motion starts in its flying phase.

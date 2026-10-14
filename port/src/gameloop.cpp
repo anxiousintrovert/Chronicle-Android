@@ -12,7 +12,6 @@
 
 #include "battle_globals.hpp"
 #include "btsysscript.hpp"
-#include "caption_text.hpp"
 #include "dataread.hpp"
 #include "dataread_port.hpp"
 #include "dataset.hpp"
@@ -37,11 +36,15 @@
 #include "platform/config.hpp"
 #include "platform/input.hpp"
 #include "platform/overlay.hpp"
+#if defined(__ANDROID__)
+#include "platform/touch_overlay.hpp"
+#endif
 #include "presence.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
 #include "texture.hpp"
 #include "textwipe.hpp"
+#include "title/cursol.hpp"
 #include "title/opening.hpp"
 #include "title/rushmovi.hpp"
 #include "title/title.hpp"
@@ -93,10 +96,7 @@ struct FpsOverlay {
     bool                on = false;
     OverlayRate         frames;
     OverlayRate         ticks;
-    std::string         text;
-    gfx::LogicalMapping mapping = {};
     gfx::DisplayListRef list;
-    bool                font = false;
 };
 
 FpsOverlay g_fps;
@@ -139,11 +139,6 @@ void GiveOnArrival() {
     }
 }
 
-bool SameMapping(const gfx::LogicalMapping &a, const gfx::LogicalMapping &b) {
-    return a.scale_x == b.scale_x && a.scale_y == b.scale_y && a.offset_x == b.offset_x &&
-           a.offset_y == b.offset_y && a.pixel_width == b.pixel_width && a.pixel_height == b.pixel_height;
-}
-
 // Recorded again only when the text or the window's mapping changed. Always drawn in the overlay's
 // own 5x7 font, so the badge looks the same on every screen: the game's message font is only
 // loaded inside a mode, which made a second, different-looking badge for the intro and loading.
@@ -151,15 +146,15 @@ const gfx::DisplayList *FpsOverlayList() {
     if (!g_fps.on) {
         return nullptr;
     }
-    std::string         text = GameFpsText();
-    gfx::LogicalMapping mapping = gfx::GetLogicalMapping(gfx::kMainTarget);
-    const bool          font = caption::Ready();
-    if (!g_fps.list || text != g_fps.text || !SameMapping(mapping, g_fps.mapping) || font != g_fps.font) {
-        g_fps.font = font;
-        g_fps.list = OverlayRecord(text);
-        g_fps.text = std::move(text);
-        g_fps.mapping = mapping;
+    gfx::BeginRecording();
+    if (!gfx::Recording()) return nullptr;
+    if (g_fps.on) {
+        const std::string text = GameFpsText();
+        const auto mapping = gfx::GetUiMapping(gfx::kMainTarget);
+        const int pixel = OverlayPixelSize(gfx::GetLogicalMapping(gfx::kMainTarget));
+        OverlayDrawText(text, mapping, pixel, pixel * kOverlayPadding, pixel * kOverlayPadding);
     }
+    g_fps.list = gfx::EndRecording();
     return g_fps.list.get();
 }
 
@@ -198,6 +193,8 @@ struct Jump {
     bool set = false;
     int  mode = GAME_MODE_MENU;
     int  map = 0;
+    bool existing_title = false;
+    bool options_only = false;
 };
 
 Jump g_jump;
@@ -242,12 +239,15 @@ void ModeInit(int &title_ran, int &exist_data, bool &skip_title) {
             SndInitialize(4, 30, 4, 5);
             if (!title_ran) {
                 title_ran = 1;
-                exist_data = InitExistData();
+                exist_data = g_jump.existing_title ? 1 : InitExistData();
                 if (ConfigWords()[kConfigGameClear] != 0) {
                     GameClearFlag = 1;
                 }
             }
             TitleInit(exist_data);
+            if (g_jump.options_only) {
+                CProcess.no = TITLE_STEP_OPTION_INIT;
+            }
             break;
         case GAME_MODE_RUSH_MOVIE:
             SndInitialize(4, 30, 4, 5);
@@ -590,6 +590,9 @@ bool GameSetJump(const char *spec) {
         jump.mode = GAME_MODE_DUNGEON;
     } else if (name == "title") {
         jump.mode = GAME_MODE_TITLE;
+    } else if (name == "options") {
+        jump.mode = GAME_MODE_TITLE;
+        jump.options_only = true;
     } else if (name == "rush") {
         jump.mode = GAME_MODE_RUSH_MOVIE;
     } else if (name == "opening") {

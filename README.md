@@ -56,6 +56,41 @@ Game text can come from JSON language files (one per language, laid out as Minec
 TrueType font so it stays sharp at any window size. The first start writes the language files from your own
 game data; the Dark Cloud community font is bundled. See `docs/LOCALIZATION.md`.
 
+## Android build
+
+This fork also builds the Chronicle port as a native Android app for `arm64-v8a` and `x86_64`, with the
+app name and launcher identity set to Chronicle. The Android work adds a multi-touch PS2-style controller,
+hides it when a hardware controller or keyboard/mouse is connected, supports Foldable display changes,
+exposes the port's settings and controller bindings, and includes Android renderer and performance work.
+The renderer requires Vulkan 1.3 and a compatible GPU. Android support is still under active development.
+
+The app does not include Dark Cloud game data. On first launch, select your own PAL disc image; the app
+imports it into private storage. Keep disc images and extracted `DATA.DAT`/`DATA.HD2` files out of this
+repository and APK.
+
+### Build on Windows
+
+Install JDK 17 and Android Studio's SDK platform 35, build tools 35.0.0, NDK 27.0.12077973, and CMake
+3.31.6. Clone this fork with its Kazarov submodule:
+
+```powershell
+git clone --recurse-submodules https://github.com/anxiousintrovert/Chronicle-Android.git
+cd Chronicle-Android\android
+.\fetch-deps.ps1
+.\gradlew.bat assembleDebug
+```
+
+The Gradle wrapper pins Gradle 8.13. `fetch-deps.ps1` downloads SDL 3.4.16 and glslang 16.6.0, checking
+their archive SHA-256 values before extraction. The debug APK is written to
+`android/app/build/outputs/apk/debug/app-debug.apk`.
+
+For local device testing, `android/publish-test-apk.ps1` builds and zips a timestamp-labeled package,
+archives previous Chronicle test packages in `DARKCLOUDBUILDS`, and leaves the current ZIP in the chosen
+destination root. Its default destination is the maintainer's mapped `Z:\` Games share; pass
+`-DestinationRoot` to use another folder.
+
+See [`android/README.md`](android/README.md) for prerequisites, setup, and build details.
+
 ## Repository layout
 
 - `ps2/src`, `ps2/include`: matching game sources and headers.

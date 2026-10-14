@@ -4,10 +4,15 @@
 #include <libvu0.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 
 #include "collision.hpp"
 #include "dataalloc.hpp"
@@ -244,6 +249,13 @@ void DrawShadowPass(CFrame *frame, float *position, float *normal, int pass, Dra
     if (!frame) {
         return;
     }
+#if defined(__ANDROID__)
+    using ShadowClock = std::chrono::steady_clock;
+    static auto window = ShadowClock::now();
+    static unsigned calls = 0;
+    static double total_ms = 0.0, max_ms = 0.0;
+    auto began = ShadowClock::now();
+#endif
     g_shadow_program = program;
     sceVu0CopyVector(mgRenderInfo.shadow_point, position);
     sceVu0CopyVector(mgRenderInfo.shadow_normal, normal);
@@ -265,6 +277,17 @@ void DrawShadowPass(CFrame *frame, float *position, float *normal, int pass, Dra
     mgRenderInfo.shadow_pass = 0;
     sceVu0CopyMatrix(mgRenderInfo.perspective, perspective);
     sceVu0CopyMatrix(mgRenderInfo.viewport, viewport);
+#if defined(__ANDROID__)
+    auto ended = ShadowClock::now();
+    double ms = std::chrono::duration<double, std::milli>(ended - began).count();
+    ++calls; total_ms += ms; max_ms = std::max(max_ms, ms);
+    if (ended - window >= std::chrono::seconds(5)) {
+        __android_log_print(ANDROID_LOG_INFO, "ChronicleShadowTiming",
+                            "calls=%u avg=%.3fms max=%.3fms total=%.1fms",
+                            calls, total_ms / calls, max_ms, total_ms);
+        calls = 0; total_ms = max_ms = 0.0; window = ended;
+    }
+#endif
 }
 
 } // namespace
@@ -585,13 +608,16 @@ PORT_OVERRIDE void MGBeginFrame() {
     sceVu0UnitMatrix(mgZeroMatrix);
     mgZeroMatrix[0][0] = mgZeroMatrix[1][1] = mgZeroMatrix[2][2] = mgZeroMatrix[3][3] = 0.0f;
 
-    ClearBars();
     if (mgClearBackFlag) {
         MGClearScreen(static_cast<u_char>(mgBackColor[0]), static_cast<u_char>(mgBackColor[1]),
                       static_cast<u_char>(mgBackColor[2]), static_cast<u_char>(mgBackColor[3]));
     } else {
         MGClearZBuffer(0);
     }
+    // The game clears its 4:3 frame to a scene colour. In fill mode that clear can
+    // extend across the window; clear the letterbox area afterwards so menus with
+    // no geometry outside the frame do not expose the scene's blue clear colour.
+    ClearBars();
 }
 
 // Retail waits for the next VSync unless one already passed while the frame was built and the

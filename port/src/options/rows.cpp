@@ -5,6 +5,7 @@
 #include <deque>
 #include <format>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,6 +22,7 @@ namespace options {
 namespace {
 
 constexpr int kMapOff = 3;
+std::span<const Row> DisplayRows();
 
 int Two(const Config &) {
     return 2;
@@ -279,9 +281,25 @@ void SetAspect(Config &config, int choice) {
     config.aspect = choice == 1 ? ConfigAspect::FourThree : ConfigAspect::Auto;
 }
 
-// 50% to 200% in tenths.
 int UiScaleCount(const Config &) {
     return 16;
+}
+
+// Render scale uses 50% to 200% in ten-point steps.
+int RenderScaleChoice(const Config &config) {
+    return std::clamp(static_cast<int>(std::lround(config.render_scale * 10.0f)) - 5, 0, 15);
+}
+
+int RenderScaleCount(const Config &) {
+    return 16;
+}
+
+void SetRenderScale(Config &config, int choice) {
+    config.render_scale = (choice + 5) / 10.0f;
+}
+
+std::string RenderScaleText(const Config &config) {
+    return std::format("{}%", static_cast<int>(std::lround(config.render_scale * 100.0f)));
 }
 
 int UiScaleChoice(const Config &config) {
@@ -623,6 +641,28 @@ const Row kDisplayRows[] = {
     GameRow<&ConfigGameOptions::soft_focus, true>("video.soft_focus", "Soft Focus", "On|Off", 0x169),
 };
 
+const Row kAndroidDisplayRows[] = {
+    SettingRow("video.render_scale", "Render Resolution",
+               "\"Render Resolution\"\nThe game's internal image\nsize. Lower values improve\nspeed and battery life.",
+               RenderScaleCount, RenderScaleChoice, SetRenderScale, RenderScaleText),
+    kDisplayRows[2],
+    kDisplayRows[3],
+    kDisplayRows[4],
+    kDisplayRows[5],
+    kDisplayRows[6],
+    kDisplayRows[7],
+    kDisplayRows[8],
+    kDisplayRows[9],
+    kDisplayRows[10],
+};
+
+std::span<const Row> DisplayRows() {
+    if (WindowHasFixedDisplay()) {
+        return kAndroidDisplayRows;
+    }
+    return kDisplayRows;
+}
+
 const Row kAudioRows[] = {
     SettingRow("audio.master_volume", "Volume", "\"Volume\"\nHow loud the game is.", VolumeCount, VolumeChoice,
                SetVolume, VolumeText),
@@ -801,15 +841,18 @@ std::span<const Row> BindingRows() {
 } // namespace
 
 std::span<const Page> Pages() {
-    static const std::vector<Page> pages = {
+    static const std::vector<Page> pages = [] {
+        const std::span<const Row> display_rows = DisplayRows();
+        return std::vector<Page>{
         {"Game",          "\"Game\"\nHow the game plays.",                           kGameRows         },
-        {"Display",       "\"Display\"\nThe window and picture.",                    kDisplayRows      },
+        {"Display",       "\"Display\"\nThe window and picture.",                    display_rows       },
         {"Audio",         "\"Audio\"\nSound and music.",                             kAudioRows        },
         {"Controls",      "\"Controls\"\nMouse, gamepad and gyro.",                  kControlRows      },
         {"Text",          "\"Text\"\nLanguage, lettering and\nsymbols.",             kTextRows         },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},
         {"Bindings",      "\"Bindings\"\nWhat each key and\nmouse button does.",       BindingRows()     },
-    };
+        };
+    }();
     return pages;
 }
 

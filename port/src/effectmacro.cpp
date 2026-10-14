@@ -29,23 +29,25 @@ float &Jitter(int i, int j) { return g_jitter[i * 15 + j]; }
 // object in front of the focus planes still takes up as much of the wobble as its depth gives.
 constexpr float kHazeNear = 10.0f;
 
-// The columns of the logical frame the effect covers (retail's screen was the frame; a target that
-// shows past it is covered to its edges) and the texel width of the blurred image laid over them.
+// The logical rectangle the effect covers (retail's screen was the frame; a target that shows past
+// it is covered to its edges) and the texel size of the blurred image laid over it.
 struct Span {
     float left;
     float right;
+    float top;
+    float bottom;
     float sample_left;
     float texels;
-    float row_scale;
+    float sample_top;
+    float rows;
 };
 
-// A band vertex: x in 12.4 GS units of the logical frame, stretched over the span; across is how
-// far over the blurred image it samples, v its row there.
-gfx::Vertex2D StripVertex(const Span &span, int x, int y, unsigned z, float across, int v, int alpha) {
+// A band vertex: x in 12.4 GS units of the logical frame, stretched over the span; across and down
+// are how far over the blurred image it samples.
+gfx::Vertex2D StripVertex(const Span &span, int x, float y, unsigned z, float across, float down, int alpha) {
     const float place = MGPortLogicalX(x) / kScreenWidth;
-    return draw2d::Vertex(span.left + place * (span.right - span.left), MGPortLogicalY(y) * draw2d::RowScale(),
-                          MGPortDepth(z & 0xFFFFFF), span.sample_left + across * span.texels,
-                          static_cast<float>(v) / 16.0f * span.row_scale, 0x80,
+    return draw2d::Vertex(span.left + place * (span.right - span.left), y, MGPortDepth(z & 0xFFFFFF),
+                          span.sample_left + across * span.texels, span.sample_top + down * span.rows, 0x80,
                           0x80, 0x80, static_cast<u_char>(alpha));
 }
 
@@ -170,14 +172,19 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     gfx::LogicalRect   visible = gfx::VisibleLogicalRect(target);
     int                left = std::min(0, static_cast<int>(std::floor(visible.x)));
     int                right = std::max(0x280, static_cast<int>(std::ceil(visible.x + visible.w)));
+    float              top = std::min(0.0f, visible.y);
+    float              bottom = std::max(kScreenHeight, visible.y + visible.h);
+    gfx::Rect          capture = {static_cast<int32_t>(std::floor(left)), static_cast<int32_t>(std::floor(top)),
+                                  static_cast<int32_t>(std::ceil(right) - std::floor(left)),
+                                  static_cast<int32_t>(std::ceil(bottom) - std::floor(top))};
     uint32_t           half_width = static_cast<uint32_t>(right - left + 1) / 2;
-    uint32_t           half_height = SCREEN_HALF_HEIGHT;
+    uint32_t           half_height = static_cast<uint32_t>(std::ceil((bottom - top) * 0.5f));
     uint32_t           quarter_width = (half_width + 1) / 2;
     uint32_t           quarter_height = half_height / 2;
-    Span               span = {static_cast<float>(left), static_cast<float>(right),
+    Span               span = {static_cast<float>(left), static_cast<float>(right), top, bottom,
                                haze ? static_cast<float>(left) : 0.0f,
                                haze ? static_cast<float>(right - left) : static_cast<float>(half_width),
-                               haze ? 2.0f : 1.0f};
+                               0.0f, haze ? bottom - top : static_cast<float>(half_height)};
 
     sceVu0FVECTOR depth_point[4] = {
         {0.0f, 0.0f, focus[0],         1.0f},
@@ -205,7 +212,7 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
         screen[2][2] = screen[3][2] = static_cast<int>(far_front[2] / far_front[3]);
     }
 
-    gfx::TextureHandle snapshot = gfx::NamedRenderTarget("dof frame", 0x280, SCREEN_HEIGHT, false, false, true);
+    gfx::TextureHandle snapshot = gfx::NamedRenderTarget("dof frame", 0x280, SCREEN_HEIGHT, false, true);
     gfx::TextureHandle beyond = haze ? gfx::kNullTexture :
                                        gfx::NamedRenderTarget("dof beyond", 0x280, SCREEN_HEIGHT, true, true);
     gfx::TextureHandle near_image = haze ? gfx::NamedRenderTarget("dof near", 0x280, SCREEN_HEIGHT, true, true) :
@@ -213,13 +220,13 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     gfx::TextureHandle far_image = gfx::kNullTexture;
     bool               ready = snapshot != gfx::kNullTexture && (haze || beyond != gfx::kNullTexture) &&
                                near_image != gfx::kNullTexture && target == gfx::kMainTarget &&
-                               gfx::SnapshotFrame(snapshot);
+                               gfx::BlitTexture(target, capture, snapshot, capture, gfx::Filter::Linear);
 
     if (ready) {
         DrawBeyond(haze ? near_image : beyond, snapshot, haze ? focus[0] - 84.0f : focus[0],
                    haze ? focus[0] + 84.0f : focus[0], haze);
         if (!haze) {
-            Resize(beyond, span.left, 0.0f, span.right, kScreenHeight, near_image, half_width, half_height);
+            Resize(beyond, span.left, top, span.right, bottom, near_image, half_width, half_height);
         }
 
         if (level >= 2) {
@@ -235,7 +242,7 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
 
                 if (half != gfx::kNullTexture && quarter != gfx::kNullTexture && far_image != gfx::kNullTexture) {
                     DrawBeyond(beyond, snapshot, focus[1], focus[1], false);
-                    Resize(beyond, span.left, 0.0f, span.right, kScreenHeight, half, half_width, half_height);
+                    Resize(beyond, span.left, top, span.right, bottom, half, half_width, half_height);
                     Resize(half, 0.0f, 0.0f, static_cast<float>(half_width), static_cast<float>(half_height), quarter,
                            quarter_width, quarter_height);
                     Resize(quarter, 0.0f, 0.0f, static_cast<float>(quarter_width), static_cast<float>(quarter_height),
@@ -271,15 +278,16 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
     for (phase = 0; phase < 1; phase++) {
         for (k = 0; k < 8; k++) {
             strip.clear();
+            float y_top = top + (bottom - top) * static_cast<float>(k) / 8.0f;
+            float y_bottom = top + (bottom - top) * static_cast<float>(k + 1) / 8.0f;
 
             for (j = 0; j < 41; j++) {
                 int   x = (j << 8) + 0x6C00;
-                int   v = k << 9;
-                int   v_bottom = std::min(v + 0x200, SCREEN_HALF_HEIGHT << 4);
                 float across = (float) j / 40.0f;
-                strip.push_back(StripVertex(span, x, v + GS_Y_OFFSET, screen[(j + phase) % 2][2], across, v, alpha));
-                strip.push_back(StripVertex(span, x, v_bottom + GS_Y_OFFSET, screen[(j + phase) % 2][2], across,
-                                            v_bottom, alpha));
+                strip.push_back(StripVertex(span, x, y_top, screen[(j + phase) % 2][2], across,
+                                            static_cast<float>(k) / 8.0f, alpha));
+                strip.push_back(StripVertex(span, x, y_bottom, screen[(j + phase) % 2][2], across,
+                                            static_cast<float>(k + 1) / 8.0f, alpha));
             }
 
             AppendStrip(triangles, strip);
@@ -319,25 +327,28 @@ PORT_OVERRIDE void DepthOfField(float *focus, int level, int alpha, int blur) {
             alpha = 0x80;
         }
 
-        for (j = 0; j < SCREEN_HALF_HEIGHT / 16; j++) {
+        constexpr int far_bands = SCREEN_HALF_HEIGHT / 16;
+        for (j = 0; j < far_bands; j++) {
             strip.clear();
+            float y_top = top + (bottom - top) * static_cast<float>(j) / static_cast<float>(far_bands);
+            float y_bottom = top + (bottom - top) * static_cast<float>(j + 1) / static_cast<float>(far_bands);
 
             for (i = 0; i < 21; i++) {
                 int x = (i << 9) + 0x6C00;
-                int v = j << 8;
-                int y = v + GS_Y_OFFSET;
-                int y_bottom = y + 0x100;
                 float across = (float) i / 20.0f;
-                int   v_bottom = v + 0x100;
 
                 if (blur > 0 && i > 0 && i < 20) {
                     strip.push_back(
-                        StripVertex(span, x - (int) Jitter(i, j), y, screen[2 + i % 2][2], across, v, alpha));
-                    strip.push_back(StripVertex(span, x - (int) Jitter(i, j + 1), y_bottom, screen[2 + i % 2][2],
-                                                across, v_bottom, alpha));
+                        StripVertex(span, x - (int) Jitter(i, j), y_top, screen[2 + i % 2][2], across,
+                                    static_cast<float>(j) / static_cast<float>(far_bands), alpha));
+                    strip.push_back(StripVertex(span, x - (int) Jitter(i, j + 1), y_bottom,
+                                                screen[2 + i % 2][2], across,
+                                                static_cast<float>(j + 1) / static_cast<float>(far_bands), alpha));
                 } else {
-                    strip.push_back(StripVertex(span, x, y, screen[2 + i % 2][2], across, v, alpha));
-                    strip.push_back(StripVertex(span, x, y_bottom, screen[2 + i % 2][2], across, v_bottom, alpha));
+                    strip.push_back(StripVertex(span, x, y_top, screen[2 + i % 2][2], across,
+                                                static_cast<float>(j) / static_cast<float>(far_bands), alpha));
+                    strip.push_back(StripVertex(span, x, y_bottom, screen[2 + i % 2][2], across,
+                                                static_cast<float>(j + 1) / static_cast<float>(far_bands), alpha));
                 }
             }
 

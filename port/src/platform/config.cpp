@@ -484,6 +484,14 @@ bool Apply(Config &config, std::string_view name, const Json &value) {
         config.ui_scale = scale;
         return true;
     }
+    if (name == "video.render_scale") {
+        float scale = 0.0f;
+        if (!ReadNumber(value, scale) || !(scale >= 0.5f && scale <= 2.0f)) {
+            return false;
+        }
+        config.render_scale = scale;
+        return true;
+    }
     if (name == "video.show_fps") {
         return ReadBool(value, config.show_fps);
     }
@@ -647,6 +655,7 @@ std::string ConfigSerialize(const Config &config) {
     root["video"]["fullscreen"] = config.fullscreen;
     root["video"]["aspect"] = config.aspect == ConfigAspect::FourThree ? "4:3" : "auto";
     root["video"]["ui_scale"] = Shortest(config.ui_scale);
+    root["video"]["render_scale"] = Shortest(config.render_scale);
     root["video"]["show_fps"] = config.show_fps;
     root["video"]["fps_detail"] = FpsDetailName(config.fps_detail);
     root["video"]["detail_distance"] = Shortest(config.detail_distance);

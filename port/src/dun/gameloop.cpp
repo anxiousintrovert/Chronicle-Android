@@ -161,6 +161,119 @@ CTexture *NamedTexture(const char *name) {
     return TexManager.GetTexture(const_cast<char *>(name), -1);
 }
 
+// The floor image is an atlas: the dungeon prefix and floor digits occupy separate regions.
+// Draw the matching regions together instead of using PAL's precomposed-banner coordinates, which
+// leave the prefix at the atlas's left edge on the Android build's loaded English assets.
+void DrawFloorTitle(CTexture *texture) {
+    int shift = 0;
+    int floor_no = UserStatus->cur_floor >= 9 ? -0x24 : 0;
+    int digit_x;
+
+    if (LanguageCode == LANG_JAPANESE) {
+        switch (selectMapNo) {
+            case DUNGEON_DIVINE_BEAST_CAVE:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xE2, 0xAA, 0x72, 0x32), CRect_i_(0, 0, 0x72, 0x32), rogoAlphaA[2]);
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x17D, 0xAA, 0x4C, 0x32), CRect_i_(0x72, 0, 0x4C, 0x32), rogoAlphaA[2]);
+                break;
+            case DUNGEON_WISE_OWL_FOREST:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0xBE, 0xAA, 0xBE, 0x32), CRect_i_(0, 0, 0xBE, 0x32), rogoAlphaA[2]);
+                shift = 0x40;
+                break;
+            case DUNGEON_SHIPWRECK:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xF5, 0xAA, 0x4C, 0x32), CRect_i_(0, 0, 0x4C, 0x32), rogoAlphaA[2]);
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x159, 0xAA, 0x4C, 0x32), CRect_i_(0x4C, 0, 0x4C, 0x32), rogoAlphaA[2]);
+                shift = -0x24;
+                break;
+            case DUNGEON_SUN_MOON_TEMPLE:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0xE8, 0xAA, 0x98, 0x32), CRect_i_(0, 0, 0x98, 0x32), rogoAlphaA[2]);
+                shift = 0x40;
+                break;
+            case DUNGEON_MOON_SEA:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xD7, 0xAA, 0x4C, 0x32), CRect_i_(0, 0, 0x4C, 0x32), rogoAlphaA[2]);
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x13B, 0xAA, 0xBE, 0x32), CRect_i_(0x4C, 0, 0xBE, 0x32), rogoAlphaA[2]);
+                shift = -0x40;
+                break;
+            case DUNGEON_GALLERY_OF_TIME:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x135, 0xAA, 0x98, 0x32), CRect_i_(0, 0, 0x98, 0x32), rogoAlphaA[2]);
+                shift = -0x40;
+                break;
+            default:
+                break;
+        }
+
+        if (BtUraDongeon != 0) {
+            set2DSprite(Vif1Packet, texture, CRect_i_(0x120, 0xE6, 0x40, 0x38), CRect_i_(0x13A, 0x78, 0x40, 0x38), rogoAlphaA[2]);
+        } else if (UserStatus->res_limit_zone_current >= 0) {
+            set2DSprite(Vif1Packet, texture, CRect_i_(0xD4, 0xE6, 0xD8, 0x30), CRect_i_(0, 0x78, 0xD8, 0x30), rogoAlphaA[2]);
+        }
+    } else if (LanguageCode > LANG_JAPANESE) {
+        switch (selectMapNo) {
+            case DUNGEON_DIVINE_BEAST_CAVE:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0x122, 0xAA, 0x2D, 0x32), CRect_i_(0, 0, 0x2D, 0x32), rogoAlphaA[2]);
+                shift = -0x14;
+                break;
+            case DUNGEON_WISE_OWL_FOREST:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0xA0, 0xAA, 0xDA, 0x32), CRect_i_(0, 0, 0xDA, 0x32), rogoAlphaA[2]);
+                shift = UserStatus->cur_floor < 9 ? 0x20 : 0x40;
+                break;
+            case DUNGEON_SHIPWRECK:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0xC8, 0xAA, 0x91, 0x32), CRect_i_(0, 0, 0x91, 0x32), rogoAlphaA[2]);
+                if (UserStatus->cur_floor >= 9) {
+                    shift = 0x20;
+                }
+                break;
+            case DUNGEON_SUN_MOON_TEMPLE:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xDC, 0xAA, 0x8E, 0x32), CRect_i_(0, 0, 0x8E, 0x32), rogoAlphaA[2]);
+                shift = 0x10;
+                break;
+            case DUNGEON_MOON_SEA:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xC3, 0xAA, 0x4B, 0x32), CRect_i_(0, 0, 0x4B, 0x32), rogoAlphaA[2]);
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x13B, 0xAA, 0xC0, 0x32), CRect_i_(0x60, 0, 0xC0, 0x32), rogoAlphaA[2]);
+                shift = -0x40;
+                break;
+            case DUNGEON_GALLERY_OF_TIME:
+                set2DSprite(Vif1Packet, texture, CRect_i_(0x108, 0xAA, 0xE1, 0x32), CRect_i_(0, 0, 0xE1, 0x32), rogoAlphaA[2]);
+                shift = -0x80;
+                break;
+            case DUNGEON_DEMON_SHAFT:
+                set2DSprite(Vif1Packet, texture, CRect_i_(floor_no + 0xDC, 0xAA, 0x8E, 0x32), CRect_i_(0, 0, 0x8E, 0x32), rogoAlphaA[2]);
+                shift = 0x10;
+                break;
+            default:
+                break;
+        }
+
+        if (BtUraDongeon != 0) {
+            set2DSprite(Vif1Packet, texture, CRect_i_(0x110, 0xE6, 0x60, 0x38), CRect_i_(0x110, 0x78, 0x60, 0x38), rogoAlphaA[2]);
+        } else if (UserStatus->res_limit_zone_current >= 0) {
+            set2DSprite(Vif1Packet, texture, CRect_i_(0xD4, 0xE6, 0xF0, 0x30), CRect_i_(0, 0x78, 0xF0, 0x30), rogoAlphaA[2]);
+        }
+    }
+
+    floor_no = UserStatus->cur_floor + 1;
+    if (selectMapNo == DUNGEON_GALLERY_OF_TIME) {
+        floor_no = BtGetFloorLevel(floor_no - 1);
+    }
+
+    if (floor_no < 10) {
+        digit_x = floor_no % 10 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+    } else if (floor_no < 100) {
+        digit_x = floor_no / 10 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x136, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+        digit_x = floor_no % 10 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+    } else {
+        digit_x = floor_no / 100 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x112, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+        floor_no %= 100;
+        digit_x = floor_no / 10 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x136, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+        digit_x = floor_no % 10 * 0x26;
+        set2DSprite(Vif1Packet, texture, CRect_i_(shift + 0x15A, 0xAA, 0x26, 0x32), CRect_i_(digit_x, 0x32, 0x26, 0x32), rogoAlphaA[2]);
+    }
+}
+
 } // namespace
 
 PORT_OVERRIDE void DunMainDraw() {
@@ -546,7 +659,7 @@ PORT_OVERRIDE void DunMainDraw() {
         if (rogoSwitch2 == 1 && BtEventInfo.floor_title_off == 0) {
             TEX_Floor1 = TexManager.GetTexture(floor_name, -1);
             TexManager.ReloadTexture(Vif1Packet, 8);
-            StartMessageDraw(TEX_Floor1, selectMapNo, UserStatus->cur_floor, BtUraDongeon, rogoAlphaA[2]);
+            DrawFloorTitle(TEX_Floor1);
         }
 
         TexManager.ReloadTexture(Vif1Packet, 2);

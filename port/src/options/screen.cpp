@@ -1,4 +1,5 @@
 #include "options/screen.hpp"
+#include "gameloop.hpp"
 
 #include <algorithm>
 #include <format>
@@ -15,6 +16,7 @@
 #include "memcard.hpp"
 #include "menu_draw.hpp"
 #include "menuetc.hpp"
+#include "gfx/gfx.hpp"
 #include "platform/display.hpp"
 #include "platform/input.hpp"
 #include "platform/window.hpp"
@@ -309,8 +311,27 @@ void RunMouse() {
         int   width = 0;
         int   height = 0;
         float scale = WindowSize(width, height) ? 1.0f / std::min(width / 640.0f, height / 480.0f) : 1.0f;
+#if defined(__ANDROID__)
+        float touch_x = 0.0f;
+        float touch_y = 0.0f;
+        if (InputTakeTouchPosition(touch_x, touch_y)) {
+            gfx::LogicalMapping mapping = gfx::GetUiMapping(gfx::kMainTarget);
+            float content_width = static_cast<float>(width);
+            float content_height = static_cast<float>(height);
+            float left = 0.0f;
+            float top = 0.0f;
+            g_screen.pointer_x = std::clamp((touch_x * content_width - left - mapping.offset_x) / mapping.scale_x,
+                                            0.0f, 639.0f);
+            g_screen.pointer_y = std::clamp((touch_y * content_height - top - mapping.offset_y) / mapping.scale_y,
+                                            0.0f, 479.0f);
+        } else {
+            g_screen.pointer_x = std::clamp(g_screen.pointer_x + mouse.dx * scale, 0.0f, 639.0f);
+            g_screen.pointer_y = std::clamp(g_screen.pointer_y + mouse.dy * scale, 0.0f, 479.0f);
+        }
+#else
         g_screen.pointer_x = std::clamp(g_screen.pointer_x + mouse.dx * scale, 0.0f, 639.0f);
         g_screen.pointer_y = std::clamp(g_screen.pointer_y + mouse.dy * scale, 0.0f, 479.0f);
+#endif
     }
     if (!g_screen.pointing) {
         return;
@@ -604,9 +625,15 @@ int Open(int mode, int block_no, u_long128 *buffer) {
     ListResolutions();
     g_screen.step = OPTION_STEP_FADE_IN;
     g_screen.first_row.assign(Pages().size(), 0);
+    if (mode == OPTION_OPEN_TITLE && WindowHasFixedDisplay() && Pages().size() > 1) {
+        g_screen.page = 1;
+    }
     g_screen.cursor_x = kLabelX - 48.0f;
     g_screen.cursor_y = RowTop(0);
     g_screen.opened = ConfigGet();
+    if (mode == OPTION_OPEN_TITLE && WindowHasFixedDisplay() && Pages().size() > 1) {
+        g_screen.page = 1;
+    }
     // A display warning outlives the screen; a save result from before it opened does not.
     DisplayTakePumpSave();
     return 1;

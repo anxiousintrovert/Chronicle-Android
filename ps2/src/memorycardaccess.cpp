@@ -159,7 +159,8 @@ void CMemoryCardAccess::MakeMcIconSysInfo() {
     float ambient[4] = {0.5f, 0.5f, 0.5f, 0.0f};
 
     memset(&this->icon_sys, 0, sizeof(sceMcIconSys));
-    strcpy(this->icon_sys.head, "PS2D");
+    // sceMcIconSys::head is a four-byte identifier, not a null-terminated string.
+    memcpy(this->icon_sys.head, "PS2D", sizeof(this->icon_sys.head));
     // "Dark Cloud Data" in full-width Shift-JIS.
     strcpy((char *) this->icon_sys.title_name, "\x82\x63\x82\x81\x82\x92\x82\x8B\x81\x40\x82\x62\x82\x8C\x82\x8F"
                                                "\x82\x95\x82\x84\x81\x40\x82\x63\x82\x81\x82\x94\x82\x81");

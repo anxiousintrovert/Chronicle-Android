@@ -500,7 +500,11 @@ int TEIGIAnalyz(char *path) {
 
     if (LoadFile(path, text, &teigiFileSize) == 0) {
         // The failure path leaves the result unset.
+#ifdef PORT
+        return 0;
+#else
         return;
+#endif
     }
 
     wait_now_loading_vsync();

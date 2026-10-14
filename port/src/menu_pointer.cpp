@@ -86,6 +86,14 @@ MenuPointerTake MenuPointer::Take(float start_x, float start_y) {
     take.held = mouse.buttons;
     take.wheel = mouse.wheel;
     buttons_ = mouse.buttons;
+#if defined(__ANDROID__)
+    // Touch controls are pad input. A stale SDL mouse event must not take the hand away from
+    // the selected menu item while the virtual pad is visible.
+    if (InputTouchOverlayVisible()) {
+        pointing = false;
+        return {};
+    }
+#endif
     bool motion = mouse.dx != 0.0f || mouse.dy != 0.0f;
     take.moved = motion || take.clicked != 0 || mouse.wheel != 0.0f;
 
@@ -117,6 +125,11 @@ int MenuPointerSyntheticDown() { return synthetic; }
 void MenuPointerShow(const MenuPointer *pointer) { shown = pointer; }
 
 bool MenuPointerHand(float &x, float &y) {
+#if defined(__ANDROID__)
+    if (InputTouchOverlayVisible()) {
+        return false;
+    }
+#endif
     if (shown == nullptr || !shown->IsOpen() || !shown->pointing) {
         return false;
     }

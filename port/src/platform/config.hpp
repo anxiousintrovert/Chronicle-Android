@@ -41,6 +41,11 @@ struct Config : HostSettings {
     bool              interpolation = true;
     ConfigAspect      aspect = ConfigAspect::Auto;
     float             ui_scale = 1.0f;
+#if defined(__ANDROID__)
+    float             render_scale = 0.5f;
+#else
+    float             render_scale = 1.0f;
+#endif
     float             detail_distance = 0.0f;
     float             shadow_distance = 0.0f;
     int               anisotropy = 0;

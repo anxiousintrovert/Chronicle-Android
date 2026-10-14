@@ -8812,7 +8812,11 @@ STATIC_ASSERT((int) &((CUserStatus *) 0)->chara_weapons == CHARA_WEAPONS_OFFSET)
 
 int Run_TrapCircle(MAP_TRAP_CIRCLE *trap) {
     if (trap == NULL) {
+#ifdef PORT
+        return 0;
+#else
         return;
+#endif
     }
 
     int          element;

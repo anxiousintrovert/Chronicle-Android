@@ -1335,7 +1335,11 @@ int CDungeonMap::CreateCollision(CCPoly *poly, CBoxVu0 box, int num) {
 
     // Retail returns no value here, which leaves whatever v0 happens to hold.
     if (frame == NULL) {
+#ifdef PORT
+        return 0;
+#else
         return;
+#endif
     }
 
     for (int i = 0; i < this->atra_num; i++) {
