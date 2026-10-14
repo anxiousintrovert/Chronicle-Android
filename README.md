@@ -58,11 +58,12 @@ game data; the Dark Cloud community font is bundled. See `docs/LOCALIZATION.md`.
 
 ## Android build
 
-This fork also builds the Chronicle port as a native Android app for `arm64-v8a` and `x86_64`, with the
-app name and launcher identity set to Chronicle. The Android work adds a multi-touch PS2-style controller,
-hides it when a hardware controller or keyboard/mouse is connected, supports Foldable display changes,
-exposes the port's settings and controller bindings, and includes Android renderer and performance work.
-The renderer requires Vulkan 1.3 and a compatible GPU. Android support is still under active development.
+This fork builds Chronicle as a native Android app for `arm64-v8a` and `x86_64`, named Chronicle. It
+includes a multi-touch PS2 control overlay with separate movement and camera sticks; unused L3/R3 buttons
+are omitted, touches outside the controls do not send game input, and the overlay hides when a hardware
+controller, keyboard, or mouse is connected. Android settings, controller bindings, Foldable display
+changes, 16 KB page-size compatibility, and renderer/performance work are included. The renderer requires
+Vulkan 1.3 and a compatible GPU. Android support remains experimental and device compatibility varies.
 
 The app does not include Dark Cloud game data. On first launch, select your own PAL disc image; the app
 imports it into private storage. Keep disc images and extracted `DATA.DAT`/`DATA.HD2` files out of this
@@ -89,7 +90,9 @@ archives previous Chronicle test packages in `DARKCLOUDBUILDS`, and leaves the c
 destination root. Its default destination is the maintainer's mapped `Z:\` Games share; pass
 `-DestinationRoot` to use another folder.
 
-See [`android/README.md`](android/README.md) for prerequisites, setup, and build details.
+See [`android/README.md`](android/README.md) for prerequisites, setup, and build details. Prebuilt test
+packages, when available, are published on the [GitHub Releases page](https://github.com/anxiousintrovert/Chronicle-Android/releases).
+They contain the app only; users must supply their own compatible PAL disc image.
 
 ## Repository layout
 
