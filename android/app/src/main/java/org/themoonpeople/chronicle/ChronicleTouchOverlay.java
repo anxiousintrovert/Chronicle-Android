@@ -85,6 +85,11 @@ final class ChronicleTouchOverlay extends View {
             } else {
                 float x = clamp((p.x - cx[p.control]) / radius[p.control], -1, 1);
                 float y = clamp((p.y - cy[p.control]) / radius[p.control], -1, 1);
+                float magnitude = (float) Math.hypot(x, y);
+                if (magnitude > 1) {
+                    x /= magnitude;
+                    y /= magnitude;
+                }
                 if (p.control == 14) { lx = x; ly = y; } else { rx = x; ry = y; }
             }
         }
