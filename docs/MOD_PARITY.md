@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 48 implemented operations, native plugins and author
+a real host-call boundary, 50 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -19,7 +19,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
-| Shops / Georama | Saved plot/placement/request inspection | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
+| Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No renderer/timing modifications | Owned overlays/camera/lighting/audio controls, activated only by callers |
@@ -29,6 +29,27 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Georama element validation (2026-10-19)
+
+Two operations inspect and edit existing optional elements in the loaded editor
+town. Detached scene state and save fields are staged together; prerequisites and
+dependents are enforced in command order. Failed batches publish neither. The
+bridge captures native pointers only for an explicit call and publishes on the
+same game thread without intervening callbacks. No custom-content registry or
+PS2 source change is introduced. JSON host responses now preserve Lua integer
+IDs, so returned IDs can round-trip through strict argument validation.
+
+Clang Windows Release game/test builds passed. The full 501-case suite passed
+with eight environment/optional skips (493 passed); a subsequently added Lua
+integer round-trip regression is checked separately. Five Georama cases cover
+ordered prerequisites, whole-save rollback, detached reads/RNG preservation,
+missing scenes and malformed inputs. All 13 Python tooling tests passed.
+An isolated PAL Norune replay invoked an action in the shared manager, enabled
+a retail element, verified both live and saved flags, restored both, and displayed
+PASS. This does not verify every element's visual refresh or completion events.
+The 3,840-case empty/disabled-mod generation comparison still matches pinned
+upstream byte for byte. Cross-platform execution and full parity remain pending.
 
 ## Native menu action validation (2026-10-19)
 

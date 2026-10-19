@@ -51,6 +51,9 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `fishing.get` | none | `game.read` | Points and native capacity (9999) |
 | `fishing.add` / `fishing.spend` | `amount` | `economy.write` | Add within native capacity; spending above balance rejects the entire batch |
 | `georama.get` | `town` | `game.read` | Town 0–5: 24 saved plot records, placements until native sentinel, request completion entries |
+| `georama.elements_get` | `town`, `plot` | `game.read` | Loaded editor town only; plot 0–23, six optional-element slots with native ID, prerequisite slot, live and saved enabled state |
+| `georama.element_set` | `town`, `plot`, `element`, `enabled` | `game.write` | Loaded editor town only; element slot 0–5, boolean enabled; updates live and saved state atomically |
+
 | `dungeon.progress` | none | `game.read` | Seven native dungeon progress slots and their highest reached floors |
 
 | `inventory.count` | `item` | `game.read` | Owned retail copies across bag and quick slots; world map uses its native ownership flag |
@@ -468,3 +471,15 @@ requires restart, so actions shown before restart belong to the current run.
 Native actions share this list, package namespace, 32-action limit and scheduling
 rules; their callback receives the C host/state and a JSON world snapshot instead
 of a Lua table. Arbitrary custom UI controls remain unimplemented.
+
+Georama element edits use existing retail definitions only. Slots whose native ID
+is outside 0–35 are unavailable. Enable prerequisites first; disable dependent
+elements first. Ordered commands in one callback see earlier staged changes, and
+any failure rolls back the whole callback. These calls do not grant Atla, place
+buildings, award completion rewards, or register custom content. They reject an
+unloaded town or unavailable plot. No scene scan occurs unless a mod calls them.
+The query returns `{town, plot, elements}`; each element has `element`, `native_id`,
+`optional`, `required_element` (-1 means none), `enabled`, and `saved_enabled`.
+Returned integer IDs retain their integer type in Lua and may be passed directly
+to host calls. Native/save state validation does not establish visual refresh for
+every retail element type.

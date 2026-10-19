@@ -344,6 +344,35 @@ TEST_F(ModRuntime, ReadApisArePermissionGatedAndLazy) {
     EXPECT_TRUE(runtime.Diagnostics().empty());
 }
 
+TEST_F(ModRuntime, HostIntegerIdsRoundTripIntoValidatedWrites) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"game.read", "game.write"};
+    Add(R"(return {on_tick=function()
+        local p=assert(chronicle.call('georama.elements_get',{town=0,plot=0}))
+        assert(math.type(p.elements[1].element)=='integer')
+        assert(p.signed==-9223372036854775807)
+        assert(math.type(p.fraction)=='float')
+        assert(chronicle.call('georama.element_set',{town=p.town,plot=p.plot,element=p.elements[1].element,enabled=true}))
+    end})",
+        manifest);
+    Start();
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, [](std::string_view, const Json &) { return Json{
+                                                                                   {"town",     0                              },
+                                                                                   {"plot",     uint64_t(0)                    },
+                                                                                   {"elements", Json::array({{{"element", 1}}})},
+                                                                                   {"signed",   int64_t(-9223372036854775807LL)},
+                                                                                   {"fraction", 0.5                            }
+ }; }, [&](const std::vector<mods::GameCommand> &commands, int, std::string &) {
+            ++commits;
+            EXPECT_EQ(commands.size(), 1);
+            EXPECT_TRUE(commands.at(0).arguments.at("element").is_number_integer());
+            EXPECT_EQ(commands.at(0).arguments.at("element"), 1);
+            return true; });
+    EXPECT_EQ(commits, 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
 TEST_F(ModRuntime, ResourcesAreOwnedBoundedAndCached) {
     auto manifest = Manifest();
     manifest["permissions"] = {"resources.read"};

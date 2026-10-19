@@ -16,6 +16,7 @@ extern "C" {
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <utility>
 
@@ -258,6 +259,9 @@ void PushJson(lua_State *L, const Json &value) {
         }
     } else if (value.is_boolean()) {
         lua_pushboolean(L, value.get<bool>());
+    } else if (value.is_number_integer() &&
+               (!value.is_number_unsigned() || value.get<uint64_t>() <= static_cast<uint64_t>(std::numeric_limits<lua_Integer>::max()))) {
+        lua_pushinteger(L, value.get<lua_Integer>());
     } else if (value.is_number()) {
         lua_pushnumber(L, value.get<double>());
     } else if (value.is_string()) {

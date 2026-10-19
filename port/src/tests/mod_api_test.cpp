@@ -4,6 +4,7 @@
 
 #include "dun/gameloop.hpp"
 #include "mods/api.hpp"
+#include "mods/georama.hpp"
 #include "mods/native.hpp"
 #include "savedata.hpp"
 #include "shot_freefuncs.hpp"
@@ -133,7 +134,10 @@ TEST(ModApi, SaveTransactionsPreserveOrderAndRollbackAcrossDomains) {
 }
 
 TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
-    auto       save = std::make_unique<CSaveData>();
+    auto               save = std::make_unique<CSaveData>();
+    mods::GeoramaState scene;
+    scene.town = 0;
+    scene.plots[0].available = true;
     const auto before = std::make_unique<CSaveData>(*save);
     srand(811);
     const auto expected = rand();
@@ -158,7 +162,13 @@ TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
         if (op.name == "georama.get") {
             a["town"] = 0;
         }
-        EXPECT_NO_THROW(mods::ReadSave(*save, {1, 0, 0, true}, op.name, a));
+        if (op.name == "georama.elements_get") {
+            a = {
+                {"town", 0},
+                {"plot", 0}
+            };
+        }
+        EXPECT_NO_THROW(mods::ReadSave(*save, {1, 0, 0, true}, op.name, a, &scene));
     }
     std::string error;
     ASSERT_TRUE(mods::ApplySave(*save, {}, 0, error));

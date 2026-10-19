@@ -1,11 +1,15 @@
 #include "sound_effect.h"
 
 #include <algorithm>
+#include <optional>
 
 #include "api.hpp"
 #include "dngstatusdata.hpp"
 #include "dun/gameloop.hpp"
+#include "editloop.hpp"
+#include "editpartsinfo.hpp"
 #include "gamemode.hpp"
+#include "georama.hpp"
 #include "main.hpp"
 #include "runtime.hpp"
 #include "savedata.hpp"
@@ -14,6 +18,46 @@ extern s32 mode;
 
 namespace mods {
 namespace {
+struct LoadedGeorama {
+    GeoramaState                     state;
+    std::array<EDITPARTS_INFO *, 24> plots{};
+
+    LoadedGeorama() {
+        if (mode != GAME_MODE_EDIT || NowEditMap < 0 || NowEditMap > 5) {
+            return;
+        }
+        state.town = NowEditMap;
+        for (int i = 0; i < 24; ++i) {
+            auto *plot = EditPartsInfo.GetPartsInfo(i);
+            if (!plot || plot->parts_no != i) {
+                continue;
+            }
+            plots[i] = plot;
+            state.plots[i].available = true;
+            for (int j = 0; j < 6; ++j) {
+                const auto &element = plot->elements[j];
+                state.plots[i].elements[j] = {element.id, element.required_element, element.enabled != 0};
+            }
+        }
+    }
+
+    void Commit() const {
+        // Captured and committed synchronously on the game thread. No mod callback
+        // or scene transition can run between capture, validation and publication.
+        for (int i = 0; i < 24; ++i) {
+            if (!plots[i]) {
+                continue;
+            }
+            for (int j = 0; j < 6; ++j) {
+                auto &element = plots[i]->elements[j];
+                if ((element.enabled != 0) != state.plots[i].elements[j].enabled) {
+                    element.enabled = state.plots[i].elements[j].enabled ? 1 : 0;
+                }
+            }
+        }
+    }
+};
+
 nlohmann::json Character(const CUserStatus &status, int id) {
     return {
         {"id",          id                             },
@@ -96,6 +140,10 @@ void TickGame() {
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
         if (!SaveData || !world.playing){ throw std::runtime_error("game state unavailable");
 }
+        if (operation == "georama.elements_get") {
+            const LoadedGeorama scene;
+            return ReadSave(*SaveData, world, operation, arguments, &scene.state);
+        }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
         for (const auto &command : commands) {
@@ -105,8 +153,14 @@ void TickGame() {
                 return false;
             }
         }
+        std::optional<LoadedGeorama> georama;
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "georama.element_set"; })) {
+            georama.emplace();
+        }
         CommitEffects effects;
-        if (!ApplySave(*SaveData, commands, money, error, &effects)) { return false; }
+        if (!ApplySave(*SaveData, commands, money, error, &effects, georama ? &georama->state : nullptr)) { return false; }
+        if (georama){ georama->Commit();
+}
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; });
 }

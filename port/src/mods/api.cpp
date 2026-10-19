@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <set>
 
+#include "georama.hpp"
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "userstatus.hpp"
@@ -13,54 +15,56 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
-    {"player.get",              "game.read",     "Active or joined character stats.",                                          false},
-    {"player.heal",             "game.write",    "Queue bounded HP restoration.",                                              true },
-    {"player.damage",           "game.write",    "Queue bounded HP reduction (not a combat hit).",                             true },
-    {"player.set",              "game.write",    "Queue current HP within native maximum.",                                    true },
-    {"player.thirst_get",       "game.read",     "Read current and maximum water.",                                            false},
-    {"player.thirst_set",       "game.write",    "Queue absolute water or restoration.",                                       true },
-    {"party.list",              "game.read",     "Joined characters in native order.",                                         false},
-    {"party.active",            "game.read",     "Active character stats.",                                                    false},
-    {"inventory.get",           "game.read",     "Bag and quick-use slots.",                                                   false},
-    {"weapons.list",            "game.read",     "Owned weapons by character and slot.",                                       false},
-    {"weapons.get",             "game.read",     "Owned weapon stats by character and slot.",                                  false},
-    {"economy.get",             "game.read",     "Wallet balance and capacity.",                                               false},
-    {"economy.add",             "economy.write", "Queue bounded currency addition.",                                           true },
-    {"economy.spend",           "economy.write", "Queue spending; reject the callback if funds are insufficient.",             true },
-    {"world.get",               "game.read",     "Current mode, map, dungeon, floor and restrictions.",                        false},
-    {"story.flag_get",          "game.read",     "Global story bit get.",                                                      false},
-    {"story.flag_set",          "game.write",    "Global story bit set.",                                                      true },
-    {"story.int_get",           "game.read",     "Global signed story integer get.",                                           false},
-    {"story.int_set",           "game.write",    "Global signed story integer set.",                                           true },
-    {"map.flag_get",            "game.read",     "Map story bit get.",                                                         false},
-    {"map.flag_set",            "game.write",    "Map story bit set.",                                                         true },
-    {"map.init_flag_get",       "game.read",     "Map initialization bit get.",                                                false},
-    {"map.init_flag_set",       "game.write",    "Map initialization bit set.",                                                true },
-    {"fishing.get",             "game.read",     "Fishing point balance.",                                                     false},
-    {"fishing.add",             "economy.write", "Add fishing points within native capacity.",                                 true },
-    {"fishing.spend",           "economy.write", "Spend fishing points atomically.",                                           true },
-    {"georama.get",             "game.read",     "Saved plots, placements and request completion.",                            false},
-    {"dungeon.progress",        "game.read",     "Highest reached floor by dungeon.",                                          false},
-    {"player.max_hp_set",       "game.write",    "Set HP capacity and clamp the current gauge.",                               true },
-    {"player.max_water_set",    "game.write",    "Set water capacity and clamp the current gauge.",                            true },
-    {"player.defense_set",      "game.write",    "Set joined character base defense.",                                         true },
-    {"player.status_get",       "game.read",     "Read native status mask and shared duration counter.",                       false},
-    {"player.status_add",       "game.write",    "Apply an active-character ailment using retail rules and durations.",        true },
-    {"player.status_remove",    "game.write",    "Remove one active-character ailment; preserve unrelated bits.",              true },
-    {"weapons.durability_set",  "game.write",    "Set an owned weapon WHP gauge, without item-use effects.",                   true },
-    {"inventory.count",         "game.read",     "Count owned retail bag and quick-slot copies.",                              false},
-    {"inventory.give",          "game.write",    "Grant retail items using an explicit local random seed.",                    true },
-    {"inventory.remove",        "game.write",    "Remove owned retail items, bag first then quick slots.",                     true },
-    {"weapons.give",            "game.write",    "Grant a retail weapon to its native owner using a local seed.",              true },
-    {"weapons.abs_get",         "game.read",     "Read owned ABS, native threshold and synthesis points.",                     false},
-    {"weapons.abs_add",         "game.write",    "Grant ABS and synthesis points without automatic level-up.",                 true },
-    {"weapons.attachments_get", "game.read",     "Inspect fitted native attachment sockets.",                                  false},
-    {"items.native_definition", "game.read",     "Inspect an existing retail definition; does not register content.",          false},
-    {"attachments.list",        "game.read",     "Inspect the retail attachment bag and overflow slots.",                      false},
-    {"attachments.give",        "game.write",    "Grant existing retail attachments into free regular bag slots.",             true },
-    {"attachments.remove",      "game.write",    "Discard one owned attachment by its current bag slot.",                      true },
-    {"weapons.build_up_list",   "game.read",     "Inspect native build-up targets and owned weapon requirements without RNG.", false},
-    {"weapons.synthesize",      "game.write",    "Status-break an unequipped level 5+ weapon into a native SynthSphere.",      true },
+    {"player.get",              "game.read",     "Active or joined character stats.",                                           false},
+    {"player.heal",             "game.write",    "Queue bounded HP restoration.",                                               true },
+    {"player.damage",           "game.write",    "Queue bounded HP reduction (not a combat hit).",                              true },
+    {"player.set",              "game.write",    "Queue current HP within native maximum.",                                     true },
+    {"player.thirst_get",       "game.read",     "Read current and maximum water.",                                             false},
+    {"player.thirst_set",       "game.write",    "Queue absolute water or restoration.",                                        true },
+    {"party.list",              "game.read",     "Joined characters in native order.",                                          false},
+    {"party.active",            "game.read",     "Active character stats.",                                                     false},
+    {"inventory.get",           "game.read",     "Bag and quick-use slots.",                                                    false},
+    {"weapons.list",            "game.read",     "Owned weapons by character and slot.",                                        false},
+    {"weapons.get",             "game.read",     "Owned weapon stats by character and slot.",                                   false},
+    {"economy.get",             "game.read",     "Wallet balance and capacity.",                                                false},
+    {"economy.add",             "economy.write", "Queue bounded currency addition.",                                            true },
+    {"economy.spend",           "economy.write", "Queue spending; reject the callback if funds are insufficient.",              true },
+    {"world.get",               "game.read",     "Current mode, map, dungeon, floor and restrictions.",                         false},
+    {"story.flag_get",          "game.read",     "Global story bit get.",                                                       false},
+    {"story.flag_set",          "game.write",    "Global story bit set.",                                                       true },
+    {"story.int_get",           "game.read",     "Global signed story integer get.",                                            false},
+    {"story.int_set",           "game.write",    "Global signed story integer set.",                                            true },
+    {"map.flag_get",            "game.read",     "Map story bit get.",                                                          false},
+    {"map.flag_set",            "game.write",    "Map story bit set.",                                                          true },
+    {"map.init_flag_get",       "game.read",     "Map initialization bit get.",                                                 false},
+    {"map.init_flag_set",       "game.write",    "Map initialization bit set.",                                                 true },
+    {"fishing.get",             "game.read",     "Fishing point balance.",                                                      false},
+    {"fishing.add",             "economy.write", "Add fishing points within native capacity.",                                  true },
+    {"fishing.spend",           "economy.write", "Spend fishing points atomically.",                                            true },
+    {"georama.get",             "game.read",     "Saved plots, placements and request completion.",                             false},
+    {"georama.elements_get",    "game.read",     "Inspect loaded retail optional plot elements and their prerequisites.",       false},
+    {"georama.element_set",     "game.write",    "Enable or disable a loaded retail plot element atomically with saved state.", true },
+    {"dungeon.progress",        "game.read",     "Highest reached floor by dungeon.",                                           false},
+    {"player.max_hp_set",       "game.write",    "Set HP capacity and clamp the current gauge.",                                true },
+    {"player.max_water_set",    "game.write",    "Set water capacity and clamp the current gauge.",                             true },
+    {"player.defense_set",      "game.write",    "Set joined character base defense.",                                          true },
+    {"player.status_get",       "game.read",     "Read native status mask and shared duration counter.",                        false},
+    {"player.status_add",       "game.write",    "Apply an active-character ailment using retail rules and durations.",         true },
+    {"player.status_remove",    "game.write",    "Remove one active-character ailment; preserve unrelated bits.",               true },
+    {"weapons.durability_set",  "game.write",    "Set an owned weapon WHP gauge, without item-use effects.",                    true },
+    {"inventory.count",         "game.read",     "Count owned retail bag and quick-slot copies.",                               false},
+    {"inventory.give",          "game.write",    "Grant retail items using an explicit local random seed.",                     true },
+    {"inventory.remove",        "game.write",    "Remove owned retail items, bag first then quick slots.",                      true },
+    {"weapons.give",            "game.write",    "Grant a retail weapon to its native owner using a local seed.",               true },
+    {"weapons.abs_get",         "game.read",     "Read owned ABS, native threshold and synthesis points.",                      false},
+    {"weapons.abs_add",         "game.write",    "Grant ABS and synthesis points without automatic level-up.",                  true },
+    {"weapons.attachments_get", "game.read",     "Inspect fitted native attachment sockets.",                                   false},
+    {"items.native_definition", "game.read",     "Inspect an existing retail definition; does not register content.",           false},
+    {"attachments.list",        "game.read",     "Inspect the retail attachment bag and overflow slots.",                       false},
+    {"attachments.give",        "game.write",    "Grant existing retail attachments into free regular bag slots.",              true },
+    {"attachments.remove",      "game.write",    "Discard one owned attachment by its current bag slot.",                       true },
+    {"weapons.build_up_list",   "game.read",     "Inspect native build-up targets and owned weapon requirements without RNG.",  false},
+    {"weapons.synthesize",      "game.write",    "Status-break an unequipped level 5+ weapon into a native SynthSphere.",       true },
 };
 
 int CharacterId(const CUserStatus &s, const Json &a) {
@@ -221,6 +225,9 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
             return "missing flag argument";
         }
         return {};
+    }
+    if (name == "georama.elements_get" || name == "georama.element_set") {
+        return ValidateGeoramaElements(name, a);
     }
     if (name == "georama.get") {
         if (a.size() != 1 || !a.contains("town") || !a["town"].is_number_integer() || a["town"].get<double>() < 0 || a["town"].get<double>() > 5) {
@@ -518,10 +525,16 @@ bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, 
     return true;
 }
 
-Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Json &a) {
+Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Json &a, const GeoramaState *georama) {
     const auto error = ValidateOperation(op, a);
     if (!error.empty()) {
         throw std::runtime_error(error);
+    }
+    if (op == "georama.elements_get") {
+        if (!georama) {
+            throw std::runtime_error("native Georama scene is unavailable");
+        }
+        return ReadGeoramaElements(save, *georama, a);
     }
     if (op == "weapons.build_up_list") {
         return retail::Read(*save.GetDngStatus(), op, a, save.GetGameIntFlag(0x14));
@@ -595,7 +608,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     return ReadStatus(*save.GetDngStatus(), world, op, a);
 }
 
-bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects) {
+bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama) {
     if (effects) {
         *effects = {};
     }
@@ -610,7 +623,11 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
     }
     // The copy constructor does not run save initialization or consume native RNG.
     // Only callbacks with writes pay for staging; public setters here touch save fields only.
-    auto staged = std::make_unique<CSaveData>(save);
+    auto                        staged = std::make_unique<CSaveData>(save);
+    std::optional<GeoramaState> staged_georama;
+    if (georama) {
+        staged_georama = *georama;
+    }
     try {
         if (!ApplyStatus(*staged->GetDngStatus(), {}, money_delta, error)) {
             return false;
@@ -626,7 +643,12 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 error = "query cannot be committed";
                 return false;
             }
-            if (op == "story.flag_set") {
+            if (op == "georama.element_set") {
+                if (!staged_georama) {
+                    throw std::runtime_error("native Georama scene is unavailable");
+                }
+                ApplyGeoramaElement(*staged, *staged_georama, a);
+            } else if (op == "story.flag_set") {
                 staged->SetGameFlag(a.at("id"), a.at("value"));
             } else if (op == "story.int_set") {
                 staged->SetGameIntFlag(a.at("id"), a.at("value"));
@@ -654,6 +676,9 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
         return false;
     }
     save = *staged;
+    if (georama) {
+        *georama = *staged_georama;
+    }
     if (effects) {
         *effects = pending;
     }
