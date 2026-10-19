@@ -81,6 +81,7 @@ constexpr Operation operations[] = {
     {"attachments.give",        "game.write",    "Grant existing retail attachments into free regular bag slots.",               true },
     {"attachments.remove",      "game.write",    "Discard one owned attachment by its current bag slot.",                        true },
     {"weapons.build_up_list",   "game.read",     "Inspect native build-up targets and owned weapon requirements without RNG.",   false},
+    {"weapons.build_up",        "game.write",    "Evolve an unequipped retail weapon using saved native requirements.",          true },
     {"weapons.synthesize",      "game.write",    "Status-break an unequipped level 5+ weapon into a native SynthSphere.",        true },
 };
 
@@ -697,7 +698,9 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 error = "query cannot be committed";
                 return false;
             }
-            if (op == "georama.element_set") {
+            if (op == "weapons.build_up") {
+                retail::BuildUp(*staged, a);
+            } else if (op == "georama.element_set") {
                 if (!staged_georama) {
                     throw std::runtime_error("native Georama scene is unavailable");
                 }

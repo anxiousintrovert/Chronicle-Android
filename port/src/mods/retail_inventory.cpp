@@ -9,6 +9,7 @@
 #include "battlemenu.hpp"
 #include "menu_inventory.hpp"
 #include "menu_misc.hpp"
+#include "savedata.hpp"
 #include "userstatus.hpp"
 #include "weapon_buildup.hpp"
 #include "weaponlevelup.hpp"
@@ -251,7 +252,7 @@ bool Handles(std::string_view op) {
            op == "weapons.give" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
            op == "weapons.attachments_get" || op == "items.native_definition" ||
            op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
-           op == "weapons.build_up_list" || op == "weapons.synthesize";
+           op == "weapons.build_up_list" || op == "weapons.build_up" || op == "weapons.synthesize";
 }
 
 std::string Validate(std::string_view op, const Json &a) {
@@ -280,6 +281,9 @@ std::string Validate(std::string_view op, const Json &a) {
     }
     if (op == "inventory.give" || op == "weapons.give") {
         fields["seed"] = {0, 4294967295.0};
+    }
+    if (op == "weapons.build_up") {
+        fields["target"] = {257, 376};
     }
     if (op == "weapons.abs_add") {
         fields["amount"] = {0, 32767};
@@ -394,7 +398,40 @@ Json Read(const CUserStatus &s, std::string_view op, const Json &a, std::optiona
     throw std::runtime_error("retail operation is not a query");
 }
 
+void BuildUp(CSaveData &save, const Json &a) {
+    auto       &s = *save.GetDngStatus();
+    const auto &owned = Owned(s, a);
+    const int   character = Character(s, a), slot = a.at("slot").get<int>();
+    if (s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("build-up requires an unequipped weapon until native model refresh is supported");
+    }
+    const int  target = a.at("target").get<int>();
+    const auto targets = BuildUps(s, a, save.GetGameIntFlag(0x14));
+    const auto found = std::ranges::find_if(targets, [target](const auto &entry) { return entry.at("item") == target; });
+    if (found == targets.end() || !found->at("can_build").get<bool>()) {
+        throw std::runtime_error("target is not an eligible retail build-up; meet requirements and remove attachments");
+    }
+    const bool mardan = owned.item_no == ITEM_WEAPON_MARDAN_EINS || owned.item_no == ITEM_WEAPON_MARDAN_TWEI;
+    auto      &weapon = s.chara_weapons[character][slot];
+    // Retail WEP_EFFECT_STATE_BUILDUP_PLAY data changes, without the UI/model
+    // side effects. Save staging also makes the Mardan counter reset atomic.
+    SetWeaponBuildValue(&weapon, target);
+    weapon.item_no = target;
+    weapon.level = 0;
+    weapon.experience = 0;
+    const int option = DefaultWeaponOptionSet(target);
+    if (option != 1) {
+        weapon.flags |= CheckWeaponOptionStatus(option);
+    }
+    if (mardan) {
+        save.SetGameIntFlag(0x14, 0);
+    }
+}
+
 void Apply(CUserStatus &s, std::string_view op, const Json &a) {
+    if (op == "weapons.build_up") {
+        throw std::runtime_error("build-up requires the save host");
+    }
     if (op == "weapons.synthesize") {
         Synthesize(s, a);
         return;

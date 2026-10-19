@@ -67,6 +67,7 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `attachments.give` | `item`, `quantity`, optional `level` | `game.write` | Grant existing retail attachments to free regular slots; stat boosters accept level 1-3 |
 | `attachments.remove` | `bag_slot` | `game.write` | Discard one owned bag attachment, including an existing overflow record |
 | `weapons.build_up_list` | `slot`, optional `character` | `game.read` | Native evolution targets, requirements, and current eligibility without consuming RNG |
+| `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve an unequipped retail weapon after rechecking native requirements; atomic Mardan counter reset |
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
 
@@ -444,9 +445,45 @@ assert(chronicle.call("attachments.give", {item=91, quantity=1, level=3}))
 local targets = assert(chronicle.call("weapons.build_up_list", {slot=0}))
 ```
 
-Fitted attachment insertion/removal, active equipment refresh, actual build-up,
-and automatic level-up remain separate APIs to implement. The contributor still
+Fitted attachment insertion/removal, active equipment refresh (including
+build-up of equipped weapons), and automatic level-up remain APIs to implement. The contributor still
 owns custom item/weapon registration and content formats.
+
+### Retail weapon evolution
+
+`weapons.build_up {slot=0..10, target=257..376, character=optional}` evolves an
+owned, unequipped weapon to one of its retail build-up targets. Declare
+`weapons.build_up` in `requires_operations` and grant `game.write` (plus
+`game.read` for inspection). Both Lua and native callers use the normal host call.
+The owner must be joined. The host rechecks target membership, native stat/fish
+requirements and empty attachments at commit, against prior commands in the same
+transaction. `build_up_list.can_build` describes retail requirements; an equipped
+slot still cannot be mutated through this API until native model refresh exists.
+
+Evolution applies the retail completion data changes: destination ID, level/ABS
+reset, destination minimum endurance/speed/WHP capacity and native destination
+option flags. Other fields retain retail behavior, including current WHP and
+socket data. Mardan evolutions clear the same save's catch counter. All changes
+roll back together if any command fails; no global RNG or menu animation runs.
+Slot indices are mutable inventory positions, not stable weapon handles. Recheck
+inventory before queuing an action and inspect committed results on a later tick.
+
+```lua
+assert(chronicle.action('evolve', 'Evolve weapon', 'Build up the weapon in slot 1.', function()
+    local targets = assert(chronicle.call('weapons.build_up_list', {slot=1}))
+    for _, target in ipairs(targets) do
+        if target.can_build then
+            assert(chronicle.call('weapons.build_up', {slot=1, target=target.item}))
+            return
+        end
+    end
+    error('No eligible retail target')
+end))
+```
+
+This example requires `menu.actions.v1` and uses the shared manager. It selects the
+first eligible target; an author offering multiple paths should let the player
+choose. No custom weapon definition, path registration or contributor ID is added.
 
 ## Mod manager actions
 

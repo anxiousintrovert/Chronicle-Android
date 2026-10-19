@@ -4,10 +4,13 @@
 #include <limits>
 
 #include "battlemenu.hpp"
+#include "frame.hpp"
+#include "menu_draw.hpp"
 #include "menu_inventory.hpp"
 #include "mods/api.hpp"
 #include "savedata.hpp"
 #include "weapon_buildup.hpp"
+#include "weaponlevelup.hpp"
 
 namespace {
 using Json = nlohmann::json;
@@ -402,5 +405,135 @@ TEST(ModRetailValidation, AttachmentAndSynthesisArgumentsRejectUnknownFieldsAndU
     }) {
         EXPECT_FALSE(mods::ValidateOperation(c.operation, c.arguments).empty()) << c.operation;
     }
+}
+} // namespace
+
+namespace {
+TEST_F(ModRetailInventory, BuildUpMatchesNativeCompletionAcrossEligibleRetailTargetsWithoutRng) {
+    auto &s = Status();
+    s.party_size = 6;
+    int checked = 0;
+    for (int item = ITEM_WEAPON_START; item < ITEM_WEAPON_END; ++item) {
+        const auto *definition = GetWeaponData(item);
+        const int   owner = definition->owner;
+        s.equipped_weapon_slot[owner] = 0;
+        auto &weapon = s.chara_weapons[owner][1];
+        WepDataListToHaveCopy(item, &weapon);
+        weapon.attack = definition->attack_max;
+        weapon.magic = definition->magic_max;
+        weapon.level = 7;
+        weapon.experience = 17;
+        for (auto &v : weapon.elem) {
+            v = 99;
+        }
+        for (auto &v : weapon.vs_monster) {
+            v = 99;
+        }
+        save->SetGameIntFlag(0x14, 20);
+        const auto initial = weapon;
+        const auto targets = Read("weapons.build_up_list", {
+                                                               {"character", owner},
+                                                               {"slot",      1    }
+        });
+        for (const auto &target : targets) {
+            if (!target.at("can_build").get<bool>()) {
+                continue;
+            }
+            weapon = initial;
+            save->SetGameIntFlag(0x14, 20);
+            auto expected = initial;
+            // Execute the linked retail effect's completion branch on a detached
+            // weapon. A real frame object supplies only the non-null readiness gate.
+            CFrame         frame;
+            CWeaponLevelUp native{};
+            native.operation_kind = WEP_EFFECT_BUILDUP;
+            native.effect_state = WEP_EFFECT_STATE_BUILDUP_PLAY;
+            native.effect.frame = &frame;
+            native.effect.motion_state = 3;
+            native.weapon = &expected;
+            native.buildup_weapon_no = target.at("item").get<int>();
+            const auto texture_flag = MenuExTextureReadFlag;
+            native.Step();
+            MenuExTextureReadFlag = texture_flag;
+            ASSERT_EQ(native.buildup_complete, 1);
+            srand(314);
+            const int next = rand();
+            srand(314);
+            ASSERT_TRUE(Apply({
+                {"weapons.build_up", {{"character", owner}, {"slot", 1}, {"target", target.at("item")}}}
+            }))
+                << error;
+            EXPECT_EQ(rand(), next);
+            EXPECT_EQ(std::memcmp(&weapon, &expected, sizeof(weapon)), 0) << item;
+            EXPECT_EQ(save->GetGameIntFlag(0x14), (item == ITEM_WEAPON_MARDAN_EINS || item == ITEM_WEAPON_MARDAN_TWEI) ? 0 : 20);
+            ++checked;
+        }
+    }
+    EXPECT_GT(checked, 60);
+}
+
+TEST_F(ModRetailInventory, BuildUpRechecksRequirementsAndRollsBackWholeSaveAndFishCounter) {
+    auto &s = Status();
+    auto &w = s.chara_weapons[0][1];
+    s.equipped_weapon_slot[0] = 0;
+    WepDataListToHaveCopy(ITEM_WEAPON_MARDAN_EINS, &w);
+    const GameCommand build{
+        "weapons.build_up", {{"slot", 1}, {"target", ITEM_WEAPON_MARDAN_TWEI}}
+    };
+    auto reject = [&](std::vector<GameCommand> commands) {
+        const auto before = std::make_unique<CSaveData>(*save);
+        EXPECT_FALSE(Apply(std::move(commands)));
+        EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    };
+    save->SetGameIntFlag(0x14, 4);
+    reject({build});
+    save->SetGameIntFlag(0x14, 5);
+    s.equipped_weapon_slot[0] = 1;
+    reject({build});
+    s.equipped_weapon_slot[0] = 0;
+    w.attach[0].item_no = ITEM_ATTACH_FIRE;
+    reject({build});
+    w.attach[0].item_no = 0;
+    reject({
+        {"weapons.build_up", {{"slot", 1}, {"target", ITEM_WEAPON_START}}}
+    });
+    reject({
+        build, {"economy.spend", {{"amount", 65535}}}
+    });
+    reject({build, build});
+    ASSERT_TRUE(Apply({
+        {"story.int_set", {{"id", 0x14}, {"value", 5}}},
+        build
+    }))
+        << error;
+    EXPECT_EQ(w.item_no, ITEM_WEAPON_MARDAN_TWEI);
+    EXPECT_EQ(save->GetGameIntFlag(0x14), 0);
+}
+
+TEST(ModRetailValidation, BuildUpRequiresBoundedExactArgumentsAndSaveHost) {
+    EXPECT_TRUE(mods::ValidateOperation("weapons.build_up", {
+                                                                {"slot",   1  },
+                                                                {"target", 260}
+    })
+                    .empty());
+    for (const auto &args : std::vector<Json>{
+             {{"slot", 1}},
+             {{"slot", 11}, {"target", 260}},
+             {{"slot", 1}, {"target", 377}},
+             {{"slot", 1}, {"target", 260.5}},
+             {{"slot", 1}, {"target", 260}, {"force", true}},
+             {{"slot", 1}, {"target", 260}, {"character", 6}}
+    }) {
+        EXPECT_FALSE(mods::ValidateOperation("weapons.build_up", args).empty());
+    }
+    CUserStatus s{};
+    const auto  before = s;
+    std::string error;
+    EXPECT_FALSE(mods::ApplyStatus(s, {
+                                          {"weapons.build_up", {{"slot", 1}, {"target", 260}}}
+    },
+                                   0, error));
+    EXPECT_NE(error.find("save host"), std::string::npos);
+    EXPECT_EQ(std::memcmp(&s, &before, sizeof(s)), 0);
 }
 } // namespace
