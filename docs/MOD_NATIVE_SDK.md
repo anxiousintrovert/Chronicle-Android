@@ -110,14 +110,20 @@ tick's supplied snapshot, not refreshed after each write. Return 1 for success,
 | `CHRONICLE_EVENT_GAME_LEAVE` | First non-gameplay tick after gameplay; owned values are available but game operations are rejected |
 | `CHRONICLE_EVENT_MAP_ENTER` | First observed gameplay map or changed map |
 | `CHRONICLE_EVENT_FLOOR_ENTER` | First observed dungeon floor or changed dungeon/floor |
+| `CHRONICLE_EVENT_ENEMY_KILLED` | Deferred native/scripted enemy death; requires `events.enemy_killed.v1` for availability |
 
 These use the [Lua lifecycle semantics](MOD_HOST_API.md#owned-lifecycle-listeners).
 Floor entry is not a scene-ready/generation-completed hook; game leave is not a
 guaranteed shutdown callback. Per package, dispatch order is save-loaded, game
-enter/leave, map entry, floor entry, queued menu actions, Lua tick, native tick.
+enter/leave, map entry, floor entry, enemy deaths, queued menu actions, Lua tick, native tick.
 For each lifecycle event the Lua callback/listeners run before the native callback.
 Lua and native callbacks have separate transactions; packages keep dependency order.
 No subscribed event callback executes for a zero mask.
+
+Enemy-kill callbacks add an `event` object to `world_json`, using the fields and
+delivery limits in [enemy-kill events](MOD_HOST_API.md#enemy-kill-events). This is
+an additive ABI 2 event bit; host/plugin struct layouts are unchanged. An older
+binary's compiled `CHRONICLE_EVENT_ALL` mask does not request the new bit.
 
 The V2 host adds `state_get(context, key, &result_json)` and
 `state_set(context, key, value_json, &result_json)`. They access the same package's

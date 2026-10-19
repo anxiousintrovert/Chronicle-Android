@@ -310,7 +310,7 @@ world tables. They share one instruction budget and transaction per event: failu
 rolls back that event's owned-state changes and queued native writes, stops the
 module and skips its later listeners. Previously committed events remain committed.
 The order within a package is save-loaded, game enter/leave, map entry, floor entry,
-queued menu actions, Lua tick, then native plugin tick. Subscribed ABI 2 native
+enemy-kill events, queued menu actions, Lua tick, then native plugin tick. Subscribed ABI 2 native
 callbacks follow the corresponding Lua lifecycle callback/listeners, in separate
 transactions; see [the native SDK](MOD_NATIVE_SDK.md). Packages retain dependency load order. World values
 are the snapshot supplied for that tick, not an implicit refresh after each write.
@@ -324,6 +324,32 @@ return {}
 
 These are runtime lifecycle notifications, not enemy death, dialogue, cutscene,
 render, or native script-interception hooks. No listener runs with no active module.
+
+## Enemy-kill events
+
+Require `events.enemy_killed.v1`. Register during startup with
+`chronicle.subscribe('enemy_killed', function(world) ... end)` or return an
+`on_enemy_killed` callback. ABI 2 plugins request `CHRONICLE_EVENT_ENEMY_KILLED`.
+Capture remains disabled without an active Lua/native subscriber.
+
+The callback receives the normal world snapshot plus `world.event` containing
+`entity` (opaque, already-dead handle), `attacker` (-1 when unknown/scripted),
+`reward_exp`, `reward_money`, `damage` (native last-hit value, possibly -1), and
+`source` (`native` or `scripted`). Reward fields are enemy parameters, not a
+receipt of rewards paid. Native poison deaths use `native`; `combat.damage`
+deaths use `scripted`. Despawning/clearing a floor is not a kill event.
+
+Native damage processing only captures bounded values. On a later runtime tick,
+events dispatch in capture order after lifecycle events and before menu actions
+and tick callbacks. Each Lua event shares its listeners' transaction; its native
+callback has a separate transaction. A failed listener rolls back its changes
+and stops that package, without rolling back the death itself. Payload tables are
+detached. No callbacks run inside native damage processing.
+
+Events are not saved or replayed after load/reset. Floor cleanup, unit changes,
+gameplay exit and runtime replacement discard stale pending events. Capture holds
+64 records; overflow drops later records and produces a runtime diagnostic. Mods
+must not treat this bounded notification stream as a durable kill journal.
 
 ## Dependency query exports
 
@@ -492,8 +518,7 @@ simulation can delay death accounting. Death decrements native alive count once,
 increments recorded kills (saturating at 32767), clears stop and marks the native
 death event flag. The native death script handles subsequent drops/rewards; this
 API does not fabricate collision hits, elemental effects, knockback or weapon
-credit. Scripted hits use attacker -1. Damage formulas and mod kill-event listeners
-remain pending. Read `combat.get` on later callbacks to observe death processing.
+credit. Scripted hits use attacker -1. Damage formulas remain pending; kill notifications use the enemy-kill event API. Read `combat.get` on later callbacks to observe death processing.
 
 Pending reactions survive a mod stopping because the HP change is already
 committed. Native slot construction and floor cleanup cancel obsolete reactions.

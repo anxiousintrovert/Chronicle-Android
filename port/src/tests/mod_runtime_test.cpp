@@ -85,6 +85,66 @@ TEST_F(ModRuntime, EpochChangesOnlyWhenRuntimeStateIsReplaced) {
     EXPECT_NE(loaded, runtime.Epoch());
 }
 
+TEST_F(ModRuntime, EnemyDeathListenersReceiveDetachedContextBeforeTickAndRejectStaleFloors) {
+    Add(R"(assert(chronicle.subscribe('enemy_killed',function(w)
+        assert(w.event.entity=='16' and w.event.source=='scripted')
+        assert(w.event.damage==5 and w.floor==1)
+        chronicle.set('kills',(chronicle.get('kills') or 0)+1)
+        w.event.damage=999
+    end))
+    return {on_tick=function(w) assert(w.event==nil) end})");
+    Start();
+    ASSERT_TRUE(runtime.WantsEnemyDeaths());
+    const mods::World                     world{2, 0, 0, true, 0, 1};
+    const std::array<mods::EnemyDeath, 1> deaths{{{16, 0, 1, -1, 10, 20, 5, true}}};
+    runtime.Tick(world);
+    runtime.Tick(world, {}, {}, {}, {}, deaths);
+    EXPECT_EQ(State()["values"]["kills"], 1);
+    EXPECT_EQ(deaths[0].damage, 5);
+    runtime.Tick({2, 0, 0, true, 0, 2}, {}, {}, {}, {}, deaths);
+    EXPECT_EQ(State()["values"]["kills"], 1);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error));
+    runtime.Tick(world, {}, {}, {}, {}, deaths);
+    EXPECT_EQ(State()["values"]["kills"], 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, FailedEnemyListenerRollsBackStateAndWritesAndStopsSubscription) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"economy.write"};
+    Add(R"(assert(chronicle.subscribe('enemy_killed',function(w)
+        assert(chronicle.set('reward',true))
+        assert(chronicle.add_money(2))
+        error('reject reward')
+    end)) return {})",
+        manifest);
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    ASSERT_TRUE(runtime.WantsEnemyDeaths());
+    const mods::World world{2, 0, 10, true, 0, 1};
+    runtime.Tick(world);
+    int                                   commits = 0;
+    const std::array<mods::EnemyDeath, 1> deaths{{{16, 0, 1}}};
+    runtime.Tick(world, [&](int) { ++commits; return true; }, {}, {}, {}, deaths);
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(State()["values"].contains("reward"));
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, ReturnedEnemyCallbackAlsoRequestsCaptureWithoutDoubleDelivery) {
+    Add("return {on_enemy_killed=function(w) chronicle.set('kills',(chronicle.get('kills') or 0)+1) end}");
+    Start();
+    ASSERT_TRUE(runtime.WantsEnemyDeaths());
+    const mods::World                     world{2, 0, 0, true, 0, 1};
+    const std::array<mods::EnemyDeath, 1> deaths{{{16, 0, 1}}};
+    runtime.Tick(world);
+    runtime.Tick(world, {}, {}, {}, {}, deaths);
+    EXPECT_EQ(State()["values"]["kills"], 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
 TEST_F(ModRuntime, LuaReceivesGameEventsAndIsolatedState) {
     Add("return {on_tick=function(w) chronicle.set('map', w.map); chronicle.set('ticks', (chronicle.get('ticks') or 0)+1) end}");
     Start();
@@ -952,6 +1012,28 @@ TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {
                                   "test.native.v2: [native] v2 started", "test.native.v2: [native] game_enter", "test.native.v2: [native] map_enter",
                                   "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] v2 tick",
                                   "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] game_leave"}));
+}
+
+TEST_F(ModNativeV2, EnemyDeathsDeliverNativePayloadAndRollbackFailedCallbacks) {
+    const mods::World                     world{2, 0, 0, true, 0, 1};
+    const std::array<mods::EnemyDeath, 1> deaths{{{16, 0, 1, -1, 10, 20, 5, true}}};
+    const auto                            commit = [](const auto &, int, auto &) { return true; };
+    LoadPlugin();
+    ASSERT_TRUE(runtime.WantsEnemyDeaths());
+    runtime.Tick(world, {}, {}, {}, commit);
+    runtime.Tick(world, {}, {}, {}, commit, deaths);
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values()["enemy_killed"], 1);
+    LoadPlugin("fail_kill");
+    runtime.Tick(world, {}, {}, {}, commit);
+    int commits = 0;
+    runtime.Tick(world, {}, {}, {}, [&](const auto &, int, auto &) { ++commits; return true; }, deaths);
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(Values().contains("enemy_killed"));
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    LoadPlugin({}, CHRONICLE_NATIVE_V2_NO_EVENTS_FIXTURE);
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());
 }
 
 TEST_F(ModNativeV2, SaveLoadRebindsOwnedValuesBeforeDeferredEventAndResetClearsThem) {

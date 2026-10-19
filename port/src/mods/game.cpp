@@ -126,10 +126,12 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 void TickGame() {
     static std::uint64_t entity_epoch = 0;
     if (entity_epoch != Scripts().Epoch()) {
+        EnemyDeaths().Enable(false);
         StopTrackingEntities();
         entity_epoch = Scripts().Epoch();
     }
     if (!Scripts().HasGameplay()) {
+        EnemyDeaths().Enable(false);
         StopTrackingEntities();
         return;
     }
@@ -143,6 +145,14 @@ void TickGame() {
         world.dungeon = SaveData->GetDngStatus()->cur_georama;
         world.floor = SaveData->GetDngStatus()->cur_floor;
     }
+    std::vector<EnemyDeath> deaths;
+    for (const auto &death : EnemyDeaths().Pending()) {
+        if (playing && mode == GAME_MODE_DUNGEON && death.unit == NowMonstorUnit) {
+            deaths.push_back(death);
+        }
+    }
+    const auto dropped_deaths = EnemyDeaths().Dropped();
+    EnemyDeaths().Reset();
     Scripts().Tick(world, [playing](int amount) {
         if (!playing || !SaveData) {
             return false;
@@ -181,6 +191,7 @@ void TickGame() {
         if (georama){ georama->Commit();
 }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
-        return true; });
+        return true; }, deaths, dropped_deaths);
+    EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());
 }
 } // namespace mods

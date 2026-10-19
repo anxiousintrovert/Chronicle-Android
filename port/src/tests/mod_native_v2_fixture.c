@@ -95,12 +95,22 @@ static int event(const ChronicleModHostV2 *host, void *state, uint32_t which, co
     case CHRONICLE_EVENT_SAVE_LOADED:
         key = "save_loaded";
         break;
+    case CHRONICLE_EVENT_ENEMY_KILLED:
+        if (!strstr(world, "\"event\":") || !strstr(world, "\"entity\":\"16\"") ||
+            !strstr(world, "\"source\":\"scripted\""))
+            return 0;
+        key = "enemy_killed";
+        break;
     default:
         return 0;
     }
     if (!increment(host, key))
         return 0;
     host->log(host->context, key);
+    if (which == CHRONICLE_EVENT_ENEMY_KILLED && mode(host, "\"fail_kill\"")) {
+        host->call(host->context, "economy.add", "{\"amount\":3}", &result);
+        return 0;
+    }
     if (which == CHRONICLE_EVENT_GAME_LEAVE) {
         return strstr(world, "\"playing\":false") &&
                !host->call(host->context, "economy.get", "{}", &result);

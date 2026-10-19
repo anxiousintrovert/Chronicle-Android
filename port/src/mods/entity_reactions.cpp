@@ -5,6 +5,7 @@
 
 #include "dngstatusdata.hpp"
 #include "dun/gameloop.hpp"
+#include "entity_events.hpp"
 #include "monstorunit.hpp"
 
 namespace mods {
@@ -106,6 +107,7 @@ int ConsumeEntityDamage(CMonstorUnit *unit, int slot) noexcept {
     if (actor.event_flag2 != -1) {
         actor.event_flag2_pending = 1;
     }
+    CaptureEnemyDeath(unit, slot, true);
     return result;
 }
 } // namespace mods

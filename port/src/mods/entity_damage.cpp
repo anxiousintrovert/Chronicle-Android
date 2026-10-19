@@ -37,6 +37,7 @@
 #include "weaponelement.hpp"
 
 #include "entity_reactions.hpp"
+#include "entity_events.hpp"
 extern int hitCnt;
 
 PORT_OVERRIDE int CMonstorUnit::CheckDmg() {
@@ -162,6 +163,7 @@ PORT_OVERRIDE int CMonstorUnit::CheckDmg() {
                 alive_count--;
                 result = MONSTER_DMG_KILLED;
                 ((CDngStatusData *) UserStatus)->AddKills();
+                mods::CaptureEnemyDeath(this, current_monster, false);
             }
 
             chara[current_monster][0].GetPosition(poison_position);
@@ -569,6 +571,7 @@ PORT_OVERRIDE int CMonstorUnit::CheckDmg() {
                         alive_count--;
                         result = MONSTER_DMG_KILLED;
                         ((CDngStatusData *) UserStatus)->AddKills();
+                        mods::CaptureEnemyDeath(this, current_monster, false);
 
                         if (monster[current_monster].event_flag2 != -1) {
                             monster[current_monster].event_flag2_pending = 1;

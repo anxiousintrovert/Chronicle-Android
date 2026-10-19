@@ -4,6 +4,7 @@
 #include "dun/gameloop.hpp"
 #include "mods/api.hpp"
 #include "mods/entities.hpp"
+#include "mods/entity_events.hpp"
 #include "mods/entity_handles.hpp"
 #include "mods/entity_reactions.hpp"
 #include "mods/entity_tracking.hpp"
@@ -64,8 +65,13 @@ TEST(ModEntityHandles, NativeDamageDispatchAccountsForDeathExactlyOnce) {
     actor.last_attacker = 2;
     actor.event_flag2 = 7;
     actor.event_flag2_pending = 0;
+    mods::EnemyDeaths().Enable(true);
     mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_KILLED);
     EXPECT_EQ(unit->CheckDmg(), MONSTER_DMG_KILLED);
+    ASSERT_EQ(mods::EnemyDeaths().Pending().size(), 1);
+    EXPECT_TRUE(mods::EnemyDeaths().Pending()[0].scripted);
+    EXPECT_EQ(mods::EnemyDeaths().Pending()[0].floor, 1);
+    EXPECT_NE(mods::EnemyDeaths().Pending()[0].entity, 0);
     EXPECT_EQ(actor.hp, 0);
     EXPECT_EQ(actor.stop_timer, 0);
     EXPECT_TRUE(actor.motion_reset_pending);
@@ -78,6 +84,8 @@ TEST(ModEntityHandles, NativeDamageDispatchAccountsForDeathExactlyOnce) {
     EXPECT_EQ(combat["recorded_kills"], 1);
     EXPECT_THROW(mods::ReadCombat(nullptr, *UserStatus), std::runtime_error);
     EXPECT_EQ(mods::ConsumeEntityDamage(unit.get(), 0), MONSTER_DMG_NONE);
+    EXPECT_EQ(mods::EnemyDeaths().Pending().size(), 1);
+    mods::EnemyDeaths().Enable(false);
     EXPECT_EQ(UserStatus->kills[0][1], 1);
     mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
     EXPECT_EQ(unit->CheckDmg(), MONSTER_DMG_HIT);

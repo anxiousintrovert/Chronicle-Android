@@ -1,5 +1,6 @@
 #include "entity_tracking.hpp"
 
+#include "entity_events.hpp"
 #include "entity_reactions.hpp"
 #include "monstorunit.hpp"
 
@@ -38,6 +39,7 @@ void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {
 }
 
 void EntityUnitCleared(CMonstorUnit *unit) {
+    EnemyDeaths().CancelUnit(unit);
     ClearEntityReactions(unit);
     if (tracked == unit) {
         handles.Clear();

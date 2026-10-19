@@ -25,6 +25,9 @@ class EntityLifecycleSource(unittest.TestCase):
                 "    if (scripted != MONSTER_DMG_NONE) return scripted;\n")
         adapter = function(port, signature)
         self.assertEqual(adapter.count(hook), 1)
+        capture = "mods::CaptureEnemyDeath(this, current_monster, false);"
+        self.assertEqual(adapter.count(capture), 2)
+        adapter = "\n".join(line for line in adapter.split("\n") if capture not in line)
         self.assertEqual(adapter.replace(hook, ""), function(native, signature))
 
     def test_native_statements_are_preserved(self):

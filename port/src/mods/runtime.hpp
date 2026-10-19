@@ -1,5 +1,7 @@
 #pragma once
 #include <functional>
+
+#include "entity_events.hpp"
 #pragma push_macro("B")
 #pragma push_macro("R")
 #pragma push_macro("G")
@@ -30,9 +32,10 @@ using QueryGame = std::function<nlohmann::json(std::string_view, const nlohmann:
 using CommitGame = std::function<bool(const std::vector<GameCommand> &, int, std::string &)>;
 
 struct World {
-    int  mode = -1, map = -1, money = 0;
-    bool playing = false;
-    int  dungeon = -1, floor = -1;
+    int            mode = -1, map = -1, money = 0;
+    bool           playing = false;
+    int            dungeon = -1, floor = -1;
+    nlohmann::json event;
 };
 
 struct QuestStatus {
@@ -53,9 +56,11 @@ public:
     Runtime &operator=(const Runtime &) = delete;
     void     Start(const Manager &manager);
     void     Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
-                  const QueryGame &query_game = {}, const CommitGame &commit_game = {});
+                  const QueryGame &query_game = {}, const CommitGame &commit_game = {},
+                  std::span<const EnemyDeath> deaths = {}, unsigned dropped_deaths = 0);
     void     ResetState();
     bool     HasGameplay() const;
+    bool     WantsEnemyDeaths() const;
 
     std::uint64_t Epoch() const { return epoch_; }
 

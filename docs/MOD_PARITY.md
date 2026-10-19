@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers and mod kill events |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,26 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Enemy-kill event validation (2026-10-19)
+
+`events.enemy_killed.v1` provides deferred Lua subscriptions/returned callbacks
+and the additive ABI 2 enemy-killed event bit. Capture is dormant without a live
+subscriber. Native code captures bounded records only; callbacks dispatch later
+with detached payloads and the existing per-callback transaction rules. Stale
+floor/unit/load context is discarded, and a 64-record limit reports overflow.
+No published native struct layout, PS2 source or retail engine capacity changed.
+
+Clang Windows Release game/test builds passed. The full 522-case suite completed
+with 516 passed and six environment/optional skips. Lua tests cover payloads,
+stale floors/load, rollback and failed subscriptions; a real native DLL validates
+the new payload and failed-callback rollback. A later focused test verifies the
+returned callback form without duplicate dispatch. All 15 Python tests passed.
+The 3,840-case empty/disabled generator comparison still matches pinned upstream.
+An isolated PAL dungeon replay invoked a scripted kill through the shared manager,
+received one listener event, committed its owned counter and queued reward, and
+displayed PASS. Natural combat/poison producer hooks are source-checked; the live
+replay used scripted damage. Other-platform execution remains unverified.
 
 ## Scripted damage validation (2026-10-19)
 
@@ -254,7 +274,7 @@ The generator comparison does not establish full retail-gameplay equivalence.
 - No gameplay module means no game queries, writes or native plugin load.
 - Reads are lazy detached snapshots. Writes are bounded and committed only after
   the calling callback succeeds. Disabling a package takes effect after restart.
-- No generator array expansion, extra enemy scans, dungeon patch, RNG hook,
+- No generator array expansion, unconditional enemy scans, dungeon patch, RNG hook,
   combat formula, renderer replacement or timing change is part of this expansion.
 - Native changes stay in `port/`; tools/docs/examples stay outside `ps2/`. Native
   signatures and layouts remain unchanged. Clang is required for C and C++.

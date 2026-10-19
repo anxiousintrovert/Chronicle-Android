@@ -583,7 +583,7 @@ int Subscribe(lua_State *L) {
     if (!m.initializing || lua_rawlen(L, 1) != std::strlen(event) || !lua_isfunction(L, 2)) {
         return Failure(L, "subscribe requires a function during package initialization");
     }
-    if (std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
+    if (std::strcmp(event, "enemy_killed") && std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
         return Failure(L, "unsupported lifecycle event");
     }
     if (m.listener_count >= 32) {
@@ -726,6 +726,10 @@ void PushWorld(lua_State *L, const World &world) {
     lua_setfield(L, -2, "dungeon");
     lua_pushinteger(L, world.floor);
     lua_setfield(L, -2, "floor");
+    if (!world.event.is_null()) {
+        PushJson(L, world.event);
+        lua_setfield(L, -2, "event");
+    }
 }
 
 int Dispatch(lua_State *L) {
@@ -761,6 +765,16 @@ int Reference(lua_State *L) {
     if (!lua_istable(L, 1)) {
         return luaL_error(L, "script must return a callback table");
     }
+    lua_getfield(L, 1, "on_enemy_killed");
+    if (!lua_isnil(L, -1) && !lua_isfunction(L, -1)) {
+        return luaL_error(L, "on_enemy_killed must be a function");
+    }
+    if (lua_isfunction(L, -1)) {
+        // An empty listener entry also marks a legacy returned callback as an
+        // explicit subscription, without invoking it twice in Dispatch.
+        Self(L).listeners.try_emplace("on_enemy_killed");
+    }
+    lua_pop(L, 1);
     Self(L).reference = luaL_ref(L, LUA_REGISTRYINDEX);
     return 0;
 }
@@ -929,15 +943,18 @@ struct Runtime::Impl {
         bool        accepted = false;
         try {
             if (event || action) {
-                const auto payload = Json{
+                auto payload_object = Json{
                     {"mode",    world.mode   },
                     {"map",     world.map    },
                     {"money",   world.money  },
                     {"playing", world.playing},
                     {"dungeon", world.dungeon},
                     {"floor",   world.floor  }
+                };
+                if (!world.event.is_null()) {
+                    payload_object["event"] = world.event;
                 }
-                                         .dump();
+                const auto payload = payload_object.dump();
                 accepted = action ? m.native->RunAction(action, payload.c_str()) : m.native->Event(event, payload.c_str());
             } else {
                 accepted = m.native->Tick();
@@ -1094,7 +1111,11 @@ void Runtime::Start(const Manager &manager) {
 }
 
 void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
-                   const QueryGame &query_game, const CommitGame &commit_game) {
+                   const QueryGame &query_game, const CommitGame &commit_game,
+                   std::span<const EnemyDeath> deaths, unsigned dropped_deaths) {
+    if (dropped_deaths) {
+        impl_->diagnostics.push_back("Enemy event queue overflow: " + std::to_string(dropped_deaths) + " deaths dropped.");
+    }
     // UI requests are consumed exactly once, never carried into another session.
     const auto actions = std::exchange(impl_->pending_actions, {});
     const bool action_context = world.playing && impl_->was_playing && world.mode == impl_->previous.mode &&
@@ -1158,6 +1179,26 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER);
         }
         if (world.playing) {
+            if (!game_enter && !floor_enter && !impl_->loaded_pending) {
+                for (const auto &death : deaths.first(std::min<std::size_t>(deaths.size(), 64))) {
+                    if (death.dungeon != world.dungeon || death.floor != world.floor) {
+                        continue;
+                    }
+                    World event_world = world;
+                    event_world.event = {
+                        {"entity",       std::to_string(death.entity)          },
+                        {"attacker",     death.attacker                        },
+                        {"reward_exp",   death.experience                      },
+                        {"reward_money", death.money                           },
+                        {"damage",       death.damage                          },
+                        {"source",       death.scripted ? "scripted" : "native"}
+                    };
+                    if (m.listeners.contains("on_enemy_killed")) {
+                        impl_->Call(m, "on_enemy_killed", event_world, money, read_game, query_game, commit_game);
+                    }
+                    impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_ENEMY_KILLED);
+                }
+            }
             for (const auto &[owner, id] : actions) {
                 if (owner == m.package.id && action_context && !m.failed) {
                     auto &action = m.actions.at(id);
@@ -1183,6 +1224,13 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
 
 bool Runtime::HasGameplay() const {
     return std::ranges::any_of(impl_->modules, [](const auto &m) { return !m->failed; });
+}
+
+bool Runtime::WantsEnemyDeaths() const {
+    return std::ranges::any_of(impl_->modules, [](const auto &m) {
+        return !m->failed && (m->listeners.contains("on_enemy_killed") ||
+                              (m->native && m->native->WantsEvent(CHRONICLE_EVENT_ENEMY_KILLED)));
+    });
 }
 
 std::vector<ActionStatus> Runtime::Actions(std::string_view owner) const {
