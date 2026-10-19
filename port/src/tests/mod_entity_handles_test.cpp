@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 
+#include "mods/api.hpp"
 #include "mods/entities.hpp"
 #include "mods/entity_handles.hpp"
 #include "mods/entity_tracking.hpp"
+#include "mods/runtime.hpp"
 #include "monstorunit.hpp"
+#include "savedata.hpp"
 
 TEST(ModEntityHandles, DormantRegistryCreatesNoIdentities) {
     mods::EntityHandles handles;
@@ -13,6 +16,112 @@ TEST(ModEntityHandles, DormantRegistryCreatesNoIdentities) {
     }
     EXPECT_FALSE(handles.Resolve(0));
     EXPECT_FALSE(handles.Resolve(16));
+}
+
+TEST(ModEntityHandles, CombatWritesStageInOrderAndRejectWithoutPublishing) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    mods::StopTrackingEntities();
+    unit->CleanViewMonstor(0);
+    auto &actor = unit->monster[0];
+    actor.state = 2;
+    actor.hp = 10;
+    actor.max_hp = 50;
+    actor.revealed = -1;
+    const auto              id = std::to_string(mods::TrackEntities(*unit).Get(0));
+    mods::EntityTransaction transaction;
+    std::string             error;
+    const mods::GameCommand heal{
+        "combat.heal", {{"entity", id}, {"amount", 25}}
+    };
+    const mods::GameCommand slow{
+        "combat.status_add", {{"entity", id}, {"status", "slow"}, {"duration_frames", 90}}
+    };
+    ASSERT_TRUE(transaction.Stage(unit.get(), {heal, heal, slow}, error)) << error;
+    EXPECT_EQ(actor.hp, 10);
+    EXPECT_EQ(actor.slow_timer, 0);
+    transaction.Commit();
+    EXPECT_EQ(actor.hp, 50);
+    EXPECT_EQ(actor.slow_timer, 90);
+    actor.hp = 10;
+    auto bad = slow;
+    bad.arguments["duration_frames"] = 0;
+    EXPECT_FALSE(transaction.Stage(unit.get(), {heal, bad}, error));
+    transaction.Commit();
+    EXPECT_EQ(actor.hp, 10);
+    auto shorter = slow;
+    shorter.arguments["duration_frames"] = 1;
+    ASSERT_TRUE(transaction.Stage(unit.get(), {shorter}, error));
+    transaction.Commit();
+    EXPECT_EQ(actor.slow_timer, 90);
+    actor.state = 1;
+    EXPECT_FALSE(transaction.Stage(unit.get(), {heal}, error));
+    mods::EntitySlotConstructed(unit.get(), 0);
+    actor.state = 2;
+    EXPECT_FALSE(transaction.Stage(unit.get(), {heal}, error));
+    EXPECT_FALSE(transaction.Stage(nullptr, {heal}, error));
+    mods::StopTrackingEntities();
+}
+
+TEST(ModEntityHandles, MixedEnemyAndSaveBatchRollsBackBothDomains) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    auto save = std::make_unique<CSaveData>();
+    mods::StopTrackingEntities();
+    unit->CleanViewMonstor(0);
+    auto &actor = unit->monster[0];
+    actor.state = 2;
+    actor.hp = 10;
+    actor.max_hp = 50;
+    actor.revealed = -1;
+    const auto              id = std::to_string(mods::TrackEntities(*unit).Get(0));
+    const mods::GameCommand heal{
+        "combat.heal", {{"entity", id}, {"amount", 25}}
+    };
+    const mods::GameCommand flag{
+        "story.flag_set", {{"id", 10}, {"value", 1}}
+    };
+    const mods::GameCommand bad{"fishing.spend", {{"amount", 9999}}};
+    save->SetFishingPoint(0);
+    save->SetGameFlag(10, 0);
+    const auto          before = std::make_unique<CSaveData>(*save);
+    mods::CommitEffects effects;
+    std::string         error;
+    EXPECT_FALSE(mods::ApplyEntityAndSave(*save, unit.get(), {heal, flag, bad}, 0, error, &effects, nullptr));
+    EXPECT_EQ(actor.hp, 10);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    EXPECT_EQ(effects.status_sounds, 0);
+    ASSERT_TRUE(mods::ApplyEntityAndSave(*save, unit.get(), {flag, heal}, 0, error, &effects, nullptr)) << error;
+    EXPECT_EQ(actor.hp, 35);
+    EXPECT_EQ(save->GetGameFlag(10), 1);
+    mods::StopTrackingEntities();
+}
+
+TEST(ModEntityHandles, CombatValidationRejectsUnsafeAmountsAndUnknownFields) {
+    using Json = nlohmann::json;
+    const Json heal = {
+        {"entity", "16"},
+        {"amount", 1   }
+    };
+    const Json status = {
+        {"entity",          "16"  },
+        {"status",          "stop"},
+        {"duration_frames", 32767 }
+    };
+    EXPECT_TRUE(mods::ValidateOperation("combat.heal", heal).empty());
+    EXPECT_TRUE(mods::ValidateOperation("combat.status_add", status).empty());
+    for (const Json &bad : {Json(-1), Json(0), Json(1000001), Json(1.5), Json(true), Json("1"), Json(UINT64_MAX)}) {
+        auto value = heal;
+        value["amount"] = bad;
+        EXPECT_FALSE(mods::ValidateOperation("combat.heal", value).empty());
+    }
+    auto value = status;
+    value["duration_frames"] = 32768;
+    EXPECT_FALSE(mods::ValidateOperation("combat.status_add", value).empty());
+    value = status;
+    value["status"] = "poison";
+    EXPECT_FALSE(mods::ValidateOperation("combat.status_add", value).empty());
+    value = heal;
+    value["extra"] = 1;
+    EXPECT_FALSE(mods::ValidateOperation("combat.heal", value).empty());
 }
 
 TEST(ModEntityHandles, QueriesRejectStaleActorsAndExcludeHiddenOrDeadMonsters) {

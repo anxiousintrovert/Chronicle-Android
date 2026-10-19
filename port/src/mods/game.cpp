@@ -173,7 +173,8 @@ void TickGame() {
             georama.emplace();
         }
         CommitEffects effects;
-        if (!ApplySave(*SaveData, commands, money, error, &effects, georama ? &georama->state : nullptr)) { return false; }
+        if (!ApplyEntityAndSave(*SaveData, mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr,
+                               commands, money, error, &effects, georama ? &georama->state : nullptr)) { return false; }
         if (georama){ georama->Commit();
 }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }

@@ -472,6 +472,24 @@ Native actions share this list, package namespace, 32-action limit and schedulin
 rules; their callback receives the C host/state and a JSON world snapshot instead
 of a Lua table. Arbitrary custom UI controls remain unimplemented.
 
+### Enemy healing and native status timers
+
+`combat.heal({entity = handle, amount = 1..1000000})` queues healing clamped to the
+enemy's native maximum HP. `combat.status_add({entity = handle, status = "slow" |
+"stop", duration_frames = 1..32767})` extends that native timer to the greater of
+its current value and the requested duration. Both require `game.write` and a
+live, revealed, actively participating enemy in the current dungeon. Dormant,
+dead, stale and out-of-dungeon targets reject the callback. Read the resulting
+fields with `entities.get` on a subsequent callback after commit.
+
+These operations participate in the same atomic callback as save and Georama
+writes: a failure in any domain publishes none of them. Healing does not simulate
+a hit, revive enemies, award kill credit or change rewards. Status calls set the
+requested timer directly, without a random weapon-proc roll, and do not clear
+other ailments. Native stepping controls animation, timer progression and expiry;
+inactive simulation may delay those effects. This is not persistent per-mod stat
+ownership or a damage-formula API.
+
 ### Live enemy inspection
 
 `entities.list` takes no arguments and requires `game.read` plus an active dungeon.

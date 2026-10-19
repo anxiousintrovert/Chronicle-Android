@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 52 implemented operations, native plugins and author
+a real host-call boundary, 54 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
+| Entities / combat | Lazy generation-checked live enemy list/get; bounded transactional healing and slow/stop timers; port-side spawn/clear identity notifications; unchanged retail capacity | Damage/kill processing, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,24 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Enemy healing and status validation (2026-10-19)
+
+`combat.heal` and `combat.status_add` stage selected enemy fields before publishing
+them alongside save/scene transactions. Failed native context, stale handles,
+invalid inputs or a later save-command failure leave both domains unchanged.
+Unrelated mod callbacks keep the existing save-only path. No damage or death
+simulation is introduced, and native timers remain responsible for expiry.
+
+Clang Windows Release game/test builds passed. The full 511-case suite completed
+with 505 passed and six environment/optional skips. The final nine entity tests
+also passed after adding strict argument-boundary coverage. All 14 Python tests
+passed, and all 3,840 empty/disabled generator cases remain identical to upstream.
+PS2 sources remain untouched. An isolated PAL Divine Beast Cave action in the
+shared manager healed an active enemy to its native cap, applied slow and stop,
+verified the committed HP/timers on the next callback and displayed PASS. Partial
+health restoration is covered by the native-record tests; the replay does not
+establish every combat animation/expiry path or other-platform execution.
 
 ## Live enemy inspection validation (2026-10-19)
 
