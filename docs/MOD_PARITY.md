@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 60 implemented operations, native plugins and author
+a real host-call boundary, 63 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,28 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Enemy movement and spatial query validation (2026-10-19)
+
+The native MoonMod binding also exposes `physics.query`, `physics.velocity_get`
+and `physics.velocity_set`; these now appear in our catalog and author docs.
+Sphere queries select active revealed enemy origins, not collision geometry.
+Movement uses native direction/speed without an engine-loop override. Writes
+share callback rollback with save/combat changes. There are no persistent
+controllers, capacity increases or no-mod behavior changes.
+
+Clang 23.1.2 Windows Release game/test builds pass. The full 629-case suite
+completed with 622 passes, six skips and one disabled benchmark. After adding a
+native-byte/RNG preservation case, the final affected suite passed all 19 tests,
+including seven physics cases. These cover bounds, hidden/inactive/stale actors,
+gravity/knockback/stop semantics, mixed transaction failures, command ordering,
+slot cleanup and unchanged native bytes/RNG for queries and empty commands.
+All 15 Python checks pass. All 3,840 empty/disabled generator cases still match
+the pinned upstream exactly; `ps2/` remains unchanged. Other platforms and
+collision-constrained movement playthroughs remain unverified. An isolated PAL
+dungeon replay invoked all three APIs through a shared-manager Lua action, checked
+an exact-origin sphere match, changed and restored movement intent, and displayed
+`PASS native movement`. The audit package stays outside the repository.
 
 ## Owned enemy scale validation (2026-10-19)
 

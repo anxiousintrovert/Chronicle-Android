@@ -166,7 +166,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
-        if (operation.starts_with("entities.")) {
+        if (operation.starts_with("entities.") || operation.starts_with("physics.")) {
             return ReadEntities(world.playing && world.mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr, operation, arguments);
         }
         if (!SaveData || !world.playing){ throw std::runtime_error("game state unavailable");

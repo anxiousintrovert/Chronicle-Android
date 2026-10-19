@@ -16,6 +16,9 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"physics.query",           "game.read",     "Find active revealed enemy origins inside a sphere (not collision geometry).", false},
+    {"physics.velocity_get",    "game.read",     "Read native enemy movement intent before collision.",                          false},
+    {"physics.velocity_set",    "game.write",    "Queue one-shot enemy movement intent, replacing knockback.",                   true },
     {"entities.scale_set",      "game.write",    "Own a live enemy model and shadow scale multiplier from 0.5 to 3.0.",          true },
     {"entities.scale_reset",    "game.write",    "Release this package's visual scale for a live enemy.",                        true },
     {"entities.set_stats",      "game.write",    "Own selected live enemy stats with conditional restoration.",                  true },
@@ -197,7 +200,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (IsEntityWrite(name)) {
         return ValidateEntityWrite(name, a);
     }
-    if (name.starts_with("entities.")) {
+    if (name.starts_with("entities.") || name.starts_with("physics.")) {
         return ValidateEntityQuery(name, a);
     }
     if (!a.is_object()) {

@@ -31,12 +31,15 @@ public:
 
 private:
     struct Values {
-        bool            touched = false;
-        EnemyStatValues stats{};
-        int             slow = 0, stop = 0;
-        int             reaction = 0, damage = 0;
-        bool            scale_touched = false;
-        EnemyScale      scale{};
+        bool                 touched = false;
+        EnemyStatValues      stats{};
+        int                  slow = 0, stop = 0;
+        int                  reaction = 0, damage = 0;
+        bool                 scale_touched = false;
+        EnemyScale           scale{};
+        bool                 velocity_touched = false;
+        std::array<float, 3> direction{};
+        float                speed = 0;
     };
 
     CMonstorUnit                   *unit_ = nullptr;

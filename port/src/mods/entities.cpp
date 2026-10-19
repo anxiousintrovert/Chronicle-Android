@@ -28,6 +28,52 @@ bool Live(const MONSTOR &actor) {
     return (actor.state == 1 || actor.state == 2) && actor.hp > 0 && actor.revealed != 0;
 }
 
+bool Vector3(const nlohmann::json &value, double limit) {
+    if (!value.is_array() || value.size() != 3) {
+        return false;
+    }
+    return std::ranges::all_of(value, [limit](const auto &axis) {
+        return axis.is_number() && std::isfinite(axis.template get<double>()) &&
+               std::abs(axis.template get<double>()) <= limit;
+    });
+}
+
+nlohmann::json Velocity(const MONSTOR &actor, const nlohmann::json &entity) {
+    if (!Live(actor) || actor.state != 2 || actor.max_hp < actor.hp) {
+        throw std::runtime_error("velocity requires an active live enemy with valid health");
+    }
+    std::array<float, 3> velocity{};
+    const char          *source = "stopped";
+    if (actor.stop_timer <= 0) {
+        if (!std::isfinite(actor.knockback[0]) || !std::isfinite(actor.ground_distance)) {
+            throw std::runtime_error("native movement state is not finite");
+        }
+        const bool  impulse = actor.knockback[0] > 0;
+        const float speed = impulse ? actor.knockback[0] : actor.movement_speed;
+        const auto *direction = impulse ? actor.knockback_direction : actor.movement;
+        if (!std::isfinite(speed) || speed < 0) {
+            throw std::runtime_error("native speed is invalid");
+        }
+        for (unsigned i = 0; i < 3; ++i) {
+            velocity[i] = direction[i] * speed;
+        }
+        if (actor.falls && actor.ground_distance > 0.0001f) {
+            velocity[1] -= 0.2f;
+        }
+        if (!std::ranges::all_of(velocity, [](float x) { return std::isfinite(x); })) {
+            throw std::runtime_error("native movement intent is not finite");
+        }
+        source = impulse ? "knockback" : "native_movement";
+    }
+    return {
+        {"entity",    entity                                              },
+        {"velocity",  velocity                                            },
+        {"source",    source                                              },
+        {"units",     "game_units_per_frame"                              },
+        {"semantics", "movement intent before collision and subsequent AI"}
+    };
+}
+
 nlohmann::json Snapshot(const MONSTOR &actor, const CCharacter &character, EntityHandles::Handle handle) {
     return {
         {"entity",       std::to_string(handle)   },
@@ -49,7 +95,7 @@ nlohmann::json Snapshot(const MONSTOR &actor, const CCharacter &character, Entit
 bool IsEntityWrite(std::string_view operation) {
     return operation == "combat.heal" || operation == "combat.damage" || operation == "combat.status_add" ||
            operation == "entities.set_stats" || operation == "entities.reset_stats" ||
-           operation == "entities.scale_set" || operation == "entities.scale_reset";
+           operation == "entities.scale_set" || operation == "entities.scale_reset" || operation == "physics.velocity_set";
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
@@ -78,6 +124,14 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
 }
 
 std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json &a) {
+    if (operation == "physics.velocity_set") {
+        if (!a.is_object() || a.size() != 2 || !a.contains("entity") || !a["entity"].is_string() ||
+            !Parse(a["entity"].get_ref<const std::string &>()) || !a.contains("velocity") ||
+            !Vector3(a["velocity"], 100000)) {
+            return "provide a current entity handle and velocity [x,y,z], each finite within +/-100000";
+        }
+        return {};
+    }
     if (operation == "entities.scale_set" || operation == "entities.scale_reset") {
         const bool reset = operation == "entities.scale_reset";
         if (!a.is_object() || a.size() != (reset ? 1u : 2u) || !a.contains("entity") ||
@@ -178,6 +232,23 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
         if (hp <= 0 || max_hp < hp) {
             error = "enemy is already dying or has invalid native health";
             return false;
+        }
+        if (command.operation == "physics.velocity_set") {
+            if (command.owner.empty() || value.stop > 0 || !std::isfinite(actor.ground_distance)) {
+                error = "velocity requires a runtime owner, unstopped enemy and finite ground distance";
+                return false;
+            }
+            auto requested = command.arguments.at("velocity").get<std::array<double, 3>>();
+            if (actor.falls && actor.ground_distance > 0.0001f) {
+                requested[1] += 0.2;
+            }
+            const double speed = std::hypot(requested[0], requested[1], requested[2]);
+            value.speed = static_cast<float>(speed);
+            for (unsigned axis = 0; axis < 3; ++axis) {
+                value.direction[axis] = speed == 0 ? 0 : static_cast<float>(requested[axis] / speed);
+            }
+            value.velocity_touched = true;
+            continue;
         }
         if (command.operation == "entities.scale_set" || command.operation == "entities.scale_reset") {
             if (command.owner.empty()) {
@@ -306,6 +377,13 @@ void EntityTransaction::Commit() noexcept {
         }
         unit_->monster[i].slow_timer = values_[i].slow;
         unit_->monster[i].stop_timer = values_[i].stop;
+        if (values_[i].velocity_touched) {
+            auto &actor = unit_->monster[i];
+            std::copy(values_[i].direction.begin(), values_[i].direction.end(), actor.movement);
+            actor.movement[3] = 1;
+            actor.movement_speed = values_[i].speed;
+            actor.knockback[0] = 0;
+        }
         if (values_[i].scale_touched) {
             WriteEnemyScale(unit_->chara[i][0], values_[i].scale);
         }
@@ -328,7 +406,16 @@ std::string ValidateEntityQuery(std::string_view operation, const nlohmann::json
     if (operation == "entities.list") {
         return a.empty() ? "" : "entities.list takes no arguments";
     }
-    if (operation != "entities.get") {
+    if (operation == "physics.query") {
+        if (a.size() != 2 || !a.contains("center") || !Vector3(a["center"], 1000000) ||
+            !a.contains("radius") || !a["radius"].is_number() ||
+            !std::isfinite(a["radius"].get<double>()) || a["radius"].get<double>() < 0 ||
+            a["radius"].get<double>() > 10000) {
+            return "provide center [x,y,z] within +/-1000000 and a finite radius from 0 to 10000";
+        }
+        return {};
+    }
+    if (operation != "entities.get" && operation != "physics.velocity_get") {
         return "unknown entity query";
     }
     if (a.size() != 1 || !a.contains("entity") || !a["entity"].is_string() ||
@@ -354,13 +441,43 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
         throw std::runtime_error("entity queries require an active dungeon");
     }
     auto &handles = TrackEntities(*unit);
-    if (operation == "entities.get") {
+    if (operation == "physics.query") {
+        const auto   center = a.at("center").get<std::array<double, 3>>();
+        const double radius = a.at("radius").get<double>();
+        auto         matches = nlohmann::json::array();
+        for (unsigned slot = 0; slot < EntityHandles::Capacity; ++slot) {
+            if (!Live(unit->monster[slot]) || unit->monster[slot].state != 2 || !handles.Get(slot)) {
+                continue;
+            }
+            float position[4]{};
+            unit->chara[slot][0].GetPosition(position);
+            const double distance = std::hypot(position[0] - center[0], position[1] - center[1], position[2] - center[2]);
+            if (std::isfinite(distance) && distance <= radius) {
+                matches.push_back({
+                    {"entity",   std::to_string(handles.Get(slot))      },
+                    {"distance", distance                               },
+                    {"position", {position[0], position[1], position[2]}}
+                });
+            }
+        }
+        return {
+            {"entities",  matches                                                       },
+            {"semantics", "active revealed enemy origins in a sphere; no collision test"}
+        };
+    }
+    if (operation == "entities.get" || operation == "physics.velocity_get") {
         const auto slot = handles.Resolve(Parse(a.at("entity").get_ref<const std::string &>()));
         if (!slot || !Live(unit->monster[*slot])) {
+            if (operation == "physics.velocity_get") {
+                throw std::runtime_error("enemy handle is expired");
+            }
             return {
                 {"entity", a.at("entity")},
                 {"status", "expired"     }
             };
+        }
+        if (operation == "physics.velocity_get") {
+            return Velocity(unit->monster[*slot], a.at("entity"));
         }
         return Snapshot(unit->monster[*slot], unit->chara[*slot][0], handles.Get(*slot));
     }

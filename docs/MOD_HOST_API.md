@@ -660,3 +660,58 @@ The query returns `{town, plot, elements}`; each element has `element`, `native_
 Returned integer IDs retain their integer type in Lua and may be passed directly
 to host calls. Native/save state validation does not establish visual refresh for
 every retail element type.
+
+### Enemy spatial queries and movement intent
+
+These operations use existing session-local enemy handles through Lua and the
+native host-call boundary. Declare them in `requires_operations` when mandatory.
+They require an active dungeon. No physics loop or AI/collision override is installed.
+
+- `physics.query({center = {x,y,z}, radius = r})` (`game.read`) finds active,
+  revealed, living enemy **origins** within an inclusive sphere. Center coordinates
+  must be finite within +/-1,000,000; radius must be finite from 0 to 10,000.
+  Returns `{entities = {{entity = handle, position = {x,y,z}, distance = n}, ...},
+  semantics = ...}`, in native slot order, at most 16 entries. Hidden, inactive,
+  dead and nonfinite origins are omitted. This is not a mesh, hitbox, raycast or
+  line-of-sight test; zero radius matches an exact origin.
+- `physics.velocity_get({entity = handle})` (`game.read`) returns `entity`,
+  `velocity = {x,y,z}`, `units = "game_units_per_frame"`, `source` and `semantics`.
+  Source is `native_movement`, `knockback` or `stopped`. The snapshot combines
+  native direction/speed (or current knockback) with the native falling term;
+  stop yields zero. This is current movement intent, not measured displacement
+  or a prediction of the next simulation step. Subsequent AI, knockback decay,
+  collisions and native restrictions can change motion. Invalid native movement,
+  stale handles and inactive enemies fail the query.
+- `physics.velocity_set({entity = handle, velocity = {x,y,z}})` (`game.write`)
+  queues a one-shot command for an active, revealed, living enemy. Each component
+  must be finite within +/-100,000. It normalizes native direction/speed,
+  compensates for the current falling term and clears current knockback speed.
+  It does not teleport, disable collisions, remove stop or continuously override
+  AI. A stopped enemy rejects the command, including stop queued earlier in the
+  same callback. All unknown fields are rejected.
+
+Writes commit only after the complete save/entity batch succeeds. Queries during
+a callback see committed state, not pending commands. Sequential commands follow
+callback order; separate callbacks follow deterministic runtime package/listener
+order. The later successful movement command replaces the earlier one. Like
+damage, these are immediate effects rather than persistent ownership claims:
+unload does not rewind movement or restore an obsolete AI vector. No controller,
+deferred movement job or restoration record survives the command. Native
+slot/floor cleanup resets movement and expires handles. Use manifest `exclusive`
+claims when two packages must not control the same behavior.
+
+```lua
+local hits = assert(chronicle.call("physics.query", {
+    center = {0, 0, 0}, radius = 1000
+})).entities
+if hits[1] then
+    local current = assert(chronicle.call("physics.velocity_get", {
+        entity = hits[1].entity
+    }))
+    if current.source ~= "stopped" then
+        assert(chronicle.call("physics.velocity_set", {
+            entity = hits[1].entity, velocity = {1, 0, 0}
+        }))
+    end
+end
+```
