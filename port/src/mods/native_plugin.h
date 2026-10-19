@@ -56,7 +56,8 @@ enum ChronicleModEventV2 {
     CHRONICLE_EVENT_FLOOR_ENTER = 1u << 3,
     CHRONICLE_EVENT_SAVE_LOADED = 1u << 4,
     CHRONICLE_EVENT_ENEMY_KILLED = 1u << 5,
-    CHRONICLE_EVENT_ALL = (1u << 6) - 1
+    CHRONICLE_EVENT_CUSTOM = 1u << 6, /* event: {owner,name,payload}; own package or declared dependencies only. */
+    CHRONICLE_EVENT_ALL = (1u << 7) - 1
 };
 
 typedef struct ChronicleModPluginV2 {

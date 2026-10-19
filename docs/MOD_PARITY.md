@@ -7,14 +7,14 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 63 implemented operations, native plugins and author
+a real host-call boundary, 64 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
-| Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | More native events and custom events; mutating dependency commands; native plugin exports |
+| Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events; mutating dependency commands; native plugin exports |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
@@ -23,12 +23,35 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No framework renderer/timing hooks; native enemy model/shadow scale on explicit request | Owned overlays/camera/lighting/audio controls, activated only by callers |
-| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle events, owned scalar save values and optional shared-manager actions | Custom/native-ready events, cross-package exports, broader host domains; Linux/macOS/Android verification |
+| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions | Native-ready events, cross-package exports, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Custom event delivery (2026-10-19)
+
+`events.custom.v1` adds initialization-time owned Lua subscriptions, a shared
+`events.emit` host call and the additive ABI 2 `CHRONICLE_EVENT_CUSTOM` bit.
+Sources are assigned by the runtime; only the sender and declared dependents
+receive events. Publication follows successful callback commit. Delivery is
+bounded and deferred until the next tick, with detached payloads, per-recipient
+rollback and context/load/reset cancellation. No engine hooks or ABI structure
+layout changes were introduced. Mutating dependency commands and native exports
+remain outstanding; these notifications do not pretend to provide synchronous RPC.
+
+Validation: Clang 23.1.2 Windows Release game/test builds pass. All 79 focused
+runtime/native/API tests passed, including eight new custom-event cases and a
+real native DLL exercising emission, receipt, opt-out and callback failure. The
+full 638-case suite completed with 631 passes, six skips and one disabled optional
+benchmark. All 15 Python checks and offline dependency/capability validation pass.
+All 3,840 empty/disabled generator cases still match pinned upstream exactly.
+No PS2 source changed; other platforms remain unverified.
+An isolated PAL dungeon replay invoked an event from a provider's shared-manager
+action; its separate declared subscriber verified the sender and structured
+payload, committed owned state, and displayed `PASS custom events` in the manager.
+Audit packages and retail assets remain outside the repository.
 
 ## Enemy movement and spatial query validation (2026-10-19)
 

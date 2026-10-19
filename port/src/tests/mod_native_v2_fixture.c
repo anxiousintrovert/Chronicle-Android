@@ -63,6 +63,14 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
                host->state_set(host->context, "valid", "\"snowman \\u2603\"", &result) &&
                host->state_get(host->context, "absent", &result) && strcmp(result, "null") == 0;
     }
+    if (mode(host, "\"emit_custom\"") || mode(host, "\"fail_custom\"") || mode(host, "\"fail_emit_custom\"")) {
+        if (*(int *)state != 1)
+            return 1;
+        if (!host->state_set(host->context, "emitted", "true", &result) ||
+            !host->call(host->context, "events.emit", "{\"name\":\"pulse\",\"payload\":{\"answer\":42}}", &result))
+            return 0;
+        return !mode(host, "\"fail_emit_custom\"");
+    }
     if (!increment(host, "ticks"))
         return 0;
     host->log(host->context, "v2 tick");
@@ -101,12 +109,23 @@ static int event(const ChronicleModHostV2 *host, void *state, uint32_t which, co
             return 0;
         key = "enemy_killed";
         break;
+    case CHRONICLE_EVENT_CUSTOM:
+        if (!strstr(world, "\"owner\":\"test.native.v2\"") || !strstr(world, "\"name\":\"pulse\"") ||
+            !strstr(world, "\"payload\":{\"answer\":42}"))
+            return 0;
+        key = "custom";
+        break;
     default:
         return 0;
     }
     if (!increment(host, key))
         return 0;
     host->log(host->context, key);
+    if (which == CHRONICLE_EVENT_CUSTOM && mode(host, "\"fail_custom\"")) {
+        host->call(host->context, "events.emit", "{\"name\":\"leaked\",\"payload\":{}}", &result);
+        host->call(host->context, "economy.add", "{\"amount\":3}", &result);
+        return 0;
+    }
     if (which == CHRONICLE_EVENT_ENEMY_KILLED && mode(host, "\"fail_kill\"")) {
         host->call(host->context, "economy.add", "{\"amount\":3}", &result);
         return 0;

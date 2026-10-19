@@ -563,7 +563,7 @@ TEST_F(ModRuntime, NativePluginRequiresSeparateTrustAndEnableAndRejectsChangedBy
     auto manifest = Manifest("test.native");
     manifest.erase("script");
     manifest.erase("quests");
-    manifest["permissions"] = {"native.extension", "game.read", "economy.write"};
+    manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
     const fs::path source = CHRONICLE_NATIVE_FIXTURE;
     const auto     name = "plugin" + source.extension().string();
     manifest["native_library"] = name;
@@ -982,7 +982,7 @@ protected:
         runtime.ResetState();
         auto manifest = Manifest("test.native.v2");
         manifest.erase("quests");
-        manifest["permissions"] = {"native.extension", "game.read", "economy.write"};
+        manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
         manifest["requires_capabilities"] = {"plugins.native.v2"};
         manifest["native_library"] = "plugin" + source.extension().string();
         const auto package = root / "mods/test.native.v2";
@@ -1361,3 +1361,273 @@ TEST_F(ModNativeV2, DependencyFailureCancelsNativeActionAndUnloadsPluginImmediat
 }
 
 } // namespace
+
+TEST_F(ModRuntime, CustomEventsAreDeferredDependencyScopedOrderedAndDetached) {
+    auto provider = Manifest("source-mod");
+    provider["permissions"] = {"game.write"};
+    provider["requires_capabilities"] = {"events.custom.v1"};
+    Add(R"(local sent=false
+        assert(chronicle.subscribe_custom('source-mod','ready',function(w)
+            assert(w.event.owner=='source-mod')
+            assert(chronicle.set('self', (chronicle.get('self') or 0)+1))
+        end))
+        return {on_tick=function()
+            if sent then return end
+            sent=true
+            for n=1,2 do
+                local payload={value=n}
+                assert(chronicle.call('events.emit',{name='ready',payload=payload}))
+                payload.value=99
+            end
+        end})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"source-mod"};
+    Add(R"(assert(chronicle.subscribe_custom('source-mod','ready',function(w)
+            assert(w.event.owner=='source-mod' and w.event.name=='ready')
+            assert(chronicle.set('order',(chronicle.get('order') or '')..w.event.payload.value))
+            w.event.payload.value=999
+        end))
+        assert(chronicle.subscribe_custom('source-mod','ready',function(w)
+            assert(w.event.payload.value~=999)
+            assert(chronicle.set('order',chronicle.get('order')..w.event.payload.value))
+        end))
+        return {})",
+        consumer);
+    Add(R"(assert(not chronicle.subscribe_custom('source-mod','ready',function() error('leak') end)); return {})", Manifest("unrelated.mod"));
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(State().contains("values"));
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["order"], "1122");
+    EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["source-mod"]["values"]["self"], 2);
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["order"], "1122");
+}
+
+TEST_F(ModRuntime, CustomEventValidationAndQueryReadOnlyRules) {
+    auto provider = Manifest("source.mod");
+    provider["permissions"] = {"game.write"};
+    Add(R"(assert(not chronicle.call('events.emit',{name='ready',payload={}}))
+        assert(not chronicle.subscribe_custom('source.mod','bad:name',function() end))
+        assert(chronicle.export_query('probe',function()
+            assert(not chronicle.call('events.emit',{name='ready',payload={}}))
+            return {ok=true}
+        end))
+        return {on_tick=function()
+            assert(not chronicle.subscribe_custom('source.mod','late',function() end))
+            assert(not chronicle.call('events.emit',{name='ready',payload={},owner='spoof.mod'}))
+            assert(not chronicle.call('events.emit',{name='Bad',payload={}}))
+            assert(not chronicle.call('events.emit',{name='bad\0name',payload={}}))
+            assert(not chronicle.call('events.emit',{name='ready',payload={1,2}}))
+            assert(not chronicle.call('events.emit',{name='ready',payload={x=0/0}}))
+            assert(not chronicle.call('events.emit',{name='ready',payload={x=string.rep('x',16384)}}))
+            for n=1,16 do assert(chronicle.call('events.emit',{name='ready',payload={n=n}})) end
+            assert(not chronicle.call('events.emit',{name='ready',payload={}}))
+        end})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"source.mod"};
+    Add(R"(return {on_tick=function()
+        assert(not chronicle.call('events.emit',{name='denied',payload={}}))
+        assert(chronicle.invoke_query('source.mod','probe',{}).ok)
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, CustomEventQueueOverflowRejectsBeforeAnyGameCommit) {
+    for (int i = 0; i < 5; ++i) {
+        const std::string id = "source." + std::to_string(i);
+        auto              manifest = Manifest(id);
+        manifest["permissions"] = {"game.write", "economy.write"};
+        Add("local sent=false; assert(chronicle.subscribe_custom('" + id + R"(','ready',function()
+            assert(chronicle.set('seen',(chronicle.get('seen') or 0)+1))
+        end)); return {on_tick=function()
+            if sent then return end; sent=true
+            assert(chronicle.set('sent',true))
+            for n=1,16 do assert(chronicle.call('events.emit',{name='ready',payload={n=n}})) end
+            assert(chronicle.call('economy.add',{amount=1}))
+        end})",
+            manifest);
+    }
+    Start();
+    int  commits = 0;
+    auto commit = [&](const auto &commands, int, auto &) {++commits;EXPECT_EQ(commands.size(),1);EXPECT_EQ(commands[0].operation,"economy.add");return true; };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_EQ(commits, 4);
+    ASSERT_EQ(runtime.Diagnostics().size(), 1);
+    EXPECT_NE(runtime.Diagnostics()[0].find("custom event queue capacity"), std::string::npos);
+    auto states = Json::parse(runtime.SaveState())["mods"];
+    EXPECT_FALSE(states["source.4"].contains("values"));
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    states = Json::parse(runtime.SaveState())["mods"];
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_EQ(states["source." + std::to_string(i)]["values"]["seen"], 16);
+    }
+}
+
+TEST_F(ModRuntime, CustomListenerFailureRollsBackOnlyItsPackage) {
+    auto source = Manifest("source.mod");
+    source["permissions"] = {"game.write"};
+    Add(R"(local sent=false; return {on_tick=function()
+        if sent then return end; sent=true
+        assert(chronicle.call('events.emit',{name='ready',payload={}}))
+    end})",
+        source);
+    auto consumer = Manifest();
+    consumer["requires"] = {"source.mod"};
+    consumer["permissions"] = {"game.write", "economy.write"};
+    Add(R"(assert(chronicle.subscribe_custom('source.mod','ready',function()
+        assert(chronicle.set('changed',true))
+        assert(chronicle.call('events.emit',{name='leaked',payload={}}))
+        assert(chronicle.call('economy.add',{amount=7}))
+        error('listener failed')
+    end)); return {})",
+        consumer);
+    auto sibling = Manifest("sibling.mod");
+    sibling["requires"] = {"source.mod"};
+    Add(R"(assert(chronicle.subscribe_custom('source.mod','ready',function()
+        assert(chronicle.set('seen',true))
+    end)); return {})",
+        sibling);
+    Start();
+    int  commits = 0;
+    auto commit = [&](const auto &, int, auto &) {++commits;return true; };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_TRUE(Json::parse(runtime.SaveState())["mods"]["sibling.mod"]["values"]["seen"]);
+    EXPECT_EQ(runtime.ActiveOwners(), (std::vector<std::string>{"source.mod", "sibling.mod"}));
+}
+
+TEST_F(ModRuntime, CustomEmissionFailureRollsBackStateAndDoesNotNotify) {
+    for (bool fail_script : {true, false}) {
+        auto source = Manifest();
+        source["permissions"] = {"game.write", "economy.write"};
+        Add(std::string(R"(assert(chronicle.subscribe_custom('test.mod','ready',function() error('leaked') end))
+          return {on_tick=function()
+            assert(chronicle.set('sent',true))
+            assert(chronicle.call('events.emit',{name='ready',payload={}}))
+            assert(chronicle.call('economy.add',{amount=7}))
+        )") + (fail_script ? "error('emitter failed')" : "") +
+                " end}",
+            source);
+        Start();
+        int commits = 0;
+        runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &, int, auto &) {++commits;return false; });
+        runtime.Tick({1, 0, 0, true});
+        EXPECT_EQ(commits, fail_script ? 0 : 1);
+        EXPECT_FALSE(State().contains("values"));
+        ASSERT_EQ(runtime.Diagnostics().size(), 1);
+        EXPECT_EQ(runtime.Diagnostics()[0].find("leaked"), std::string::npos);
+    }
+}
+
+TEST_F(ModRuntime, CustomEventRecursionIsDeferredAndContextChangesDiscardQueues) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"game.write"};
+    Add(R"(local sent=false
+        assert(chronicle.subscribe_custom('test.mod','again',function()
+            assert(chronicle.set('seen',(chronicle.get('seen') or 0)+1))
+            assert(chronicle.call('events.emit',{name='again',payload={}}))
+        end))
+        return {on_tick=function()
+            if sent then return end; sent=true
+            assert(chronicle.call('events.emit',{name='again',payload={}}))
+        end})",
+        manifest);
+    Start();
+    const mods::World world{2, 0, 0, true, 0, 1};
+    runtime.Tick(world);
+    EXPECT_FALSE(State().contains("values"));
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 1);
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 2);
+    runtime.Tick({2, 0, 0, true, 0, 2});
+    runtime.Tick({2, 0, 0, true, 0, 2});
+    EXPECT_EQ(State()["values"]["seen"], 2);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error));
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 2);
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 3);
+    runtime.Tick({2, 0, 0, false, 0, 1});
+    runtime.Tick(world);
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 3);
+    runtime.ResetState();
+    runtime.Tick(world);
+    EXPECT_FALSE(State().contains("values"));
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 1);
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error));
+    runtime.Tick(world);
+    EXPECT_EQ(State()["values"]["seen"], 1);
+    runtime.Tick({2, 1, 0, true, 0, 1});
+    runtime.Tick({2, 1, 0, true, 0, 1});
+    EXPECT_EQ(State()["values"]["seen"], 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModNativeV2, CustomEventsUseTheSameNativeAndLuaQueueAndDetachedPayload) {
+    LoadPlugin("emit_custom", CHRONICLE_NATIVE_V2_FIXTURE, true, true, R"(
+        assert(chronicle.subscribe_custom('test.native.v2','pulse',function(w)
+            assert(w.event.owner=='test.native.v2' and w.event.payload.answer==42)
+            assert(chronicle.set('lua_seen',true))
+            w.event.payload.answer=100
+        end))
+    )");
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(Values()["emitted"]);
+    EXPECT_FALSE(Values().contains("custom"));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(Values()["lua_seen"]);
+    EXPECT_EQ(Values()["custom"], 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(Values()["custom"], 1);
+    LoadPlugin({}, CHRONICLE_NATIVE_V2_FIXTURE, true, true, R"(
+        local sent=false
+        assert(chronicle.subscribe('tick',function()
+            if sent then return end; sent=true
+            assert(chronicle.call('events.emit',{name='pulse',payload={answer=42}}))
+        end))
+    )");
+    const auto commit = [](const auto &, int, auto &) { return true; };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_EQ(Values()["custom"], 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModNativeV2, CustomNativeFailureAndOptOutDoNotLeakManagedChanges) {
+    LoadPlugin("fail_custom");
+    runtime.Tick({1, 0, 0, true});
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &, int, auto &) {++commits;return true; });
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(Values().contains("custom"));
+    EXPECT_TRUE(Values()["emitted"]);
+    EXPECT_FALSE(runtime.HasGameplay());
+    LoadPlugin("fail_emit_custom");
+    runtime.Tick({1, 0, 0, true});
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(Values().contains("emitted"));
+    EXPECT_FALSE(Values().contains("custom"));
+    EXPECT_FALSE(runtime.HasGameplay());
+    LoadPlugin("emit_custom", CHRONICLE_NATIVE_V2_NO_EVENTS_FIXTURE);
+    runtime.Tick({1, 0, 0, true});
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(Values()["emitted"]);
+    EXPECT_FALSE(Values().contains("custom"));
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}

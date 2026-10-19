@@ -111,8 +111,9 @@ tick's supplied snapshot, not refreshed after each write. Return 1 for success,
 | `CHRONICLE_EVENT_MAP_ENTER` | First observed gameplay map or changed map |
 | `CHRONICLE_EVENT_FLOOR_ENTER` | First observed dungeon floor or changed dungeon/floor |
 | `CHRONICLE_EVENT_ENEMY_KILLED` | Deferred native/scripted enemy death; requires `events.enemy_killed.v1` for availability |
+| `CHRONICLE_EVENT_CUSTOM` | Deferred own/dependency custom event; requires `events.custom.v1`; `world.event` contains `owner`, `name`, object `payload` |
 
-These use the [Lua lifecycle semantics](MOD_HOST_API.md#owned-lifecycle-listeners).
+Lifecycle bits use the [Lua lifecycle semantics](MOD_HOST_API.md#owned-lifecycle-listeners).
 Floor entry is not a scene-ready/generation-completed hook; game leave is not a
 guaranteed shutdown callback. Per package, dispatch order is save-loaded, game
 enter/leave, map entry, floor entry, enemy deaths, queued menu actions, Lua tick, native tick.
@@ -211,3 +212,21 @@ calls the native action directly. Restart clears old descriptors, and unavailabl
 actions cannot be queued. Runtime results and diagnostics appear in the existing
 manager; no parallel menu/input implementation is introduced. The lifecycle example
 above includes this extension and requests no gameplay-write permissions.
+
+### Custom event publication
+
+Both native host ABIs can call `events.emit` with JSON such as
+`{"name":"challenge.complete","payload":{"score":42}}`, with `game.write`
+permission during gameplay callbacks. The host assigns the package owner.
+ABI 2 plugins receive these notifications by including `CHRONICLE_EVENT_CUSTOM`
+in their event mask; ABI 1 has no receiver entry point. Existing ABI structures
+are unchanged. Older compiled ABI 2 masks do not acquire the new bit automatically.
+Declare `events.custom.v1` as required before relying on emission or receipt.
+
+A native subscriber receives all custom names emitted by itself or its declared
+`requires` dependencies. Filter `world.event.name` and parse the detached JSON
+within the event callback lifetime. Native callbacks and Lua listeners have
+separate managed transactions; a failed native callback cannot publish its own
+queued emissions. Limits, next-tick ordering and context cancellation are specified
+in [MOD_HOST_API.md](MOD_HOST_API.md#package-owned-custom-events). Notifications
+are transient; no background thread, polling loop or native engine hook is added.

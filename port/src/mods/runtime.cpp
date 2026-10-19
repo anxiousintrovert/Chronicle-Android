@@ -18,6 +18,7 @@ extern "C" {
 #include <iterator>
 #include <limits>
 #include <map>
+#include <optional>
 #include <utility>
 
 namespace mods {
@@ -30,6 +31,12 @@ struct Action {
     std::string title, description, result;
     int         reference = LUA_NOREF;
     bool        native = false;
+};
+
+struct CustomEvent {
+    std::string owner;
+    Json        arguments;
+    World       context;
 };
 
 struct Module {
@@ -60,6 +67,7 @@ struct Module {
     Json                                                                                           arguments;
     std::string                                                                                    call_error;
     std::vector<GameCommand>                                                                       commands;
+    std::vector<Json>                                                                              emissions;
     std::unique_ptr<NativeLibrary>                                                                 native;
     std::string                                                                                    native_result;
     unsigned                                                                                       native_calls = 0;
@@ -381,6 +389,14 @@ int ApiCall(lua_State *L) {
         if (m.read_only) {
             return Failure(L, "query exports cannot write game state");
         }
+        if (op->name == "events.emit") {
+            if (m.emissions.size() >= 16) {
+                return Failure(L, "at most 16 custom events per callback");
+            }
+            m.emissions.push_back(m.arguments);
+            lua_pushboolean(L, true);
+            return 1;
+        }
         if (!m.commit_game || !*m.commit_game) {
             return Failure(L, "game write provider unavailable");
         }
@@ -457,6 +473,15 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             throw std::runtime_error(error);
         }
         if (op->writes) {
+            if (op->name == "events.emit") {
+                if (m.emissions.size() >= 16) {
+                    throw std::runtime_error("at most 16 custom events per callback");
+                }
+                m.emissions.push_back(args);
+                m.native_result = "{\"queued\":true}";
+                *result = m.native_result.c_str();
+                return 1;
+            }
             if (!m.commit_game || !*m.commit_game || m.commands.size() >= 64) {
                 throw std::runtime_error("write provider unavailable or callback write budget exceeded");
             }
@@ -597,6 +622,27 @@ int Subscribe(lua_State *L) {
     return 1;
 }
 
+int SubscribeCustom(lua_State *L) {
+    auto       &m = Self(L);
+    const char *provider = luaL_checkstring(L, 1), *name = luaL_checkstring(L, 2);
+    if (!m.initializing || lua_gettop(L) != 3 || !lua_isfunction(L, 3) || !Key(name) ||
+        lua_rawlen(L, 1) != std::strlen(provider) || lua_rawlen(L, 2) != std::strlen(name)) {
+        return Failure(L, "subscribe_custom requires provider, event name and function during initialization");
+    }
+    if (m.package.id != provider && std::ranges::find(m.package.dependencies, provider) == m.package.dependencies.end()) {
+        return Failure(L, "custom event provider must be this package or a declared dependency");
+    }
+    if (m.listener_count >= 32) {
+        return Failure(L, "at most 32 owned event listeners");
+    }
+    lua_pushvalue(L, 3);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    m.listeners[std::string("custom:") + provider + ":" + name].push_back(ref);
+    ++m.listener_count;
+    lua_pushboolean(L, true);
+    return 1;
+}
+
 int ExportQuery(lua_State *L) {
     auto       &m = Self(L);
     const char *name = luaL_checkstring(L, 1);
@@ -679,25 +725,26 @@ int Bootstrap(lua_State *L) {
     }
     lua_newtable(L);
     const luaL_Reg api[] = {
-        {"action",        RegisterAction},
-        {"subscribe",     Subscribe     },
-        {"export_query",  ExportQuery   },
-        {"invoke_query",  InvokeQuery   },
-        {"get",           Get           },
-        {"set",           Set           },
-        {"quest_add",     QuestAdd      },
-        {"quest_get",     QuestGet      },
-        {"add_money",     AddMoney      },
-        {"supports",      HasCapability },
-        {"player",        Player        },
-        {"party",         Party         },
-        {"inventory",     Inventory     },
-        {"log",           Log           },
-        {"resource",      Resource      },
-        {"call",          ApiCall       },
-        {"api_available", ApiAvailable  },
-        {"api_list",      ApiList       },
-        {nullptr,         nullptr       }
+        {"action",           RegisterAction },
+        {"subscribe",        Subscribe      },
+        {"subscribe_custom", SubscribeCustom},
+        {"export_query",     ExportQuery    },
+        {"invoke_query",     InvokeQuery    },
+        {"get",              Get            },
+        {"set",              Set            },
+        {"quest_add",        QuestAdd       },
+        {"quest_get",        QuestGet       },
+        {"add_money",        AddMoney       },
+        {"supports",         HasCapability  },
+        {"player",           Player         },
+        {"party",            Party          },
+        {"inventory",        Inventory      },
+        {"log",              Log            },
+        {"resource",         Resource       },
+        {"call",             ApiCall        },
+        {"api_available",    ApiAvailable   },
+        {"api_list",         ApiList        },
+        {nullptr,            nullptr        }
     };
     luaL_setfuncs(L, api, 0);
     lua_pushinteger(L, 1);
@@ -790,6 +837,24 @@ struct Runtime::Impl {
     bool                                             was_playing = false, loaded_pending = false;
     Manager                                          plan;
     std::vector<std::pair<std::string, std::string>> pending_actions;
+    std::vector<CustomEvent>                         pending_events;
+
+    // Prepare all allocations before publishing native writes. Swap after commit
+    // cannot fail, so failed native/managed transactions never leak notifications.
+    std::optional<std::vector<CustomEvent>> PrepareEvents(const Module &m, const World &world) {
+        if (m.emissions.empty()) {
+            return std::nullopt;
+        }
+        if (pending_events.size() + m.emissions.size() > 64) {
+            throw std::runtime_error("custom event queue capacity (64) exceeded");
+        }
+        auto        next = pending_events;
+        const World context{world.mode, world.map, 0, world.playing, world.dungeon, world.floor};
+        for (const auto &args : m.emissions) {
+            next.push_back({m.package.id, args, context});
+        }
+        return next;
+    }
 
     ~Impl() { modules.clear(); } // Lua states close before the storage their API references.
 
@@ -879,6 +944,7 @@ struct Runtime::Impl {
         m.pending_money = 0;
         m.commands.clear();
         m.services_left = 16;
+        m.emissions.clear();
         m.service_budget = &m.services_left;
         m.playing = world.playing;
         m.world = &world;
@@ -892,6 +958,7 @@ struct Runtime::Impl {
         if (!Check(m, lua_pcall(L, 0, 0, 0))) {
             *m.state = before;
             m.commands.clear();
+            m.emissions.clear();
             m.playing = false;
             m.world = nullptr;
             m.read_game = nullptr;
@@ -904,11 +971,16 @@ struct Runtime::Impl {
         const bool  writes = m.pending_money || !m.commands.empty();
         bool        accepted = !writes;
         try {
+            auto events = PrepareEvents(m, world);
             if (writes) {
                 accepted = commit_game ? commit_game(m.commands, m.pending_money, error)
                                        : m.commands.empty() && money && money(m.pending_money);
             }
+            if (accepted && events) {
+                pending_events.swap(*events);
+            }
         } catch (const std::exception &e) {
+            accepted = false;
             error = e.what();
         }
         if (!accepted) {
@@ -918,6 +990,7 @@ struct Runtime::Impl {
         }
         m.pending_money = 0;
         m.commands.clear();
+        m.emissions.clear();
         m.playing = false;
         m.world = nullptr;
         m.read_game = nullptr;
@@ -939,6 +1012,7 @@ struct Runtime::Impl {
         m.commit_game = &commit;
         m.commands.clear();
         m.native_calls = 0;
+        m.emissions.clear();
         std::string error;
         bool        accepted = false;
         try {
@@ -962,8 +1036,14 @@ struct Runtime::Impl {
             if (!accepted) {
                 error = "callback returned failure";
             }
-            if (accepted && !m.commands.empty()) {
-                accepted = commit && commit(m.commands, 0, error);
+            if (accepted) {
+                auto events = PrepareEvents(m, world);
+                if (!m.commands.empty()) {
+                    accepted = commit && commit(m.commands, 0, error);
+                }
+                if (accepted && events) {
+                    pending_events.swap(*events);
+                }
             }
         } catch (const std::exception &e) {
             accepted = false;
@@ -974,6 +1054,7 @@ struct Runtime::Impl {
         m.query_game = nullptr;
         m.commit_game = nullptr;
         m.commands.clear();
+        m.emissions.clear();
         if (!accepted) {
             *m.state = before;
             m.failed = true;
@@ -997,6 +1078,7 @@ void Runtime::Start(const Manager &manager) {
     impl_->was_playing = false;
     impl_->loaded_pending = false;
     impl_->pending_actions.clear();
+    impl_->pending_events.clear();
     for (const auto &id : manager.LoadOrder()) {
         const auto found = std::ranges::find(manager.Packages(), id, &Package::id);
         if (found == manager.Packages().end()) {
@@ -1118,6 +1200,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
     }
     // UI requests are consumed exactly once, never carried into another session.
     const auto actions = std::exchange(impl_->pending_actions, {});
+    const auto events = std::exchange(impl_->pending_events, {});
     const bool action_context = world.playing && impl_->was_playing && world.mode == impl_->previous.mode &&
                                 world.map == impl_->previous.map && world.dungeon == impl_->previous.dungeon && world.floor == impl_->previous.floor;
     for (auto &ptr : impl_->modules) {
@@ -1179,6 +1262,30 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER);
         }
         if (world.playing) {
+            for (const auto &event : events) {
+                if (m.failed || impl_->loaded_pending || !action_context || event.context.mode != world.mode ||
+                    event.context.map != world.map || event.context.dungeon != world.dungeon || event.context.floor != world.floor) {
+                    continue;
+                }
+                const auto source = std::ranges::find_if(impl_->modules, [&](const auto &p) { return p->package.id == event.owner; });
+                if (source == impl_->modules.end() || (*source)->failed) {
+                    continue;
+                }
+                if (event.owner != m.package.id && std::ranges::find(m.package.dependencies, event.owner) == m.package.dependencies.end()) {
+                    continue;
+                }
+                World event_world = world;
+                event_world.event = {
+                    {"owner",   event.owner                  },
+                    {"name",    event.arguments.at("name")   },
+                    {"payload", event.arguments.at("payload")}
+                };
+                const auto key = "custom:" + event.owner + ":" + event.arguments.at("name").get<std::string>();
+                if (m.listeners.contains(key)) {
+                    impl_->Call(m, key.c_str(), event_world, money, read_game, query_game, commit_game);
+                }
+                impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_CUSTOM);
+            }
             if (!game_enter && !floor_enter && !impl_->loaded_pending) {
                 for (const auto &death : deaths.first(std::min<std::size_t>(deaths.size(), 64))) {
                     if (death.dungeon != world.dungeon || death.floor != world.floor) {

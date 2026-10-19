@@ -387,8 +387,8 @@ or native write operations. Host reads use the **provider's** permissions; an
 export is an intentional read/calculation service, not a transfer of native write
 authority. Lua-local variables and diagnostic logs are not transactional save data;
 authors should keep query calculations stateless and read persistent values through
-`chronicle.get`. Mutating cross-mod commands, arbitrary custom events, and native
-plugin exports are still separate remaining work. This API does not implement
+`chronicle.get`. Mutating cross-mod commands and native plugin exports remain
+separate work. Package-owned custom events are documented below. This API does not implement
 custom item/weapon registration or the contributor's cutscene framework.
 
 ## Retail attachment bag and status-break
@@ -715,3 +715,65 @@ if hits[1] then
     end
 end
 ```
+
+## Package-owned custom events
+
+Require `events.custom.v1` when mandatory. `events.emit` uses `game.write` and
+active gameplay, from Lua `chronicle.call` or either native host-call ABI:
+
+```lua
+assert(chronicle.call('events.emit', {
+    name = 'challenge.complete', payload = {challenge = 'bridge', score = 42}
+}))
+```
+
+Arguments contain exactly `name` and `payload`. The name is 1-64 lowercase
+letters, digits, underscores or dots. Payload must be an object using the common
+structured-argument bounds (depth eight, 128 nodes, encoded request at most
+16 KiB). Owner identity is always assigned by the runtime; callers cannot supply
+or spoof it. Custom names cannot impersonate native/lifecycle events.
+
+Register listeners only during initialization. A consumer must list the provider
+in `requires`; self-subscriptions are also allowed. Custom and lifecycle listeners
+share the existing 32-listener limit per package.
+
+```lua
+assert(chronicle.subscribe_custom('author.challenges', 'challenge.complete', function(world)
+    assert(world.event.owner == 'author.challenges')
+    local score = world.event.payload.score
+    assert(chronicle.set('last_score', score))
+end))
+return {}
+```
+
+Callbacks receive the normal world snapshot plus
+`event = {owner = 'author.challenges', name = 'challenge.complete', payload = {...}}`.
+Each listener receives a detached table. Lua listeners for one source/name share
+one callback transaction; a native event callback is a separate transaction.
+ABI 2 listeners opt in with `CHRONICLE_EVENT_CUSTOM` and receive custom events
+from their own package and declared dependencies, filtering `event.name` as needed.
+ABI 1 can emit using its existing host call, but has no event callback interface.
+
+Emission is staged with the sender's callback and published only after all its
+managed/native writes commit. The return value means queued, not delivered.
+Query exports cannot emit. There are at most 16 emissions per callback and 64
+queued globally between ticks. Exceeding the local bound returns an error; if
+publication would overflow the global queue, the entire sender callback fails
+before any game writes commit, restores its managed state, and stops that package
+with a manager diagnostic. Game writes and emissions share success/failure, but
+remain separate bounded queues. Ordinary event-only callbacks need no game-write
+provider beyond the permission/active-gameplay checks.
+
+Delivery occurs on the next runtime tick, after lifecycle notifications and before
+native death events, menu actions and normal ticks for each receiving package.
+Packages follow dependency order; each package receives events in publication
+order. Emissions from listeners wait for the following tick, never recurse within
+the current tick. Listener failure rolls back its changes and stops that package;
+it does not rewind the sender's successful callback or other recipients.
+
+These notifications are transient, not a durable message log or synchronous
+command RPC. Events are discarded on gameplay exit, changed mode/map/dungeon/floor,
+successful load/reset/restart, or an unavailable/failed sender. They are not saved
+or replayed. No listeners, native hooks or engine behavior are added when packages
+do not use the capability. Native-ready events, mutating dependency commands and
+native plugin exports remain separate APIs still to implement.

@@ -16,6 +16,7 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"events.emit",             "game.write",    "Queue a package-owned notification after commit for next tick.",               true },
     {"physics.query",           "game.read",     "Find active revealed enemy origins inside a sphere (not collision geometry).", false},
     {"physics.velocity_get",    "game.read",     "Read native enemy movement intent before collision.",                          false},
     {"physics.velocity_set",    "game.write",    "Queue one-shot enemy movement intent, replacing knockback.",                   true },
@@ -205,6 +206,19 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (!a.is_object()) {
         return "arguments must be an object";
+    }
+    if (name == "events.emit") {
+        if (a.size() != 2 || !a.contains("name") || !a["name"].is_string() ||
+            !a.contains("payload") || !a["payload"].is_object()) {
+            return "provide name and object payload only";
+        }
+        const auto &event = a["name"].get_ref<const std::string &>();
+        if (event.empty() || event.size() > 64 || !std::ranges::all_of(event, [](char c) {
+                return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.';
+            })) {
+            return "event name must be 1-64 lowercase letters, digits, underscores or dots";
+        }
+        return {};
     }
     if (name == "combat.get") {
         return a.empty() ? "" : "combat.get takes no arguments";
