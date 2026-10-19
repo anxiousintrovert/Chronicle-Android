@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include "dngstatusdata.hpp"
+#include "dun/gameloop.hpp"
 #include "mods/api.hpp"
 #include "mods/entities.hpp"
 #include "mods/entity_handles.hpp"
+#include "mods/entity_reactions.hpp"
 #include "mods/entity_tracking.hpp"
 #include "mods/runtime.hpp"
 #include "monstorunit.hpp"
@@ -16,6 +19,84 @@ TEST(ModEntityHandles, DormantRegistryCreatesNoIdentities) {
     }
     EXPECT_FALSE(handles.Resolve(0));
     EXPECT_FALSE(handles.Resolve(16));
+}
+
+TEST(ModEntityHandles, CommittedReactionsSurviveModStopButNotNativeSlotReuse) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    unit->CleanViewMonstor(0);
+    ASSERT_TRUE(mods::CanQueueEntityReactions(unit.get()));
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_KILLED);
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
+    mods::StopTrackingEntities();
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_KILLED);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
+    mods::EntitySlotConstructed(unit.get(), 0);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    mods::QueueEntityReaction(unit.get(), 1, MONSTER_DMG_KILLED);
+    unit->CleanViewMonstor(0);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 1), MONSTER_DMG_NONE);
+}
+
+TEST(ModEntityHandles, NativeDamageDispatchAccountsForDeathExactlyOnce) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    auto save = std::make_unique<CSaveData>();
+
+    struct RestoreStatus {
+        CUserStatus *original = UserStatus;
+
+        ~RestoreStatus() { UserStatus = original; }
+    } restore;
+
+    UserStatus = save->GetDngStatus();
+    UserStatus->cur_georama = 0;
+    UserStatus->cur_floor = 1;
+    UserStatus->kills[0][1] = 0;
+    unit->CleanViewMonstor(0);
+    unit->current_monster = 0;
+    unit->alive_count = 1;
+    auto &actor = unit->monster[0];
+    actor.state = 2;
+    actor.hp = 20;
+    actor.stop_timer = 10;
+    actor.motion_reset_pending = false;
+    actor.last_attacker = 2;
+    actor.event_flag2 = 7;
+    actor.event_flag2_pending = 0;
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_KILLED);
+    EXPECT_EQ(unit->CheckDmg(), MONSTER_DMG_KILLED);
+    EXPECT_EQ(actor.hp, 0);
+    EXPECT_EQ(actor.stop_timer, 0);
+    EXPECT_TRUE(actor.motion_reset_pending);
+    EXPECT_EQ(actor.last_attacker, -1);
+    EXPECT_EQ(actor.event_flag2_pending, 1);
+    EXPECT_EQ(unit->alive_count, 0);
+    EXPECT_EQ(UserStatus->kills[0][1], 1);
+    const auto combat = mods::ReadCombat(unit.get(), *UserStatus);
+    EXPECT_EQ(combat["alive_count"], 0);
+    EXPECT_EQ(combat["recorded_kills"], 1);
+    EXPECT_THROW(mods::ReadCombat(nullptr, *UserStatus), std::runtime_error);
+    EXPECT_EQ(mods::ConsumeEntityDamage(unit.get(), 0), MONSTER_DMG_NONE);
+    EXPECT_EQ(UserStatus->kills[0][1], 1);
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
+    EXPECT_EQ(unit->CheckDmg(), MONSTER_DMG_HIT);
+    EXPECT_EQ(UserStatus->kills[0][1], 1);
+}
+
+TEST(ModEntityHandles, ReactionCapacityIsBoundedAndReleasedByFloorCleanup) {
+    auto first = std::make_unique<CMonstorUnit>();
+    auto second = std::make_unique<CMonstorUnit>();
+    auto third = std::make_unique<CMonstorUnit>();
+    for (unsigned i = 0; i < 16; ++i) {
+        mods::QueueEntityReaction(first.get(), i, MONSTER_DMG_HIT);
+        mods::QueueEntityReaction(second.get(), i, MONSTER_DMG_HIT);
+    }
+    EXPECT_TRUE(mods::CanQueueEntityReactions(first.get()));
+    EXPECT_FALSE(mods::CanQueueEntityReactions(third.get()));
+    first->CleanViewMonstor(0);
+    EXPECT_TRUE(mods::CanQueueEntityReactions(third.get()));
+    second->CleanViewMonstor(0);
 }
 
 TEST(ModEntityHandles, CombatWritesStageInOrderAndRejectWithoutPublishing) {
@@ -59,6 +140,50 @@ TEST(ModEntityHandles, CombatWritesStageInOrderAndRejectWithoutPublishing) {
     actor.state = 2;
     EXPECT_FALSE(transaction.Stage(unit.get(), {heal}, error));
     EXPECT_FALSE(transaction.Stage(nullptr, {heal}, error));
+    mods::StopTrackingEntities();
+}
+
+TEST(ModEntityHandles, DamageQueuesOnlyAfterCommitAndLethalBatchCannotRevive) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    auto save = std::make_unique<CSaveData>();
+    mods::StopTrackingEntities();
+    unit->CleanViewMonstor(0);
+    auto &actor = unit->monster[0];
+    actor.state = 2;
+    actor.hp = 50;
+    actor.max_hp = 50;
+    actor.revealed = -1;
+    const auto        id = std::to_string(mods::TrackEntities(*unit).Get(0));
+    mods::GameCommand hit{
+        "combat.damage", {{"entity", id}, {"amount", 10}}
+    };
+    mods::GameCommand heal{
+        "combat.heal", {{"entity", id}, {"amount", 50}}
+    };
+    mods::GameCommand bad{"fishing.spend", {{"amount", 9999}}};
+    save->SetFishingPoint(0);
+    std::string error;
+    EXPECT_FALSE(mods::ApplyEntityAndSave(*save, unit.get(), {hit, bad}, 0, error, nullptr, nullptr));
+    EXPECT_EQ(actor.hp, 50);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    ASSERT_TRUE(mods::ApplyEntityAndSave(*save, unit.get(), {hit}, 0, error, nullptr, nullptr)) << error;
+    EXPECT_EQ(actor.hp, 40);
+    EXPECT_EQ(actor.last_hit_damage, 10);
+    EXPECT_EQ(actor.last_attacker, -1);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_HIT);
+    actor.invincible_timer = 1;
+    ASSERT_TRUE(mods::ApplyEntityAndSave(*save, unit.get(), {hit}, 0, error, nullptr, nullptr));
+    EXPECT_EQ(actor.hp, 40);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    actor.invincible_timer = 0;
+    hit.arguments["amount"] = 1000000;
+    EXPECT_FALSE(mods::ApplyEntityAndSave(*save, unit.get(), {hit, heal}, 0, error, nullptr, nullptr));
+    EXPECT_EQ(actor.hp, 40);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    ASSERT_TRUE(mods::ApplyEntityAndSave(*save, unit.get(), {hit}, 0, error, nullptr, nullptr));
+    EXPECT_EQ(actor.hp, 0);
+    EXPECT_EQ(actor.last_hit_damage, 40);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_KILLED);
     mods::StopTrackingEntities();
 }
 

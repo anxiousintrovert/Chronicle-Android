@@ -5,9 +5,12 @@
 #include <stdexcept>
 
 #include "api.hpp"
+#include "entity_reactions.hpp"
 #include "entity_tracking.hpp"
 #include "monstorunit.hpp"
 #include "runtime.hpp"
+#include "userstatus.hpp"
+#include "weaponelement.hpp"
 
 namespace mods {
 namespace {
@@ -42,7 +45,7 @@ nlohmann::json Snapshot(const MONSTOR &actor, EntityHandles::Handle handle) {
 } // namespace
 
 bool IsEntityWrite(std::string_view operation) {
-    return operation == "combat.heal" || operation == "combat.status_add";
+    return operation == "combat.heal" || operation == "combat.damage" || operation == "combat.status_add";
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
@@ -71,7 +74,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
 }
 
 std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json &a) {
-    const bool heal = operation == "combat.heal";
+    const bool heal = operation == "combat.heal" || operation == "combat.damage";
     if (!IsEntityWrite(operation) || !a.is_object() || a.size() != (heal ? 2u : 3u) ||
         !a.contains("entity") || !a["entity"].is_string() || !Parse(a["entity"].get_ref<const std::string &>())) {
         return "provide an entity handle and the required combat fields";
@@ -118,6 +121,23 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
         if (!value.touched) {
             value = {true, actor.hp, actor.slow_timer, actor.stop_timer};
         }
+        if (value.hp <= 0 || actor.max_hp < value.hp) {
+            error = "enemy is already dying or has invalid native health";
+            return false;
+        }
+        if (command.operation == "combat.damage") {
+            if (actor.invincible_timer > 0) {
+                continue;
+            }
+            if (!CanQueueEntityReactions(unit)) {
+                error = "pending native damage reaction capacity is exhausted";
+                return false;
+            }
+            value.damage = std::min(value.hp, command.arguments.at("amount").get<int>());
+            value.hp -= value.damage;
+            value.reaction = value.hp == 0 ? MONSTER_DMG_KILLED : MONSTER_DMG_HIT;
+            continue;
+        }
         if (command.operation == "combat.heal") {
             if (actor.max_hp < value.hp) {
                 error = "enemy health exceeds its native maximum";
@@ -144,6 +164,14 @@ void EntityTransaction::Commit() noexcept {
         unit_->monster[i].hp = values_[i].hp;
         unit_->monster[i].slow_timer = values_[i].slow;
         unit_->monster[i].stop_timer = values_[i].stop;
+        if (values_[i].reaction != MONSTER_DMG_NONE) {
+            auto &actor = unit_->monster[i];
+            actor.last_attacker = -1;
+            actor.last_hit_damage = values_[i].damage;
+            actor.last_hit_id = -1;
+            actor.hit_element = WEAPON_ELEMENT_NONE;
+            QueueEntityReaction(unit_, i, values_[i].reaction);
+        }
     }
     unit_ = nullptr;
 }
@@ -199,6 +227,18 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
     }
     return {
         {"entities", result}
+    };
+}
+
+nlohmann::json ReadCombat(CMonstorUnit *unit, const CUserStatus &status) {
+    if (!unit || status.cur_georama < 0 || status.cur_georama >= 6 || status.cur_floor < 0 || status.cur_floor >= 100) {
+        throw std::runtime_error("combat snapshot requires a valid active dungeon floor");
+    }
+    return {
+        {"dungeon",        status.cur_georama                                },
+        {"floor",          status.cur_floor                                  },
+        {"alive_count",    unit->alive_count                                 },
+        {"recorded_kills", status.kills[status.cur_georama][status.cur_floor]}
     };
 }
 } // namespace mods

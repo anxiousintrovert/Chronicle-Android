@@ -472,6 +472,35 @@ Native actions share this list, package namespace, 32-action limit and schedulin
 rules; their callback receives the C host/state and a JSON world snapshot instead
 of a Lua table. Arbitrary custom UI controls remain unimplemented.
 
+### Scripted enemy damage and combat state
+
+`combat.get()` requires `game.read` and an active dungeon. It returns `dungeon`,
+`floor`, the native `alive_count`, and the save's `recorded_kills` for that floor.
+Alive count is native bookkeeping, including enemies not returned by the revealed
+enemy list; it is not necessarily the length of `entities.list().entities`.
+
+`combat.damage({entity = handle, amount = 1..1000000})` requires `game.write` and
+the current dungeon's native player-status context. The target must be active,
+revealed, alive and identified by a current handle. Invincible targets accept the
+command without losing HP. Otherwise HP falls by the requested amount, clamped
+at zero. The callback stages damage, hit metadata and the pending native reaction
+together; failed batches publish none of them. Commands after a lethal hit cannot
+heal or modify that dying target in the same batch.
+
+Native stepping dispatches the queued hit/death script after commit, so paused
+simulation can delay death accounting. Death decrements native alive count once,
+increments recorded kills (saturating at 32767), clears stop and marks the native
+death event flag. The native death script handles subsequent drops/rewards; this
+API does not fabricate collision hits, elemental effects, knockback or weapon
+credit. Scripted hits use attacker -1. Damage formulas and mod kill-event listeners
+remain pending. Read `combat.get` on later callbacks to observe death processing.
+
+Pending reactions survive a mod stopping because the HP change is already
+committed. Native slot construction and floor cleanup cancel obsolete reactions.
+The bounded queue supports two complete retail units; calls reject capacity
+exhaustion before publishing any state. No queue is created or processed beyond
+an empty check when there are no requested reactions.
+
 ### Enemy healing and native status timers
 
 `combat.heal({entity = handle, amount = 1..1000000})` queues healing clamped to the

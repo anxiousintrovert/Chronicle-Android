@@ -17,6 +17,16 @@ def function(source, signature):
 
 
 class EntityLifecycleSource(unittest.TestCase):
+    def test_damage_path_preserves_native_statements_when_no_reaction_is_pending(self):
+        native = (ROOT / "ps2/src/monstorunit.cpp").read_text()
+        port = (ROOT / "port/src/mods/entity_damage.cpp").read_text()
+        signature = "int CMonstorUnit::CheckDmg()"
+        hook = ("    const int scripted = mods::ConsumeEntityDamage(this, current_monster);\n"
+                "    if (scripted != MONSTER_DMG_NONE) return scripted;\n")
+        adapter = function(port, signature)
+        self.assertEqual(adapter.count(hook), 1)
+        self.assertEqual(adapter.replace(hook, ""), function(native, signature))
+
     def test_native_statements_are_preserved(self):
         native = (ROOT / "ps2/src/monstorunit.cpp").read_text()
         port = (ROOT / "port/src/mods/entity_lifecycle.cpp").read_text()

@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 54 implemented operations, native plugins and author
+a real host-call boundary, 56 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; bounded transactional healing and slow/stop timers; port-side spawn/clear identity notifications; unchanged retail capacity | Damage/kill processing, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers and mod kill events |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,32 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Scripted damage validation (2026-10-19)
+
+`combat.damage` commits bounded HP changes and deferred hit/death reactions only
+after the entire mixed native/save batch succeeds. Invincibility blocks damage;
+lethal batches cannot resurrect their target. Pending reactions outlive mod
+tracking but expire on native slot construction or floor cleanup. The native
+damage adapter preserves all retail statements behind its empty-queue check;
+source tests enforce that identity. `combat.get` exposes native floor counts for
+observing the deferred bookkeeping. No damage formula or mod kill listener is
+claimed yet.
+
+Clang Windows Release game/test builds passed. The full 516-case suite completed
+with 508 passed and eight environment/optional skips. Thirteen entity tests
+include rollback, invincibility, lethal/no-revival ordering, bounded reaction
+capacity, native death bookkeeping exactly once, and slot/floor cancellation.
+All 15 Python tests passed, including native source-identity guards. The 3,840-case
+empty/disabled generator comparison remains identical to pinned upstream. PS2
+source files remain unchanged. Other-platform execution remains unverified.
+
+An isolated PAL Divine Beast Cave shared-manager action verified a one-HP hit,
+then lethal damage. The replay closed the menus, allowed native stepping, and
+verified one fewer live enemy plus one additional recorded kill before displaying
+PASS. This does not establish every boss/death script or every reward/drop path.
+`ModSourceIntegrity` now runs the native-body checks as part of CTest as well as
+the Python suite.
 
 ## Enemy healing and status validation (2026-10-19)
 

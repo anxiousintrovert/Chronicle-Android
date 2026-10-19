@@ -155,6 +155,9 @@ void TickGame() {
         }
         if (!SaveData || !world.playing){ throw std::runtime_error("game state unavailable");
 }
+        if (operation == "combat.get") {
+            return ReadCombat(world.mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr, *SaveData->GetDngStatus());
+        }
         if (operation == "georama.elements_get") {
             const LoadedGeorama scene;
             return ReadSave(*SaveData, world, operation, arguments, &scene.state);
@@ -162,7 +165,7 @@ void TickGame() {
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
         for (const auto &command : commands) {
-            if ((command.operation == "player.status_add" || command.operation == "player.status_remove") &&
+            if ((command.operation == "combat.damage" || command.operation == "player.status_add" || command.operation == "player.status_remove") &&
                 UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus())) {
                 error = "native active-character status is unavailable";
                 return false;

@@ -1,5 +1,6 @@
 #include "entity_tracking.hpp"
 
+#include "entity_reactions.hpp"
 #include "monstorunit.hpp"
 
 namespace mods {
@@ -37,12 +38,14 @@ void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {
 }
 
 void EntityUnitCleared(CMonstorUnit *unit) {
+    ClearEntityReactions(unit);
     if (tracked == unit) {
         handles.Clear();
     }
 }
 
 void EntitySlotConstructed(CMonstorUnit *unit, unsigned slot) {
+    ClearEntityReactions(unit, static_cast<int>(slot));
     if (tracked == unit) {
         handles.Construct(slot);
     }

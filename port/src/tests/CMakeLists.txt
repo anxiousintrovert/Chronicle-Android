@@ -12,6 +12,9 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
+add_test(NAME ModSourceIntegrity
+    COMMAND ${Python3_EXECUTABLE} -m unittest discover
+        -s ${CMAKE_SOURCE_DIR}/tools/tests -p test_entity_lifecycle.py)
 
 file(GLOB_RECURSE TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/*_test.cpp)
 add_executable(darkcloud_tests ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp ${TEST_SOURCES})

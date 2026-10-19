@@ -16,6 +16,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"combat.get",              "game.read",     "Read native floor enemy count and recorded kills.",                            false},
+    {"combat.damage",           "game.write",    "Apply bounded scripted enemy damage and queue native hit/death processing.",   true },
     {"combat.heal",             "game.write",    "Restore bounded HP to an active live enemy without exceeding native maximum.", true },
     {"combat.status_add",       "game.write",    "Extend an active live enemy's native slow or stop timer.",                     true },
     {"entities.list",           "game.read",     "List live revealed dungeon enemies with session-local handles.",               false},
@@ -196,6 +198,9 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (!a.is_object()) {
         return "arguments must be an object";
+    }
+    if (name == "combat.get") {
+        return a.empty() ? "" : "combat.get takes no arguments";
     }
     if (name == "player.status_add" || name == "player.status_remove") {
         for (const auto &[key, value] : a.items()) {

@@ -7,6 +7,7 @@
 #include <vector>
 class CMonstorUnit;
 class CSaveData;
+class CUserStatus;
 
 namespace mods {
 struct GameCommand;
@@ -28,6 +29,7 @@ private:
     struct Values {
         bool touched = false;
         int  hp = 0, slow = 0, stop = 0;
+        int  reaction = 0, damage = 0;
     };
 
     CMonstorUnit          *unit_ = nullptr;
@@ -36,4 +38,5 @@ private:
 
 std::string    ValidateEntityQuery(std::string_view operation, const nlohmann::json &arguments);
 nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, const nlohmann::json &arguments);
+nlohmann::json ReadCombat(CMonstorUnit *unit, const CUserStatus &status);
 } // namespace mods
