@@ -10,6 +10,7 @@
 #include "entity_tracking.hpp"
 #include "monstorunit.hpp"
 #include "runtime.hpp"
+#include "shops.hpp"
 #include "userstatus.hpp"
 #include "weaponelement.hpp"
 
@@ -99,19 +100,40 @@ bool IsEntityWrite(std::string_view operation) {
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
-                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment) {
-    if (!std::ranges::any_of(commands, [](const auto &command) { return IsEntityWrite(command.operation); })) {
-        return ApplySave(save, commands, money, error, effects, georama, equipment);
+                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool shops_writable) {
+    if (effects) {
+        *effects = {};
+    }
+    ShopTransaction shops;
+    if (!shops.Stage(commands, shops_writable, error)) {
+        return false;
+    }
+    std::vector<GameCommand> filtered;
+    const bool               has_shops = std::ranges::any_of(commands, [](const auto &command) { return IsShopWrite(command.operation); });
+    if (has_shops) {
+        for (const auto &command : commands) {
+            if (!IsShopWrite(command.operation)) {
+                filtered.push_back(command);
+            }
+        }
+    }
+    const auto &batch = has_shops ? filtered : commands;
+    if (!std::ranges::any_of(batch, [](const auto &command) { return IsEntityWrite(command.operation); })) {
+        if (!ApplySave(save, batch, money, error, effects, georama, equipment)) {
+            return false;
+        }
+        shops.Commit();
+        return true;
     }
     if (effects) {
         *effects = {};
     }
     EntityTransaction entities;
-    if (!entities.Stage(unit, commands, error)) {
+    if (!entities.Stage(unit, batch, error)) {
         return false;
     }
     std::vector<GameCommand> save_commands;
-    for (const auto &command : commands) {
+    for (const auto &command : batch) {
         if (!IsEntityWrite(command.operation)) {
             save_commands.push_back(command);
         }
@@ -120,6 +142,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
         return false;
     }
     entities.Commit();
+    shops.Commit();
     return true;
 }
 

@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 71 implemented operations, native plugins and author
+a real host-call boundary, 79 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -19,7 +19,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
-| Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
+| Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No framework renderer/timing hooks; native enemy model/shadow scale on explicit request | Owned overlays/camera/lighting/audio controls, activated only by callers |
@@ -611,3 +611,30 @@ registered, 663 passed, six skipped, one disabled. After limiting context captur
 to explicit weapon writes, all 84 affected API/inventory/entity tests passed and
 the final PAL build repeated PASS equipped cache. All 15 Python tests and 3,840
 upstream/empty/disabled same-seed cases passed. PS2 files remain unchanged.
+
+## Owned native shop stock and prices (2026-10-19)
+
+Eight shop operations expose all 18 native lists, their 20-good capacity and
+shared base buy/sell prices. List and price-pair claims are exclusive per package;
+conflicts identify the existing owner. Mixed shop/save/entity transactions publish
+only after all validation succeeds. Owner reset/unload/failure restores unchanged
+overrides, preserving external native edits. Writes reject unsafe gameplay phases;
+cleanup waits while town menus, conversations or the editor are active.
+
+No PS2 edit, native override, capacity increase, default package or custom-content
+registry was added. Stock uses retail definitions and affects the next native
+goods rebuild; prices remain global base values, not final per-weapon quotes.
+
+Clang 23.1.2 Windows game/test builds passed. Of 678 registered tests, 671 passed,
+six skipped and one was disabled. Eight new tests cover stock/price ownership,
+duplicates, capacity, exact restoration, deferred cleanup, external edits,
+abandoned staging, atomic failures, readiness, argument bounds and RNG isolation.
+All 15 Python author-tool tests and 3,840 upstream/empty/disabled same-seed cases
+passed. The seed result covers the existing generator matrix, not all gameplay.
+
+An isolated PAL dungeon probe verified committed native lists/prices and restored
+every queried shop entry, then displayed PASS shop restore through the shared
+manager action. Actual town purchase/sale UI behavior and other platforms remain
+unverified. The audit package is outside the repository and is not installed by
+normal builds. Kazarov was rechecked against current official Chronicle and the
+fork compatibility branch: both still use this branch's existing 611182d pin.

@@ -21,6 +21,14 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `shops.list` | none | `game.read` | All 18 native shop lists, base prices, resource owners and write readiness |
+| `shops.get` | `shop` | `game.read` | One native shop (0–17), capacity 20, stocked goods and write readiness |
+| `shops.set_items` | `shop`, `items` | `game.write` | Own and replace a native list with up to 20 existing retail item IDs |
+| `shops.register_item` | `shop`, `item` | `game.write` | Append one retail good; duplicates allowed, native capacity enforced |
+| `shops.remove_item` | `shop`, `item` | `game.write` | Remove the first matching occurrence; fail if absent |
+| `shops.reset_items` | `shop` | `game.write` | Release this package's list and conditionally restore its original contents |
+| `shops.set_price` | `item`, `buy`, `sell` | `game.write` | Own shared base prices for one retail item; both integers 0–32767 required |
+| `shops.reset_price` | `item` | `game.write` | Release this package's shared price pair and conditionally restore it |
 | `player.get` | optional `character` | `game.read` | Character, HP/capacity, defense, water/capacity, ailments, equipped slot |
 | `party.active` | none | `game.read` | Same snapshot for controlled character |
 | `party.list` | none | `game.read` | Joined character snapshots |
@@ -1033,3 +1041,44 @@ gameplay and shared 16-call/8-depth budgets apply. Native queries deny managed
 state writes, events and commands through the host; invalid results are recoverable.
 Native command failures poison the outer transaction. These guarantees cover
 host-managed operations, not trusted DLL private memory or arbitrary native code.
+
+## Owned retail shops
+
+The `shops.*` operations expose the existing 18 native lists with capacity 20.
+`shops.list` returns `{shops:[...], writable}`; `shops.get` returns
+`{shop,currency:"gilda",capacity:20,items:[...],owner,writable}`. Each stocked
+entry contains `{slot,item,buy,sell,price_owner}`. Empty owner strings mean no
+framework owner. Queries read committed tables; queued writes appear next tick.
+Declare required operations and `host.calls.v1` in the package manifest.
+
+Stock accepts existing retail attachments, dungeon items and weapons. ID 131 is
+invalid, and generic SynthSphere stock is rejected because it lacks owned weapon
+provenance. Duplicates are retained; removal deletes only the first occurrence.
+An empty `items` array clears a list. These operations do not register item or
+weapon definitions, allocate custom IDs, change native capacity or create shops.
+Lists take effect when the native shop next builds its goods on opening/refill.
+
+Prices are shared **base** buy/sell values for an item across all shops, including
+selling elsewhere. They are not a per-shop discount or a final quote for every
+owned weapon: native pricing can include fitted attachments and other calculations.
+`shops.set_price` requires both `buy` and `sell`, each an integer from 0 to 32767.
+
+One package exclusively owns each whole stock list and each item price pair.
+A competing write or reset fails with the existing owner's package ID. Repeated
+owner updates retain the first baseline unless native code has independently
+changed the resource. Reset, disable, failure or runtime restart releases claims
+and restores their baseline only if the current resource still equals the last
+framework write. External native changes are preserved. Claims are session state,
+not saved overrides; packages must explicitly request them again after loading.
+
+Writes require `writable:true`: stable town walking or stable dungeon play, outside
+events and transitions. Town menus, conversations and the editor reject writes;
+cleanup is also deferred until leaving those town modes so an active purchase is
+not repriced. A shared-manager action should set a package flag and perform the
+write from `on_tick` after readiness becomes true. Do not blindly retry a queued
+write after a failed callback: a commit failure stops that package.
+
+Stock, prices, ownership and other supported save/entity writes commit together.
+Any validation, ownership, capacity or later batch failure publishes none of them.
+No new engine hook, native RNG draw or default gameplay package is introduced.
+Without claims, lifecycle cleanup does not scan or rewrite native shop tables.

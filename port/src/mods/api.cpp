@@ -10,6 +10,7 @@
 #include "georama.hpp"
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
+#include "shops.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -17,6 +18,14 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"shops.list",                "game.read",     "List native shop lineups and shared base prices.",                             false},
+    {"shops.get",                 "game.read",     "Inspect one native shop and its current resource owners.",                     false},
+    {"shops.set_items",           "game.write",    "Own a native shop lineup of up to 20 retail goods.",                           true },
+    {"shops.register_item",       "game.write",    "Append one retail good to an owned shop lineup.",                              true },
+    {"shops.remove_item",         "game.write",    "Remove the first matching good from an owned shop lineup.",                    true },
+    {"shops.reset_items",         "game.write",    "Release this package's shop lineup with conditional restoration.",             true },
+    {"shops.set_price",           "game.write",    "Own an item's shared native base buy and sell prices.",                        true },
+    {"shops.reset_price",         "game.write",    "Release this package's shared item price override.",                           true },
     {"services.query",            "game.read",     "Invoke a dependency query export without managed or game writes.",             false},
     {"services.command",          "game.write",    "Invoke a dependency's command within the caller's transaction.",               true },
     {"events.emit",               "game.write",    "Queue a package-owned notification after commit for next tick.",               true },
@@ -202,6 +211,9 @@ const Operation *FindOperation(std::string_view name) {
 std::string ValidateOperation(std::string_view name, const Json &a) {
     if (!FindOperation(name)) {
         return "unsupported host operation";
+    }
+    if (name.starts_with("shops.")) {
+        return ValidateShop(name, a);
     }
     if (retail::Handles(name)) {
         return retail::Validate(name, a);

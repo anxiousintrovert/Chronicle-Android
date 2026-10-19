@@ -8,6 +8,7 @@
 #include "dngstatusdata.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
+#include "editmapscript.hpp"
 #include "editpartsinfo.hpp"
 #include "entities.hpp"
 #include "entity_tracking.hpp"
@@ -18,12 +19,20 @@
 #include "menu_misc.hpp"
 #include "runtime.hpp"
 #include "savedata.hpp"
+#include "shops.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
 
 namespace mods {
 namespace {
+bool ShopTablesSafe() { return mode != GAME_MODE_EDIT || GameMode == ED_MODE_WALK; }
+
+bool ShopWritesReady() {
+    return SaveData && ((mode == GAME_MODE_EDIT && GameMode == ED_MODE_WALK) ||
+                        (mode == GAME_MODE_DUNGEON && (gameTask == GAME_TASK_PLAY || gameTask == GAME_TASK_EYE_CAMERA) && BtEventMode == 0));
+}
+
 std::optional<EquipmentContext> CurrentEquipment() {
     if (mode != GAME_MODE_DUNGEON || !SaveData ||
         (gameTask != GAME_TASK_PLAY && gameTask != GAME_TASK_EYE_CAMERA) || BtEventMode != 0 ||
@@ -152,6 +161,17 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    static std::uint64_t shop_epoch = 0;
+    if (HasOwnedShops() && ShopTablesSafe()) {
+        if (shop_epoch != Scripts().Epoch()) {
+            RetainOwnedShops({});
+        } else {
+            RetainOwnedShops(Scripts().ActiveOwners());
+        }
+    }
+    if (!HasOwnedShops()) {
+        shop_epoch = Scripts().Epoch();
+    }
     static std::uint64_t entity_epoch = 0;
     if (entity_epoch != Scripts().Epoch()) {
         RetainOwnedEnemyScales({});
@@ -194,6 +214,11 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation.starts_with("shops.")) {
+            auto result = ReadShop(operation, arguments);
+            result["writable"] = ShopWritesReady();
+            return result;
+        }
         if (operation == "weapons.refresh_state") {
             const auto equipment = CurrentEquipment();
             nlohmann::json result = {{"ready", equipment.has_value()},
@@ -241,7 +266,7 @@ void TickGame() {
         }
         CommitEffects effects;
         if (!ApplyEntityAndSave(*SaveData, mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr,
-                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr)) { return false; }
+                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr, ShopWritesReady())) { return false; }
         if (georama){ georama->Commit();
 }
         if (effects.refresh_weapon) {
@@ -254,6 +279,9 @@ void TickGame() {
         }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
+    if (HasOwnedShops() && ShopTablesSafe()) {
+        RetainOwnedShops(Scripts().ActiveOwners());
+    }
     EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());
     if (!OwnedEnemyStats().empty() || !OwnedEnemyScales().empty()) {
         const auto owners = Scripts().ActiveOwners();

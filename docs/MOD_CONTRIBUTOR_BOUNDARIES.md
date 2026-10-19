@@ -81,3 +81,8 @@ upstream exactly. No PS2 diff. Other native-loader platforms remain unverified.
 Native ABI 2 services now share the generic dependency boundary with Lua. They
 allocate no content IDs or contributor registries and require explicit package
 trust and enablement.
+
+Shop stock/price operations use existing retail definitions only. They own native
+lists and base-price pairs without introducing custom item/weapon schemas, IDs or
+registries. Future contributor content can integrate through a separately agreed
+definition lookup and native allocation contract; these APIs do not reserve it.
