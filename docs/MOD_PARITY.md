@@ -117,9 +117,9 @@ shared-manager action verified 2x, then 0.5x, then restored original XYZ values
 while checking unchanged health/defense; the manager displayed `PASS owned scale`.
 This does not establish every attachment, boss phase or platform's rendering.
 
-## Kazarov dependency alignment (2026-10-19)
+## Kazarov dependency alignment (2026-10-19, superseded below)
 
-The branch now matches Chronicle master's Kazarov pin `611182d6393e3717d0700a71f3fd637e63f44d2a`
+At this earlier checkpoint the branch matched Chronicle master's Kazarov pin `611182d6393e3717d0700a71f3fd637e63f44d2a`
 and its `anxiousintrovert/Kazarov-Android` compatibility source. This is newer than
 the prior `1a8f9ab7` pin; it is **not** Kazarov main `04bd301e`, whose removed binary
 audio loaders require a separate Chronicle data-format migration. The port uses
@@ -638,3 +638,36 @@ manager action. Actual town purchase/sale UI behavior and other platforms remain
 unverified. The audit package is outside the repository and is not installed by
 normal builds. Kazarov was rechecked against current official Chronicle and the
 fork compatibility branch: both still use this branch's existing 611182d pin.
+
+## Official Kazarov migration (2026-10-19)
+
+The branch now uses unmodified `TheMoonPeople/Kazarov` at
+`04bd301efd8486c033caf46faf52f179a6022d7c`; `.gitmodules` points to the official
+repository and main branch. It no longer depends on Kazarov-Android or a private
+compatibility branch. The pin includes texture logical-size support (a78762c),
+the shared skinned-mesh pose fix (43cc847), Android support and frame-capture fixes.
+This does not independently establish the reported poncho issue is resolved.
+
+Chronicle still loads its existing extracted retail files. Format adapters
+convert HD/BD/SQ audio into upstream semantic JSON/in-memory WAV samples, and the
+retail memory-card icon into in-memory glTF/PNG. Upstream owns synthesis, rendering
+and platform installation. No Kazarov source is patched, and no renderer is copied.
+The retained retail readers are attributed to their source revision and carry the
+upstream MIT notice in `port/third_party/kazarov-retail-LICENSE`. A complete change
+to upstream's new data.zip/model/config publication format is not claimed here.
+
+Clang 23.1.2 Windows game/test builds passed. The full suite registered 707 tests:
+697 passed, nine skipped and one disabled. The newly included upstream fog stress
+test exceeded this checkout's old five-second limit; the final suite passed with
+the 60-second limit used by current Chronicle CI, without changing test assertions.
+The separate six-test retail run passed, checking nine banks, 21 sequences, 367
+resolved sample payloads and the existing icon pack. End-of-track metadata is
+normalized by the upstream sequence schema; event timing, channel data, metadata
+events and payloads are compared. All 15 Python tests and the 3,840-case no-mod/
+disabled-mod generator comparison passed. PS2 remains unchanged.
+
+The PAL dungeon probe completed with the official dependency and displayed
+PASS shop restore in the shared mod manager; its log reported no unreadable bank
+or sequence. This is Windows runtime evidence, not a listening assessment or
+Android/Linux/macOS certification. Official Chronicle master is a separate
+checkout and still needs its own migration PR; no upstream PR was opened here.

@@ -221,7 +221,9 @@ else()
 endif()
 
 function(dc_link_game target)
-    target_sources(${target} PRIVATE $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_host> $<TARGET_OBJECTS:dc_ps2>)
+    target_sources(${target} PRIVATE $<TARGET_OBJECTS:dc_port> $<TARGET_OBJECTS:dc_ps2>)
+    # Link the host target so its upstream dependencies (including fastgltf) propagate.
+    target_link_libraries(${target} PRIVATE dc_host)
     target_link_libraries(${target} PRIVATE dc_options kz_port_headers SDL3::SDL3 Vulkan::Vulkan)
     target_link_libraries(${target} PRIVATE chronicle_mod_lua)
     target_include_directories(${target} PRIVATE ${PORT_DIR})
