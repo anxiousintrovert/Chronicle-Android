@@ -67,6 +67,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `attachments.give` | `item`, `quantity`, optional `level` | `game.write` | Grant existing retail attachments to free regular slots; stat boosters accept level 1-3 |
 | `attachments.remove` | `bag_slot` | `game.write` | Discard one owned bag attachment, including an existing overflow record |
 | `weapons.build_up_list` | `slot`, optional `character` | `game.read` | Native evolution targets, requirements, and current eligibility without consuming RNG |
+| `weapons.attachment_set` | `slot`, `socket`, `bag_slot`, optional `character` | `game.write` | Fit/swap an owned bag attachment into an unequipped weapon |
+| `weapons.attachment_remove` | `slot`, `socket`, optional `character` | `game.write` | Move a fitted attachment to a free regular bag slot |
 | `weapons.upgrade` | `slot`, `seed`, optional `character` | `game.write` | Level up an unequipped retail weapon using full ABS or one Powerup Powder; absorb attachments atomically |
 | `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve an unequipped retail weapon after rechecking native requirements; atomic Mardan counter reset |
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
@@ -446,9 +448,45 @@ assert(chronicle.call("attachments.give", {item=91, quantity=1, level=3}))
 local targets = assert(chronicle.call("weapons.build_up_list", {slot=0}))
 ```
 
-Fitted attachment insertion/removal, active equipment refresh (including
-build-up and level-up of equipped weapons) remain APIs to implement. The contributor still
+Active equipment refresh (including fitted attachment changes, build-up and
+level-up of equipped weapons) remains to implement. The contributor still
 owns custom item/weapon registration and content formats.
+
+### Fitting and removing retail attachments
+
+`weapons.attachment_set {slot, socket, bag_slot, character=optional}` moves an
+owned attachment from bag slot 0-42 into an existing weapon socket (0-5, further
+bounded by its retail definition). If occupied, it swaps the old attachment back
+into the same bag slot. Complete records are preserved, including SynthSphere
+provenance, level, flags and values; no new attachment is created. A SynthSphere
+requires a native type-2 socket. Socket multipliers remain attached to the weapon,
+not to the moved attachment.
+
+`weapons.attachment_remove {slot, socket, character=optional}` returns a fitted
+attachment to the first free regular bag slot (0-39). A full bag, unresolved
+overflow, empty socket or invalid record rejects the transaction. Fitting may
+consume an explicitly selected overflow record, enabling recovery; swapping it
+leaves the displaced record in that same position. Removing never creates overflow.
+
+Both operations require `game.write`, a joined owner and an unequipped weapon.
+Declare the operation names in `requires_operations` when mandatory. They run
+through the shared Lua/native host boundary, apply the retail active-element
+correction, consume no global RNG and roll back with all other queued writes.
+Equipped mutation awaits native active-effect refresh. Slot coordinates are
+mutable positions; inspect current inventory before selecting them.
+
+```lua
+-- Inside a gameplay callback or shared-manager action:
+assert(chronicle.call('weapons.attachment_set', {
+    character=0, slot=1, socket=0, bag_slot=0
+}))
+-- An upgrade queued after this fit sees the newly fitted attachment.
+-- Queries see the committed result on a later callback.
+```
+
+Use `attachments.list` and `weapons.attachments_get` for selection and verification.
+The operations do not register custom attachments or weapons and add no default
+packages, periodic scans or engine hooks.
 
 ### Retail weapon level-up
 

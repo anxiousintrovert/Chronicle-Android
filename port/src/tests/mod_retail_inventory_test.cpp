@@ -723,3 +723,187 @@ TEST(ModRetailValidation, UpgradeRequiresExplicitSeedAndRejectsUnknownArguments)
     }
 }
 } // namespace
+
+namespace {
+TEST_F(ModRetailInventory, AttachmentMovesAndSwapsPreserveOwnedRecordsAcrossRetailSocketsWithoutRng) {
+    auto &s = Status();
+    s.party_size = 6;
+    int checked = 0;
+    for (int item = ITEM_WEAPON_START; item < ITEM_WEAPON_END; ++item) {
+        const auto *d = GetWeaponData(item);
+        s.equipped_weapon_slot[d->owner] = 0;
+        auto &w = s.chara_weapons[d->owner][1];
+        for (int socket = 0; socket < d->hole_num; ++socket) {
+            if (d->hole[socket] <= 0) {
+                continue;
+            }
+            WepDataListToHaveCopy(item, &w);
+            ATTACH_LIST first{}, second{};
+            AttachDataListToHaveCopy(ITEM_ATTACH_FIRE, &first);
+            AttachDataListToHaveCopy(ITEM_ATTACH_ICE, &second);
+            first.elem[0] = 7;
+            std::memcpy(&s.consumable_items[0], &first, sizeof(first));
+            const int old_kind = w.attach_kind[socket];
+            srand(12);
+            const int next = rand();
+            srand(12);
+            ASSERT_TRUE(Apply({
+                {"weapons.attachment_set", {{"character", d->owner}, {"slot", 1}, {"socket", socket}, {"bag_slot", 0}}}
+            }))
+                << error;
+            EXPECT_EQ(rand(), next);
+            EXPECT_EQ(std::memcmp(&w.attach[socket], &first, sizeof(first)), 0);
+            EXPECT_LT(s.consumable_items[0].id, ITEM_ATTACH_START);
+            std::memcpy(&s.consumable_items[0], &second, sizeof(second));
+            ASSERT_TRUE(Apply({
+                {"weapons.attachment_set", {{"character", d->owner}, {"slot", 1}, {"socket", socket}, {"bag_slot", 0}}}
+            }))
+                << error;
+            EXPECT_EQ(std::memcmp(&w.attach[socket], &second, sizeof(second)), 0);
+            EXPECT_EQ(std::memcmp(&s.consumable_items[0], &first, sizeof(first)), 0);
+            s.consumable_items[1].id = -1;
+            ASSERT_TRUE(Apply({
+                {"weapons.attachment_remove", {{"character", d->owner}, {"slot", 1}, {"socket", socket}}}
+            }))
+                << error;
+            EXPECT_EQ(std::memcmp(&s.consumable_items[1], &second, sizeof(second)), 0);
+            EXPECT_LT(w.attach[socket].item_no, ITEM_ATTACH_START);
+            EXPECT_EQ(w.attach_kind[socket], old_kind);
+            ++checked;
+        }
+    }
+    EXPECT_GT(checked, 100);
+}
+
+TEST_F(ModRetailInventory, AttachmentMovesEnforceSphereSlotsCapacityAndAtomicRollback) {
+    auto &s = Status();
+    auto &w = s.chara_weapons[0][1];
+    s.equipped_weapon_slot[0] = 0;
+    int ordinary = -1, sphere = -1, item = ITEM_WEAPON_START;
+    for (; item < ITEM_WEAPON_END; ++item) {
+        const auto *d = GetWeaponData(item);
+        if (d->owner != 0) {
+            continue;
+        }
+        ordinary = sphere = -1;
+        for (int i = 0; i < d->hole_num; ++i) {
+            if (d->hole[i] == 2) {
+                sphere = i;
+            } else if (d->hole[i] > 0) {
+                ordinary = i;
+            }
+        }
+        if (ordinary >= 0 && sphere >= 0) {
+            break;
+        }
+    }
+    ASSERT_LT(item, ITEM_WEAPON_END);
+    WepDataListToHaveCopy(item, &w);
+    ATTACH_LIST record{};
+    record.item_no = ITEM_ATTACH_SYNTHESIS_SPHERE;
+    record.sphere_weapon_no = ITEM_WEAPON_MARDAN_EINS;
+    record.sphere_level = 7;
+    record.status[0] = 43;
+    std::memcpy(&s.consumable_items[0], &record, sizeof(record));
+    auto              set = [&](int socket) { return GameCommand{
+                                                  "weapons.attachment_set", {{"slot", 1}, {"socket", socket}, {"bag_slot", 0}}
+ }; };
+    const GameCommand remove{
+        "weapons.attachment_remove", {{"slot", 1}, {"socket", sphere}}
+    };
+    auto reject = [&](std::vector<GameCommand> commands) {
+        const auto before = std::make_unique<CSaveData>(*save);
+        EXPECT_FALSE(Apply(std::move(commands)));
+        EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    };
+    reject({set(ordinary)});
+    reject({remove});
+    reject({
+        set(sphere), {"economy.spend", {{"amount", 65535}}}
+    });
+    s.equipped_weapon_slot[0] = 1;
+    reject({set(sphere)});
+    s.equipped_weapon_slot[0] = 0;
+    ASSERT_TRUE(Apply({set(sphere)})) << error;
+    EXPECT_EQ(std::memcmp(&w.attach[sphere], &record, sizeof(record)), 0);
+    reject({set(sphere)}); // The source bag slot is now empty.
+    for (int i = 0; i < 40; ++i) {
+        s.consumable_items[i].id = ITEM_ATTACH_FIRE;
+    }
+    reject({remove});
+    s.consumable_items[0].id = -1;
+    s.consumable_items[40].id = ITEM_ATTACH_FIRE;
+    reject({remove});
+    s.consumable_items[40].id = -1;
+    reject({remove, remove});
+    ASSERT_TRUE(Apply({remove})) << error;
+    EXPECT_EQ(std::memcmp(&s.consumable_items[0], &record, sizeof(record)), 0);
+}
+
+TEST_F(ModRetailInventory, AttachmentRemovalUpdatesElementAndFitThenUpgradeUsesStagedValues) {
+    auto &s = Status();
+    auto &w = s.chara_weapons[0][1];
+    s.equipped_weapon_slot[0] = 0;
+    int item = ITEM_WEAPON_START;
+    while (item < ITEM_WEAPON_END && (GetWeaponData(item)->owner != 0 || GetWeaponData(item)->hole[0] <= 0)) {
+        ++item;
+    }
+    ASSERT_LT(item, ITEM_WEAPON_END);
+    WepDataListToHaveCopy(item, &w);
+    for (auto &v : w.elem) {
+        v = 0;
+    }
+    w.best_elem = 0;
+    AttachDataListToHaveCopy(ITEM_ATTACH_FIRE, &w.attach[0]);
+    ASSERT_TRUE(Apply({
+        {"weapons.attachment_remove", {{"slot", 1}, {"socket", 0}}}
+    }))
+        << error;
+    EXPECT_EQ(w.best_elem, 5);
+    const int initial_fire = w.elem[0];
+    w.experience = GetWeaponMaxExp(&w);
+    ASSERT_TRUE(Apply({
+        {"weapons.attachment_set", {{"slot", 1}, {"socket", 0}, {"bag_slot", 0}}},
+        {"weapons.upgrade",        {{"slot", 1}, {"seed", 1}}                   }
+    }))
+        << error;
+    EXPECT_GT(w.elem[0], initial_fire);
+    EXPECT_EQ(w.level, 1);
+    EXPECT_LT(w.attach[0].item_no, ITEM_ATTACH_START);
+    EXPECT_LT(s.consumable_items[0].id, ITEM_ATTACH_START);
+}
+
+TEST(ModRetailValidation, AttachmentMutationRequiresExactBoundedCoordinates) {
+    EXPECT_TRUE(mods::ValidateOperation("weapons.attachment_set", {
+                                                                      {"slot",     1 },
+                                                                      {"socket",   0 },
+                                                                      {"bag_slot", 42}
+    })
+                    .empty());
+    EXPECT_TRUE(mods::ValidateOperation("weapons.attachment_remove", {
+                                                                         {"slot",   1},
+                                                                         {"socket", 0}
+    })
+                    .empty());
+    for (const auto &args : std::vector<Json>{
+             {{"slot", 1}},
+             {{"slot", 1}, {"socket", 6}},
+             {{"slot", 11}, {"socket", 0}},
+             {{"slot", 1}, {"socket", 0.5}},
+             {{"slot", 1}, {"socket", 0}, {"force", true}}
+    }) {
+        EXPECT_FALSE(mods::ValidateOperation("weapons.attachment_remove", args).empty());
+    }
+    EXPECT_FALSE(mods::ValidateOperation("weapons.attachment_set", {
+                                                                       {"slot",   1},
+                                                                       {"socket", 0}
+    })
+                     .empty());
+    EXPECT_FALSE(mods::ValidateOperation("weapons.attachment_set", {
+                                                                       {"slot",     1 },
+                                                                       {"socket",   0 },
+                                                                       {"bag_slot", 43}
+    })
+                     .empty());
+}
+} // namespace

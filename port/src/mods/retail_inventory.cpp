@@ -7,6 +7,7 @@
 #include <map>
 
 #include "battlemenu.hpp"
+#include "menu_dungeon.hpp"
 #include "menu_inventory.hpp"
 #include "menu_misc.hpp"
 #include "savedata.hpp"
@@ -250,7 +251,7 @@ void Synthesize(CUserStatus &s, const Json &a) {
 bool Handles(std::string_view op) {
     return op == "inventory.count" || op == "inventory.give" || op == "inventory.remove" ||
            op == "weapons.give" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
-           op == "weapons.attachments_get" || op == "items.native_definition" ||
+           op == "weapons.attachment_set" || op == "weapons.attachment_remove" || op == "weapons.attachments_get" || op == "items.native_definition" ||
            op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
            op == "weapons.build_up_list" || op == "weapons.build_up" || op == "weapons.upgrade" || op == "weapons.synthesize";
 }
@@ -281,6 +282,12 @@ std::string Validate(std::string_view op, const Json &a) {
     }
     if (op == "inventory.give" || op == "weapons.give" || op == "weapons.upgrade") {
         fields["seed"] = {0, 4294967295.0};
+    }
+    if (op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
+        fields["socket"] = {0, 5};
+    }
+    if (op == "weapons.attachment_set") {
+        fields["bag_slot"] = {0, 42};
     }
     if (op == "weapons.build_up") {
         fields["target"] = {257, 376};
@@ -429,6 +436,63 @@ void BuildUp(CSaveData &save, const Json &a) {
 }
 
 namespace {
+void MoveAttachment(CUserStatus &s, std::string_view op, const Json &a) {
+    const auto &owned = Owned(s, a);
+    const int   character = Character(s, a), slot = a.at("slot").get<int>(), socket = a.at("socket").get<int>();
+    const auto &definition = Definition(owned.item_no);
+    if (s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("attachment mutation requires an unequipped weapon until active effect refresh is supported");
+    }
+    if (socket >= definition.hole_num || definition.hole[socket] <= 0) {
+        throw std::runtime_error("weapon socket does not exist");
+    }
+    // Validate every occupied record before the native total-value helper reads it.
+    for (const auto &attachment : owned.attach) {
+        if (attachment.item_no >= ITEM_ATTACH_START) {
+            AttachmentDefinition(attachment.item_no);
+        }
+    }
+    auto &weapon = s.chara_weapons[character][slot];
+    auto &fitted = weapon.attach[socket];
+    if (op == "weapons.attachment_set") {
+        const int  bag = a.at("bag_slot").get<int>();
+        const auto incoming = BagAttachment(s, bag);
+        AttachmentDefinition(incoming.item_no);
+        if (incoming.item_no == ITEM_ATTACH_SYNTHESIS_SPHERE && definition.hole[socket] != 2) {
+            throw std::runtime_error("SynthSphere requires a native sphere socket");
+        }
+        auto outgoing = fitted;
+        if (outgoing.item_no < ITEM_ATTACH_START) {
+            outgoing = {};
+            outgoing.item_no = -1;
+        }
+        StoreAttachment(s, bag, outgoing);
+        fitted = incoming;
+    } else {
+        if (fitted.item_no < ITEM_ATTACH_START) {
+            throw std::runtime_error("weapon socket is empty");
+        }
+        StoreAttachment(s, AttachmentSpace(s), fitted);
+        fitted = {};
+        fitted.item_no = -1;
+    }
+    // WeaponMenuCheckElemValue's data rules, without its menu globals/logging.
+    WEAPON_HAVE total{};
+    WeaponAllValueSet(&weapon, &total, 0);
+    if (weapon.best_elem >= 0 && weapon.best_elem < 5 && total.elem[static_cast<int>(weapon.best_elem)] <= 0) {
+        weapon.best_elem = 5;
+    }
+    const int  item = weapon.item_no;
+    const bool needs_element = definition.owner == CHARA_RUBY ||
+                               item == ITEM_WEAPON_BLESSING_GUN || item == ITEM_WEAPON_BLESSING_GUN + 1 ||
+                               item == ITEM_WEAPON_HEXA_BLASTER || item == ITEM_WEAPON_SUPERNOVA;
+    if (weapon.best_elem == 5 && needs_element) {
+        SetWeaponElementStatus(&weapon);
+    }
+}
+} // namespace
+
+namespace {
 void Upgrade(CUserStatus &s, const Json &a) {
     const int   character = Character(s, a), slot = a.at("slot").get<int>();
     const auto &checked = Owned(s, a);
@@ -498,6 +562,10 @@ void Upgrade(CUserStatus &s, const Json &a) {
 } // namespace
 
 void Apply(CUserStatus &s, std::string_view op, const Json &a) {
+    if (op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
+        MoveAttachment(s, op, a);
+        return;
+    }
     if (op == "weapons.upgrade") {
         Upgrade(s, a);
         return;

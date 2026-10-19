@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 68 implemented operations, native plugins and author
+a real host-call boundary, 70 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional unequipped level-up/build-up and status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, equipped upgrade/build-up and fitted attachment insertion/removal with active effect refresh |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional unequipped attachment fit/swap/removal, level-up/build-up and status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, equipped upgrade/build-up and fitted attachment mutation with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
@@ -570,3 +570,22 @@ All 15 Python tests and 3,840 upstream/empty/disabled same-seed cases passed.
 A PAL shared-manager action displayed PASS retail upgrade after verifying both
 Powder and ABS payment paths and committed level changes. PS2 remains unchanged.
 Other-platform runtime behavior and equipped effect refresh remain unverified.
+
+## Fitted retail attachments (2026-10-19)
+
+Added weapons.attachment_set and weapons.attachment_remove, moving or swapping
+complete owned records on unequipped weapons. Native socket restrictions and
+active-element correction apply. Removal requires regular bag space without
+unresolved overflow. Changes are atomic with progression and other save writes.
+No global RNG, PS2 change, default package, custom-content registry or engine
+hook was introduced. Equipped mutation still needs active-effect refresh.
+
+Windows Clang 23.1.2 game/test builds passed. Of 665 registered tests, 658 passed,
+six skipped and one remained disabled. Four new tests cover all retail sockets,
+record-preserving round trips/swaps, sphere restrictions, bag capacity, rollback,
+argument bounds, active-element correction and fit-then-upgrade transactions.
+All 15 Python tests and 3,840 upstream/empty/disabled same-seed cases passed.
+
+A PAL shared-manager action displayed PASS fit swap remove after verifying each
+committed socket and returned bag record. Other-platform runtime behavior remains
+unverified; normal builds install no audit package.
