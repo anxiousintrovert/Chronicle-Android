@@ -15,7 +15,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload | Recruitment, town-character switching, temporary tuning ownership |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload | Town-character switching, temporary tuning ownership; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
@@ -680,7 +680,9 @@ request, revalidates ownership/native state/assets, then calls the native loader
 after the frame closes. It reloads the retail model, weapon/effect and voice;
 requests do not merely overwrite the save's current-character byte. A completed
 switch is a one-shot gameplay action, not an owned override to restore on disable.
-Town selection and recruitment remain in the coverage ledger.
+Town selection remains a reference capability gap. Recruitment remains an extension
+request, but is not an implemented Chronicle capability in the pinned reference;
+see the town integration audit below.
 
 The idle end-of-frame hook returns before accessing native game state or assets.
 No shipped package enables this feature. Eight queue tests cover unchanged save
@@ -704,3 +706,72 @@ The refreshed 3,840-case seed matrix remains byte-identical to pinned upstream
 `50eaff633e4e02e5dbc6a7a6a84c7e34688cb738`, with both empty and installed-disabled
 mod sets. The `ps2/` diff remains empty. This matrix covers the documented generator
 cases, not an assertion of complete retail-gameplay equivalence.
+
+## Town integration audit (2026-10-19; implementation pending)
+
+The reference evidence here is the pinned MoonMod commit named at the top of this
+ledger, specifically `ports/chronicle/moonfactory-chronicle.patch`. This is a source
+audit, not a runtime comparison or a newly implemented API. The implemented
+operation count remains 81. All other outstanding coverage above remains open.
+
+### Reference support versus catalog entries
+
+The reference catalog lists `party.recruit`, but `UnsupportedReason` explicitly
+reports that Chronicle has a story-ordered cast and no separate NPC companion
+recruitment routine. Its `game.party.recruited` event is tagged `chronicle-two`.
+Do not implement an unchecked `party_size` write merely to claim parity with that
+catalog name. A future Chronicle recruitment service would need its own story,
+initialization and save-state contract. It is not supplied by this audit.
+
+By contrast, `party.town_active` and `party.town_set_active` have Chronicle native
+bindings. The latter selects a retail character for walking in a town, separately
+from the active dungeon party. Its delayed loader preserves position and rotation.
+This is still an implementation target for our framework.
+
+### Integration differences that must be resolved
+
+- The reference increases the town `CharaBuffer` allocation from 115000 to 160000
+  quadwords in `EditInit` regardless of mod use. Our existing port initializer
+  retains 115000. Any additional storage must be acquired only for an explicit
+  request, with defined lifetime and cleanup; do not increase the idle allocation.
+- `EdLoadMainChara` resets `CharaBuffer.used` only when its arena argument is null.
+  Passing a non-null arena repeatedly does not reset it. Our loader must reset its
+  owned arena before reuse and preserve storage while models, texture data or
+  queued rendering still refer to it. The native `CDataAlloc2<1>(int)` constructor
+  does not allocate backing storage; giving it a larger limit is insufficient.
+- The reference remaps town motions through a port override of `GetMotionParam`
+  and a build patch targeting `CCharacter::ShadowStep` in PS2 source. The latter
+  performs its own motion-range lookup instead of calling `GetMotionParam`.
+  Implement both paths outside `ps2/`; do not introduce a generated PS2 patch.
+  Preserve native lookup behavior when no town override is active and for every
+  other character. The reference's motion map is
+  `{0, 1, 2, 0, 0, 34, 35, 31, 32, 0, 0}` for town motion IDs 0 through 10.
+- The reference loads `chara/c01d.chr` with `info.cfg` for Toan, and dungeon packs
+  `c04b`, `c06b`, `c05a`, `c10b`, `c18a` with `base.cfg` for the other five members.
+  Validate resource availability and model/motion assumptions before mutating the
+  displayed character. File existence alone does not establish a valid model.
+- Town reads must be observational. Separate requested and displayed selection,
+  and report readiness or failure instead of silently repairing state in a query.
+  Retain dungeon active-member and equipped-weapon state unchanged.
+
+### Required acceptance evidence
+
+Use the shared mod-manager action mechanism and the existing permission/owner
+transaction boundaries. The eventual implementation needs exclusive ownership,
+queued application outside rendering, epoch and scene revalidation, and explicit
+restoration on disable/unload. Repeated switches, owner removal during a pending
+switch, conversation/event entry, map changes and save/load must not leave model
+pointers or motion remapping attached to stale storage. Restoration may wait for a
+safe scene boundary, but the API must report that pending state.
+
+Clang unit tests must cover idle calls, ownership, cancellation and both model and
+shadow motion paths. A retail replay must exercise all six characters, repeated
+switches, movement, conversations, town transitions and disable/restoration, while
+checking that dungeon party/save fields remain unchanged. Inspect rendered output
+for model and shadow agreement. Repeat the existing no-mod/disabled-mod seed
+matrix and source comparison, supplemented by town-specific idle-state checks;
+the dungeon seed matrix alone cannot prove unchanged town behavior.
+
+This work uses existing retail characters only. It must not establish custom
+character/item/weapon identifiers or consume the contributor's cutscene, custom
+item or custom weapon framework contracts.
