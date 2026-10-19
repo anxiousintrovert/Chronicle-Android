@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 33 implemented operations, native plugins and author
+a real host-call boundary, 41 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation | Author-provided menu/action contributions, richer journal/skills UI |
 | Lua and host calls | Isolated bounded Lua, simulation/map callbacks, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | Owned event subscriptions and more native lifecycle events; dependency exports/commands |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
-| Inventory / weapons / economy | Bag, quick-slot and weapon reads; WHP gauge writes; wallet and fishing point transactions | Custom item/weapon registration belongs to contributor; native give/remove/use; weapon equip, ABS/build-up/attachments/synthesis |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item grant/removal and weapon grants; ABS/synthesis points and WHP writes; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; attachment inventory give/remove and item use; weapon equip, build-up, attachment insertion/removal and status-break synthesis |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
 | Shops / Georama | Saved plot/placement/request inspection | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
@@ -103,3 +103,21 @@ Cutscene, custom item and custom weapon frameworks are reserved for the contribu
 per the user instruction. Do not implement competing systems. Their integration
 boundaries are documented in [MOD_CONTRIBUTOR_BOUNDARIES.md](MOD_CONTRIBUTOR_BOUNDARIES.md).
 Coverage remains pending external integration, not falsely marked complete.
+
+### Retail inventory expansion
+
+Eight operations now cover existing retail item count/grant/removal, weapon grants,
+ABS and synthesis-point progression, fitted attachment inspection and native
+metadata. Tests use real linked native definitions and verify full-save rollback,
+quick-slot accounting, capacity rejection, missing owners, signed overflow,
+repeatable explicit grant seeds and preservation of the retail RNG. No custom
+item/weapon registration was added. Item use, equip, attachment mutation and weapon
+transformations remain incomplete, as shown above.
+
+Retail expansion validation: Clang 23.1.2 Windows x64 Release game/test builds;
+446 C++ tests passed, 6 skipped, no failures; all 8 Python tests passed.
+An isolated PAL Norune Lua smoke package granted bread, a Bone Rapier and ABS,
+then verified committed native values on the following tick. Its PASS log was
+visually checked in the shared in-game mod manager. The package and game assets
+remain local audit fixtures, not installed gameplay examples. Repeated 3,840-case
+empty/disabled-mod exports matched the pinned upstream hash above. No PS2 diff.

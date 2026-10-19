@@ -51,6 +51,15 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `georama.get` | `town` | `game.read` | Town 0–5: 24 saved plot records, placements until native sentinel, request completion entries |
 | `dungeon.progress` | none | `game.read` | Seven native dungeon progress slots and their highest reached floors |
 
+| `inventory.count` | `item` | `game.read` | Owned retail copies across bag and quick slots; world map uses its native ownership flag |
+| `inventory.give` | `item`, `quantity`, `seed` | `game.write` | Grant existing retail bag items; reject capacity overflow |
+| `inventory.remove` | `item`, `quantity` | `game.write` | Remove bag copies first, then quick-slot copies; insufficient ownership rejects the batch |
+| `weapons.give` | `item`, `seed` | `game.write` | Grant an existing retail weapon to its joined native owner; do not equip automatically |
+| `weapons.abs_get` | `slot`, optional `character` | `game.read` | Current ABS, native next-level threshold, level and synthesis points |
+| `weapons.abs_add` | `slot`, `amount`, optional `character`, `synthesis` | `game.write` | Add ABS up to native threshold and synthesis points; no implicit level-up |
+| `weapons.attachments_get` | `slot`, optional `character` | `game.read` | Fitted sockets, attachment stats and SynthSphere metadata |
+| `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
+
 Character IDs are 0â€“5 and must be joined; omitted means the controlled character.
 Weapon slots are 0â€“10. Amount and HP arguments are integers 0â€“32767. Water values
 may be fractional, finite and 0â€“32767. Lua arguments use a root object with string keys. Values can be finite numbers,
@@ -158,3 +167,36 @@ A mismatch exits nonzero, reports hashes/counts and the first differing record
 (if only final line terminators differ, that record is null). This compares existing
 exports; it does not build upstream or run the game. Matching results prove only
 the fixture coverage described in [MOD_PARITY.md](MOD_PARITY.md).
+
+## Retail inventory adapter
+
+These operations are implemented separately in `port/src/mods/retail_inventory.cpp`.
+They do not define a custom item or weapon format, registry, ID allocation scheme,
+or content-loading hook. Contributor boundaries are in
+[MOD_CONTRIBUTOR_BOUNDARIES.md](MOD_CONTRIBUTOR_BOUNDARIES.md).
+
+Bag item IDs are 132–256; weapon IDs are 257–376; definition inspection also accepts
+attachment IDs 81–131. IDs still need an actual matching native definition. A numeric
+ID is revision-specific retail data, not a persistent custom-content handle.
+Quantity is 1–100. `seed` is required for grants and is an integer 0–4294967295.
+
+Grants use native base definitions, with explicit local random state for feather
+volume, amulet charges, and non-default weapon durability traits. The local stream
+is unsigned 32-bit `seed = seed * 1664525 + 1013904223` per random draw; it never
+calls retail `rand`. Repeating the same request reproduces its properties. Authors
+can persist and advance their chosen grant seeds in owned mod state. This policy
+deliberately does not reproduce the global RNG sequence of retail pickup helpers.
+The generated item or weapon remains an ordinary native inventory record.
+
+Grants reject over-capacity bags, weapon overflow slots, and weapons belonging to
+unjoined characters. No array sizes change and no overflow menu is forced open.
+World-map grants/removals operate its native flag and require quantity one.
+Removal orders bag slots before quick slots, updates `item_count`, and never
+silently discards more items than requested. Attachment inventory grants/removals,
+item use and weapon equip are not supplied by these operations.
+
+ABS `amount` and optional `synthesis` are integers 0–32767. Synthesis addition
+rejects signed-32-bit overflow; ABS clamps to the native threshold. This does not
+consume attachments, run level-up random rolls, build up, or status-break a weapon.
+Existing equipped weapons remain equipped. All writes participate in the same
+callback transaction as health, currency and story flags.

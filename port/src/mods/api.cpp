@@ -4,6 +4,7 @@
 #include <cmath>
 #include <set>
 
+#include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "userstatus.hpp"
 
@@ -12,39 +13,47 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
-    {"player.get",             "game.read",     "Active or joined character stats.",                              false},
-    {"player.heal",            "game.write",    "Queue bounded HP restoration.",                                  true },
-    {"player.damage",          "game.write",    "Queue bounded HP reduction (not a combat hit).",                 true },
-    {"player.set",             "game.write",    "Queue current HP within native maximum.",                        true },
-    {"player.thirst_get",      "game.read",     "Read current and maximum water.",                                false},
-    {"player.thirst_set",      "game.write",    "Queue absolute water or restoration.",                           true },
-    {"party.list",             "game.read",     "Joined characters in native order.",                             false},
-    {"party.active",           "game.read",     "Active character stats.",                                        false},
-    {"inventory.get",          "game.read",     "Bag and quick-use slots.",                                       false},
-    {"weapons.list",           "game.read",     "Owned weapons by character and slot.",                           false},
-    {"weapons.get",            "game.read",     "Owned weapon stats by character and slot.",                      false},
-    {"economy.get",            "game.read",     "Wallet balance and capacity.",                                   false},
-    {"economy.add",            "economy.write", "Queue bounded currency addition.",                               true },
-    {"economy.spend",          "economy.write", "Queue spending; reject the callback if funds are insufficient.", true },
-    {"world.get",              "game.read",     "Current mode, map, dungeon, floor and restrictions.",            false},
-    {"story.flag_get",         "game.read",     "Global story bit get.",                                          false},
-    {"story.flag_set",         "game.write",    "Global story bit set.",                                          true },
-    {"story.int_get",          "game.read",     "Global signed story integer get.",                               false},
-    {"story.int_set",          "game.write",    "Global signed story integer set.",                               true },
-    {"map.flag_get",           "game.read",     "Map story bit get.",                                             false},
-    {"map.flag_set",           "game.write",    "Map story bit set.",                                             true },
-    {"map.init_flag_get",      "game.read",     "Map initialization bit get.",                                    false},
-    {"map.init_flag_set",      "game.write",    "Map initialization bit set.",                                    true },
-    {"fishing.get",            "game.read",     "Fishing point balance.",                                         false},
-    {"fishing.add",            "economy.write", "Add fishing points within native capacity.",                     true },
-    {"fishing.spend",          "economy.write", "Spend fishing points atomically.",                               true },
-    {"georama.get",            "game.read",     "Saved plots, placements and request completion.",                false},
-    {"dungeon.progress",       "game.read",     "Highest reached floor by dungeon.",                              false},
-    {"player.max_hp_set",      "game.write",    "Set HP capacity and clamp the current gauge.",                   true },
-    {"player.max_water_set",   "game.write",    "Set water capacity and clamp the current gauge.",                true },
-    {"player.defense_set",     "game.write",    "Set joined character base defense.",                             true },
-    {"player.status_get",      "game.read",     "Read native status mask and shared duration counter.",           false},
-    {"weapons.durability_set", "game.write",    "Set an owned weapon WHP gauge, without item-use effects.",       true },
+    {"player.get",              "game.read",     "Active or joined character stats.",                                 false},
+    {"player.heal",             "game.write",    "Queue bounded HP restoration.",                                     true },
+    {"player.damage",           "game.write",    "Queue bounded HP reduction (not a combat hit).",                    true },
+    {"player.set",              "game.write",    "Queue current HP within native maximum.",                           true },
+    {"player.thirst_get",       "game.read",     "Read current and maximum water.",                                   false},
+    {"player.thirst_set",       "game.write",    "Queue absolute water or restoration.",                              true },
+    {"party.list",              "game.read",     "Joined characters in native order.",                                false},
+    {"party.active",            "game.read",     "Active character stats.",                                           false},
+    {"inventory.get",           "game.read",     "Bag and quick-use slots.",                                          false},
+    {"weapons.list",            "game.read",     "Owned weapons by character and slot.",                              false},
+    {"weapons.get",             "game.read",     "Owned weapon stats by character and slot.",                         false},
+    {"economy.get",             "game.read",     "Wallet balance and capacity.",                                      false},
+    {"economy.add",             "economy.write", "Queue bounded currency addition.",                                  true },
+    {"economy.spend",           "economy.write", "Queue spending; reject the callback if funds are insufficient.",    true },
+    {"world.get",               "game.read",     "Current mode, map, dungeon, floor and restrictions.",               false},
+    {"story.flag_get",          "game.read",     "Global story bit get.",                                             false},
+    {"story.flag_set",          "game.write",    "Global story bit set.",                                             true },
+    {"story.int_get",           "game.read",     "Global signed story integer get.",                                  false},
+    {"story.int_set",           "game.write",    "Global signed story integer set.",                                  true },
+    {"map.flag_get",            "game.read",     "Map story bit get.",                                                false},
+    {"map.flag_set",            "game.write",    "Map story bit set.",                                                true },
+    {"map.init_flag_get",       "game.read",     "Map initialization bit get.",                                       false},
+    {"map.init_flag_set",       "game.write",    "Map initialization bit set.",                                       true },
+    {"fishing.get",             "game.read",     "Fishing point balance.",                                            false},
+    {"fishing.add",             "economy.write", "Add fishing points within native capacity.",                        true },
+    {"fishing.spend",           "economy.write", "Spend fishing points atomically.",                                  true },
+    {"georama.get",             "game.read",     "Saved plots, placements and request completion.",                   false},
+    {"dungeon.progress",        "game.read",     "Highest reached floor by dungeon.",                                 false},
+    {"player.max_hp_set",       "game.write",    "Set HP capacity and clamp the current gauge.",                      true },
+    {"player.max_water_set",    "game.write",    "Set water capacity and clamp the current gauge.",                   true },
+    {"player.defense_set",      "game.write",    "Set joined character base defense.",                                true },
+    {"player.status_get",       "game.read",     "Read native status mask and shared duration counter.",              false},
+    {"weapons.durability_set",  "game.write",    "Set an owned weapon WHP gauge, without item-use effects.",          true },
+    {"inventory.count",         "game.read",     "Count owned retail bag and quick-slot copies.",                     false},
+    {"inventory.give",          "game.write",    "Grant retail items using an explicit local random seed.",           true },
+    {"inventory.remove",        "game.write",    "Remove owned retail items, bag first then quick slots.",            true },
+    {"weapons.give",            "game.write",    "Grant a retail weapon to its native owner using a local seed.",     true },
+    {"weapons.abs_get",         "game.read",     "Read owned ABS, native threshold and synthesis points.",            false},
+    {"weapons.abs_add",         "game.write",    "Grant ABS and synthesis points without automatic level-up.",        true },
+    {"weapons.attachments_get", "game.read",     "Inspect fitted native attachment sockets.",                         false},
+    {"items.native_definition", "game.read",     "Inspect an existing retail definition; does not register content.", false},
 };
 
 int CharacterId(const CUserStatus &s, const Json &a) {
@@ -99,6 +108,9 @@ const Operation *FindOperation(std::string_view name) {
 std::string ValidateOperation(std::string_view name, const Json &a) {
     if (!FindOperation(name)) {
         return "unsupported host operation";
+    }
+    if (retail::Handles(name)) {
+        return retail::Validate(name, a);
     }
     if (!a.is_object()) {
         return "arguments must be an object";
@@ -204,6 +216,9 @@ Json ReadStatus(const CUserStatus &s, const World &w, std::string_view op, const
     const auto error = ValidateOperation(op, a);
     if (!error.empty()) {
         throw std::runtime_error(error);
+    }
+    if (retail::Handles(op)) {
+        return retail::Read(s, op, a);
     }
     if (op == "player.get" || op == "party.active") {
         return Character(s, CharacterId(s, a));
@@ -326,6 +341,10 @@ bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, 
             if (!FindOperation(op)->writes) {
                 error = "query cannot be committed";
                 return false;
+            }
+            if (retail::Handles(op)) {
+                retail::Apply(s, op, a);
+                continue;
             }
             if (op.starts_with("economy.")) {
                 const int amount = a.at("amount");

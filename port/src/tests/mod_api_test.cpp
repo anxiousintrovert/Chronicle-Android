@@ -25,10 +25,13 @@ TEST(ModApi, DetachedQueriesAndEmptyWritesPreserveEveryNativeByteAndRng) {
     srand(715);
     for (const auto &op : mods::Operations()) {
         if (!op.writes && !op.name.starts_with("story.") && !op.name.starts_with("map.") && !op.name.starts_with("fishing.") && !op.name.starts_with("georama.")) {
-            Json args = op.name == "weapons.get" ? Json{
-                                                       {"slot", 0}
+            Json args = Json::object();
+            if (op.name.starts_with("weapons.") && op.name != "weapons.list") {
+                args["slot"] = 0;
             }
-                                                 : Json::object();
+            if (op.name == "inventory.count" || op.name == "items.native_definition") {
+                args["item"] = ITEM_BREAD;
+            }
             auto snapshot = mods::ReadStatus(status, {1, 0, 20, true}, op.name, args);
             snapshot = nullptr;
         }
@@ -138,8 +141,11 @@ TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
             continue;
         }
         Json a = Json::object();
-        if (op.name == "weapons.get") {
+        if (op.name.starts_with("weapons.") && op.name != "weapons.list") {
             a["slot"] = 0;
+        }
+        if (op.name == "inventory.count" || op.name == "items.native_definition") {
+            a["item"] = ITEM_BREAD;
         }
         if (op.name.starts_with("story.") || op.name.starts_with("map.")) {
             a["id"] = 0;
