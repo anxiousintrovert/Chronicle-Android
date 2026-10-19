@@ -7,6 +7,7 @@
 #include "memorycardaccess.hpp"
 #include "menu_draw.hpp"
 #include "menuetc.hpp"
+#include "mods/menu.hpp"
 #include "options/screen.hpp"
 #include "rect.hpp"
 #include "snd.hpp"
@@ -87,8 +88,8 @@ void DrawSelection(int alpha) {
         int val_left = val_center - (val_w / 2);
         int val_right = val_left + val_w;
 
-        int choice = row.get(config);
-        int count = row.count(config);
+        int choice = row.get != nullptr ? row.get(config) : 0;
+        int count = row.count != nullptr ? row.count(config) : 0;
         bool has_prev = (choice > 0);
         bool has_next = (choice < count - 1);
 
@@ -251,6 +252,11 @@ void Draw() {
     setbilinear(0);
 
     if (!g_screen.texture_ready) {
+        return;
+    }
+    if (mods::menu::IsOpen()) {
+        mods::menu::Draw();
+        setbilinear(1);
         return;
     }
 

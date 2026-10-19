@@ -14,6 +14,28 @@
 
 </div>
 
+## Chronicle Mod Framework fork
+
+This fork adds a Chronicle-only mod runtime and an in-game manager under
+**Options → Mods → Mod Manager**, using the shared menu framework. Install folder
+packages for compatible asset replacements, Lua scripts, and custom objectives.
+Dependencies, conflicts, enable preferences, and save-bound progress are supported.
+Gameplay APIs are experimental; full NG+, new native content registries, and
+foreign-format importers remain planned work.
+
+- [Install mods and use the manager](docs/MODS.md)
+- [Every manifest field and package format](docs/MOD_FORMAT.md)
+- [Create a mod: Lua API, lifecycle, testing, distribution, saves](docs/MOD_AUTHORING.md)
+- [Troubleshooting and profile format](docs/MOD_TROUBLESHOOTING.md)
+- [Working example packages](examples/mods/README.md)
+- [Implemented and planned host capabilities](docs/MOD_FRAMEWORK_SCOPE.md)
+
+Use Clang for both C and C++. Framework changes are port-side; `ps2/` is unchanged.
+This is a source fork, not a prebuilt release or a distribution of game assets.
+It preserves history from [TheMoonPeople/Chronicle](https://github.com/TheMoonPeople/Chronicle)
+at `50eaff63` (Player menu framework). GitHub hosts it as a standalone repository
+because the owner already has a fork in that network.
+
 ## Overview
 
 **Chronicle** is a decompilation project and port of _Dark Cloud_ for the PlayStation 2.
@@ -26,6 +48,11 @@ The project aims to produce **100% matching text and data sections** for:
 
 ## Building and Running
 
+The PC port supports folder-based asset, Lua, and custom quest mods with an
+in-game manager, save-bound mod state, dependencies, and conflict reporting.
+See [Mod packages](docs/MODS.md) for installation and the current API, and
+[framework scope](docs/MOD_FRAMEWORK_SCOPE.md) for the remaining gameplay services.
+
 ### Prerequisites
 
 - A copy of _Dark Cloud_ (ideally the PAL version).
@@ -33,8 +60,8 @@ The project aims to produce **100% matching text and data sections** for:
 ### 1. Clone the repository
 
 ```bash
-git clone --recurse-submodules https://github.com/TheMoonPeople/Chronicle.git
-cd Chronicle
+git clone --recurse-submodules https://github.com/anxiousintrovert/Chronicle-Mod-Framework.git
+cd Chronicle-Mod-Framework
 ```
 
 ### 2. Provide a disc image

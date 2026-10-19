@@ -17,6 +17,8 @@
 #include "../../tools/dcdata/dcdata.hpp"
 #include "language.h"
 #include "localize.hpp"
+#include "mods/session.hpp"
+#include "mods/runtime.hpp"
 #include "platform/paths.hpp"
 
 namespace fs = std::filesystem;
@@ -67,7 +69,17 @@ const fs::path *Lookup(std::string_view path) {
     if (!data_indexed) {
         InitCDFile();
     }
-    auto found = data_index.find(dcdata::FoldPath(StripDevice(path)));
+    const auto key = dcdata::FoldPath(StripDevice(path));
+    auto found = data_index.find(key);
+    const auto &mod_manager = mods::Shared().Active();
+    const auto replacement = mod_manager.Overrides().find(key);
+    if (found != data_index.end() && replacement != mod_manager.Overrides().end()) {
+        std::error_code original_error, replacement_error;
+        const auto original_size = fs::file_size(found->second, original_error);
+        const auto replacement_size = fs::file_size(replacement->second, replacement_error);
+        if (!original_error && !replacement_error && original_size == replacement_size) return &replacement->second;
+        std::fprintf(stderr, "mods: replacement changed or disappeared; using original %s\n", key.c_str());
+    }
     return found == data_index.end() ? nullptr : &found->second;
 }
 
@@ -150,6 +162,23 @@ PORT_OVERRIDE void InitCDFile() {
     }
     data_indexed = true;
     CheckAgainstIndex(root);
+    std::vector<fs::path> mod_roots{PathsSaveRoot() / "mods"};
+    const auto executable = PathsExecutable();
+    if (!executable.empty()) mod_roots.push_back(executable.parent_path() / "mods");
+    if (!mods::Shared().StartedFor(PathsSaveRoot())) {
+        mods::Shared().Start(mod_roots, data_index, PathsSaveRoot());
+        mods::Scripts().Start(mods::Shared().Active());
+    }
+    const auto &mod_manager = mods::Shared().Active();
+    for (const auto &package : mod_manager.Packages()) {
+        std::fprintf(stderr, "mods: %s: %s\n", package.id.c_str(),
+                     !package.problems.empty() ? "blocked" : package.enabled ? "active" : "disabled");
+        for (const auto &problem : package.problems) std::fprintf(stderr, "mods:   %s\n", problem.c_str());
+    }
+    for (const auto &problem : mod_manager.Errors()) std::fprintf(stderr, "mods: %s\n", problem.c_str());
+    std::ofstream report(PathsSaveRoot() / "mods-report.json", std::ios::binary | std::ios::trunc);
+    report << mod_manager.Report();
+    if (!report) std::fprintf(stderr, "mods: could not write mods-report.json\n");
 }
 
 PORT_OVERRIDE int LoadFile(char *path, void *buffer, int *out_size) {

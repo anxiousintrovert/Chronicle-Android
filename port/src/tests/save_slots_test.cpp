@@ -20,6 +20,7 @@
 #include "platform_fixture.hpp"
 #include "save_slots.hpp"
 #include "savedata.hpp"
+#include "mods/runtime.hpp"
 
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -266,6 +267,43 @@ TEST(SaveSlots, SaveListAndLoad) {
     ASSERT_TRUE(RunOperation(g_mc, MC_OPERATION_DELETE) == 1);
     ASSERT_FALSE(fs::exists(root / "saves" / "3"));
 
+    fs::remove_all(root);
+}
+
+TEST(SaveSlots, GameplayModStateFollowsManualSaveAutosaveAndVanillaLoad) {
+    const auto root = UseTempSaveRoot();
+    PrepareSave();
+    ASSERT_EQ(SaveNew(0), 1); // Keep an independent vanilla slot.
+    fs::create_directories(root / "mods/quest");
+    {
+        std::ofstream manifest(root / "mods/quest/mod.json");
+        manifest << R"({"schema_version":1,"id":"test.quest","name":"Quest","version":"1","game":"chronicle","files":{},"quests":[{"id":"visit","title":"Visit","description":"Visit town","goal":2,"map":0}]})";
+    }
+    mods::Manager manager; manager.Scan({root / "mods"}, {});
+    mods::Scripts().Start(manager);
+    mods::Scripts().Tick({1,0,0,true});
+    ASSERT_EQ(mods::Scripts().Quests()[0].progress, 1);
+    const auto mod_state = mods::Scripts().SaveState();
+    ASSERT_EQ(SaveNew(1), 1);
+    ASSERT_GT(ReadSave(root,1).size(), static_cast<std::size_t>(kImageSize));
+    ASSERT_TRUE(SaveSlotWriteAutosave());
+    mods::Scripts().ResetState();
+    g_mc.file_no = 1;
+    ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);
+    EXPECT_EQ(mods::Scripts().SaveState(),mod_state);
+    mods::Scripts().ResetState();
+    g_mc.file_no = kSaveSlotAutosave;
+    ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);
+    EXPECT_EQ(mods::Scripts().SaveState(),mod_state);
+    g_mc.file_no = 0;
+    ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);
+    EXPECT_EQ(mods::Scripts().Quests()[0].progress,0);
+    EXPECT_EQ(ReadSave(root,0).size(),static_cast<std::size_t>(kImageSize));
+
+    g_mc.file_no = 1;
+    ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);
+    ResetSaveKeepingConfig(g_save);
+    EXPECT_EQ(mods::Scripts().Quests()[0].progress,0);
     fs::remove_all(root);
 }
 

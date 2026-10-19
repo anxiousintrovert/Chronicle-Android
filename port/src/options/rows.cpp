@@ -13,6 +13,7 @@
 
 #include "localize.hpp"
 #include "menu_option.hpp"
+#include "mods/menu.hpp"
 #include "platform/input.hpp"
 #include "platform/window.hpp"
 
@@ -801,6 +802,7 @@ std::span<const Row> BindingRows() {
 } // namespace
 
 std::span<const Page> Pages() {
+    static const Row mod_rows[] = {{.key = "mods.manager", .label = "Mod Manager", .help = "Enable mods and inspect\nconflicts. Changes apply\nafter restarting.", .activate = mods::menu::Open}};
     static const std::vector<Page> pages = {
         {"Game",          "\"Game\"\nHow the game plays.",                           kGameRows         },
         {"Display",       "\"Display\"\nThe window and picture.",                    kDisplayRows      },
@@ -809,6 +811,7 @@ std::span<const Page> Pages() {
         {"Text",          "\"Text\"\nLanguage, lettering and\nsymbols.",             kTextRows         },
         {"Accessibility", "\"Accessibility\"\nHelp with harder parts\nof the game.", kAccessibilityRows},
         {"Bindings",      "\"Bindings\"\nWhat each key and\nmouse button does.",       BindingRows()     },
+        {"Mods", "Installed mods and\nconflict reports.", mod_rows},
     };
     return pages;
 }
@@ -873,6 +876,7 @@ std::vector<std::pair<std::string, std::string>> RowStrings() {
 }
 
 std::string RowValue(const Row &row, const Config &config) {
+    if (row.activate != nullptr) return {};
     if (row.action != nullptr) {
         return InputBindingLabel(row.action);
     }
@@ -884,6 +888,7 @@ std::string RowValue(const Row &row, const Config &config) {
 }
 
 bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
+    if (row.activate != nullptr) return false;
     int count = row.count(config);
     int choice = row.get(config);
     int next = wrap ? (choice + direction + count) % count : std::clamp(choice + direction, 0, count - 1);
@@ -897,6 +902,7 @@ bool StepRow(const Row &row, Config &config, int direction, bool wrap) {
 void ResetPage(const Page &page, Config &config) {
     const Config defaults;
     for (const Row &row : page.rows) {
+        if (row.activate != nullptr) continue;
         if (row.action != nullptr) {
             RemoveBinding(config, row.action);
         } else if (row.restore != nullptr) {

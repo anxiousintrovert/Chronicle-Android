@@ -10,6 +10,7 @@
 #include "data_fixture.hpp"
 #include "dataread.hpp"
 #include "dataread_port.hpp"
+#include "mods/session.hpp"
 #include "exitcodes.hpp"
 #include "platform_fixture.hpp"
 
@@ -94,6 +95,47 @@ TEST(DataRead, Loadfile2ReadsExactSizeAndZeroFills) {
     Clear();
     ASSERT_TRUE(LoadFile(Mutable("meswin/systeme.bin"), buffer, &size) == 1);
     ASSERT_TRUE(size == 2047 && Equals(buffer, disc.files[4].data) && buffer[2047] == 0);
+    fs::remove_all(dir);
+}
+
+TEST(DataRead, ModReplacementAndSizeChangeFallback) {
+    fs::path dir = InstallStandardData("mod_read");
+    const std::string manifest = R"({"schema_version":1,"id":"test.asset","name":"Asset test","version":"1","game":"chronicle","files":{"img/title.img":"title.img"}})";
+    WriteBytes(dir / "save/mods/test/mod.json", Bytes(manifest.begin(), manifest.end()));
+    WriteBytes(dir / "save/mods/test/title.img", Bytes(2048, 0x42));
+    mods::Shared() = mods::Session{}; // Simulate restarting after installing the fixture.
+    InitCDFile();
+    int size = 0;
+    Clear();
+    ASSERT_EQ(LoadFile2(Mutable("cdrom0:\\IMG\\TITLE.IMG"), buffer, &size, 0), 1);
+    EXPECT_EQ(size, 2048);
+    EXPECT_TRUE(AllAre(buffer, buffer + 2048, 0x42));
+    EXPECT_EQ(buffer[2048], kUntouched);
+    EXPECT_TRUE(fs::exists(dir / "save/mods-report.json"));
+
+    WriteBytes(dir / "save/mods/test/title.img", Bytes(4096, 0x43));
+    Clear();
+    ASSERT_EQ(LoadFile2(Mutable("img/title.img"), buffer, &size, 0), 1);
+    EXPECT_EQ(size, 2048);
+    EXPECT_TRUE(Equals(buffer, StandardDisc().files[1].data));
+    EXPECT_EQ(buffer[2048], kUntouched);
+    fs::remove_all(dir);
+}
+
+TEST(DataRead, ConflictingModsLeaveOriginalDataUntouched) {
+    fs::path dir = InstallStandardData("mod_conflict");
+    for (const auto *id : {"test.a", "test.b"}) {
+        const std::string manifest = std::string(R"({"schema_version":1,"id":")") + id +
+            R"(","name":"Conflict test","version":"1","game":"chronicle","files":{"img/title.img":"title.img"}})";
+        WriteBytes(dir / "save/mods" / id / "mod.json", Bytes(manifest.begin(), manifest.end()));
+        WriteBytes(dir / "save/mods" / id / "title.img", Bytes(2048, 0x42));
+    }
+    mods::Shared() = mods::Session{};
+    InitCDFile();
+    int size = 0;
+    Clear();
+    ASSERT_EQ(LoadFile2(Mutable("img/title.img"), buffer, &size, 0), 1);
+    EXPECT_TRUE(Equals(buffer, StandardDisc().files[1].data));
     fs::remove_all(dir);
 }
 

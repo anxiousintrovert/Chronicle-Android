@@ -1,4 +1,5 @@
 #include "memorycardaccess.hpp"
+#include "mods/save.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -266,7 +267,7 @@ PORT_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
     }
 
     if (result == FilesResult::kWritten) {
-        result = FilesWrite(SaveSlotPath(file_no), this->save_buffer, kImageSize, !SaveSlotNew);
+        result = mods::WriteSave(SaveSlotPath(file_no), this->save_buffer, kImageSize, !SaveSlotNew);
     }
 
     if (result != FilesResult::kWritten) {
@@ -282,6 +283,12 @@ PORT_OVERRIDE int CMemoryCardAccess::SaveToMc(int file_no) {
 
 PORT_OVERRIDE int CMemoryCardAccess::LoadFromMc(int file_no) {
     if (!ReadImage(file_no, this->GetVersion())) {
+        return -1;
+    }
+
+    std::string mod_error;
+    if (!mods::LoadSaveState(SaveSlotPath(file_no), kImageSize, mod_error)) {
+        std::fprintf(stderr, "mods: cannot load save: %s\n", mod_error.c_str());
         return -1;
     }
 
@@ -336,5 +343,5 @@ bool SaveSlotWriteAutosave() {
         return false;
     }
     BuildImage(g_image, kVersion);
-    return FilesWrite(SaveSlotPath(kSaveSlotAutosave), g_image, kImageSize, true) == FilesResult::kWritten;
+    return mods::WriteSave(SaveSlotPath(kSaveSlotAutosave), g_image, kImageSize, true) == FilesResult::kWritten;
 }

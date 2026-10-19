@@ -340,5 +340,9 @@
     "tracker.town.1": "Dorf Matataki",
     "tracker.town.2": "Queens",
     "tracker.town.3": "Muska Lacka",
-    "tracker.town.4": "Gelbe Tropfen"
+    "tracker.town.4": "Gelbe Tropfen",
+    "options.page.mods": "Mods",
+    "options.page.mods.help": "Installierte Mods\nund Konflikte.",
+    "options.mods.manager.label": "Mod-Verwaltung",
+    "options.mods.manager.help": "Mods aktivieren und\nKonflikte prüfen.\nNeustart erforderlich."
 }

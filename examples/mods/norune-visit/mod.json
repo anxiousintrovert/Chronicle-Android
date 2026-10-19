@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "example.norune-visit",
+  "name": "Norune Visit Objective",
+  "version": "1.0.0",
+  "game": "chronicle",
+  "requires_capabilities": ["quests.progress.v1", "events.map.v1", "save.metadata.v1"],
+  "quests": [
+    {
+      "id": "visit",
+      "title": "Visit Norune",
+      "description": "Enter Norune and check this objective in the mod manager.",
+      "goal": 1,
+      "map": 0
+    }
+  ],
+  "files": {}
+}

@@ -340,5 +340,9 @@
     "tracker.town.1": "Village Matataki",
     "tracker.town.2": "Queens",
     "tracker.town.3": "Muska Lacka",
-    "tracker.town.4": "Gouttes Jaunes"
+    "tracker.town.4": "Gouttes Jaunes",
+    "options.page.mods": "Mods",
+    "options.page.mods.help": "Mods installés et\nconflits.",
+    "options.mods.manager.label": "Gestion des mods",
+    "options.mods.manager.help": "Activer les mods et\nvoir les conflits.\nRedémarrage requis."
 }

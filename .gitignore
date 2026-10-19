@@ -1,5 +1,7 @@
 # Build files
 /build/
+/build-mods/
+/mods/
 /ps2/build/*
 /port/build/*
 !/ps2/build/.gitkeep

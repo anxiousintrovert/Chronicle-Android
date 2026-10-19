@@ -15,6 +15,7 @@
 #include "memcard.hpp"
 #include "menu_draw.hpp"
 #include "menuetc.hpp"
+#include "mods/menu.hpp"
 #include "platform/display.hpp"
 #include "platform/input.hpp"
 #include "platform/window.hpp"
@@ -589,6 +590,7 @@ int Open(int mode, int block_no, u_long128 *buffer) {
 
     RefreshTextsForLanguage();
     g_screen = Screen{};
+    mods::menu::Close();
     g_screen.open = true;
     g_screen.mode = mode;
     g_screen.block_no = block_no;
@@ -670,11 +672,16 @@ int Run() {
 
             break;
         default:
+            if (mods::menu::IsOpen()) {
+                const auto held = HeldButtons();
+                mods::menu::Run(Pressed(held, PAD_DPAD, true) | Pressed(held, PAD_CROSS | PAD_CIRCLE | PAD_SQUARE, false));
+                break;
+            }
             if (g_screen.bar_frames > 0) {
                 g_screen.bar_frames--;
             }
             RunMouse();
-            if (g_screen.step == OPTION_STEP_RUN) {
+            if (g_screen.step == OPTION_STEP_RUN && !mods::menu::IsOpen()) {
                 RunKeys();
             }
             ShowHelp();

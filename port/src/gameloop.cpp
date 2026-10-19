@@ -31,6 +31,7 @@
 #include "mainselect.hpp"
 #include "menu_option.hpp"
 #include "menu_save.hpp"
+#include "mods/runtime.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
 #include "nowload.hpp"
@@ -401,6 +402,7 @@ bool FrameBoundaryStop() {
 } // namespace
 
 void ResetSaveKeepingConfig(CSaveData &save) {
+    mods::Scripts().ResetState();
     SV_CONFIG_SYS config;
     // The configuration's copy holds one byte per word; the last file's number may not fit one.
     const s32 last_file = static_cast<s32 *>(save.GetConfigData())[kConfigLastFile];
@@ -963,6 +965,7 @@ int RunGame(int argc, char **argv) {
             }
             
             GiveOnArrival();
+            if (result == 0) mods::TickGame();
             InputSetLookOnLeftStick((mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_EYE_CAMERA) ||
                                     (mode == GAME_MODE_EDIT && viewMode != 0 && EdInteriorFlag == 0));
             GamePad.UpDate();

@@ -208,7 +208,12 @@ TEST(MenuOption, PagesInOrder) {
         names.push_back(page.name);
     }
     ASSERT_TRUE((names == std::vector<std::string_view>{"Game", "Display", "Audio", "Controls", "Text", "Accessibility",
-                                                        "Bindings"}));
+                                                        "Bindings", "Mods"}));
+    ASSERT_NE(pages.back().rows[0].activate, nullptr);
+    Config config;
+    EXPECT_TRUE(options::RowValue(pages.back().rows[0], config).empty());
+    EXPECT_FALSE(options::StepRow(pages.back().rows[0], config, 1, false));
+    options::ResetPage(pages.back(), config);
     ASSERT_TRUE(std::string_view(pages[5].rows[0].key) == "game.qte_always_win");
 }
 

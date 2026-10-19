@@ -340,5 +340,9 @@
     "tracker.town.1": "Aldea Matataki",
     "tracker.town.2": "Queens",
     "tracker.town.3": "Muska Lacka",
-    "tracker.town.4": "Gotas Amarillas"
+    "tracker.town.4": "Gotas Amarillas",
+    "options.page.mods": "Mods",
+    "options.page.mods.help": "Mods instalados\ny conflictos.",
+    "options.mods.manager.label": "Gestor de mods",
+    "options.mods.manager.help": "Activa mods y\nconsulta conflictos.\nRequiere reiniciar."
 }

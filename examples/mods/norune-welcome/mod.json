@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "api_version": 1,
+  "id": "example.norune-welcome",
+  "name": "Norune Welcome Quest",
+  "version": "1.0.0",
+  "game": "chronicle",
+  "enabled": true,
+  "requires_capabilities": [
+    "scripts.lua.v1",
+    "quests.progress.v1",
+    "events.map.v1",
+    "events.tick.v1",
+    "save.metadata.v1",
+    "economy.write.v1"
+  ],
+  "permissions": [
+    "economy.write"
+  ],
+  "script": "main.lua",
+  "quests": [
+    {
+      "id": "welcome",
+      "title": "Welcome to Norune",
+      "description": "Visit Norune. Receive 50 Gilda once per playthrough.",
+      "goal": 1,
+      "map": 0
+    }
+  ],
+  "files": {}
+}
