@@ -148,7 +148,7 @@ Values use the existing namespaced mod save trailer and exact package/version
 checks. Loading/resetting rebinds callbacks to restored/cleared storage; it does
 not serialize native pointers or heap state. Failed callbacks or rejected commits
 restore only that callback's owned values and discard its queued writes.
-Save migration and native cross-package exports remain separate future work.
+Save migration remains future work; native exports are documented below.
 
 The [standalone lifecycle example](../examples/native-lifecycle) counts entries
 using owned save values without gameplay permissions. It builds with Clang, is
@@ -234,7 +234,7 @@ are transient; no background thread, polling loop or native engine hook is added
 ### Calling dependency commands
 
 ABI 1 and ABI 2 plugins can call `services.command` during gameplay callbacks.
-Require `services.command.v1`, grant `game.write`, and declare the Lua provider in
+Require `services.command.v1`, grant `game.write`, and declare the provider in
 `requires`. JSON is `{ "provider":"author.rewards", "name":"reward",
 "arguments":{"amount":5} }`; a successful host call returns the export's JSON
 object, valid until the next host call. Its result remains provisional until the
@@ -246,5 +246,29 @@ back the providers too. Provider exceptions poison the outer transaction even if
 the plugin ignores the failed host call. Limits and authorization are documented
 in [MOD_HOST_API.md](MOD_HOST_API.md#transactional-dependency-commands). A real
 ABI 2 DLL test covers success, caller failure, trusted provider ownership and
-legacy reads/currency through the Lua export. Native export descriptors remain
-future work; no existing C ABI structure was changed.
+legacy reads/currency through the Lua export. Native exports are supported without changing existing ABI structures.
+
+## Native service exports
+
+Require `services.native.v1` and export `ChronicleMod_GetServicesV1` alongside
+ABI 2. Return a static `ChronicleModServicesV1` with `size=sizeof`, `abi=1`, exact
+package ID, count and static `ChronicleModServiceV1` array. Each entry uses its
+exact sizeof, QUERY or COMMAND kind, name and invoke callback. Names contain
+1-64 lowercase letters, digits, underscores or dots. The combined Lua/native
+query/command limit is 32; duplicates within a category are rejected. Invalid
+descriptors, unsupported kinds and ABI 1 providers fail explicitly.
+
+Invoke receives the host, existing plugin state, bounded JSON object arguments
+and trusted immediate caller ID. Return 1 and a UTF-8 JSON object of at most
+16 KiB, or 0 for failure. Result storage belongs to the plugin and must survive
+until its next service invocation or stop; never return stack-local storage.
+The host copies and validates results; null, malformed or oversized results fail.
+
+Queries deny managed writes through the host. Commands share the caller's
+transaction, with provider permissions and ownership. Failed commands poison the
+outer transaction and roll back managed state/game writes/events. Private heap
+changes and external effects cannot be rolled back or sandboxed. Declared
+dependencies are mandatory; active providers cannot be reentered. Nested calls
+share the 16-call/8-depth service budget.
+
+See [the standalone counter](../examples/native-services/README.md).

@@ -413,6 +413,28 @@ bool InvokeCommand(Module &m, const Json &a, Json &result, std::string &error) {
     return accepted;
 }
 
+bool InvokeQueryService(Module &m, const Json &a, Json &result, std::string &error) {
+    if (!m.playing || !m.invoke) {
+        error = "query invocation requires gameplay";
+        return false;
+    }
+    const auto &provider = a.at("provider").get_ref<const std::string &>();
+    if (std::ranges::find(m.package.dependencies, provider) == m.package.dependencies.end()) {
+        error = "query provider must be a declared dependency";
+        return false;
+    }
+    if (m.service_depth >= 8 || --*m.service_budget < 0) {
+        error = "query invocation depth or call limit exceeded";
+        return false;
+    }
+    try {
+        return m.invoke(m, provider.c_str(), a.at("name").get_ref<const std::string &>().c_str(), a.at("arguments"), result, error, false);
+    } catch (const std::exception &e) {
+        error = e.what();
+        return false;
+    }
+}
+
 int ApiCall(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
     const auto *op = FindOperation(name);
@@ -435,6 +457,13 @@ int ApiCall(lua_State *L) {
     m.call_error = ValidateOperation(name, m.arguments);
     if (!m.call_error.empty()) {
         return Failure(L, m.call_error.c_str());
+    }
+    if (op->name == "services.query") {
+        if (!InvokeQueryService(m, m.arguments, m.snapshot, m.call_error)) {
+            return Failure(L, m.call_error.c_str());
+        }
+        PushJson(L, m.snapshot);
+        return 1;
     }
     if (op->name == "services.command") {
         if (!InvokeCommand(m, m.arguments, m.snapshot, m.call_error)) {
@@ -530,6 +559,19 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         if (!error.empty()) {
             throw std::runtime_error(error);
         }
+        if (m.read_only && op->writes) {
+            throw std::runtime_error("query exports cannot write managed or game state");
+        }
+        if (op->name == "services.query") {
+            Json        value;
+            std::string error;
+            if (!InvokeQueryService(m, args, value, error)) {
+                throw std::runtime_error(error);
+            }
+            m.native_result = value.dump();
+            *result = m.native_result.c_str();
+            return 1;
+        }
         if (op->name == "services.command") {
             Json        value;
             std::string error;
@@ -580,7 +622,7 @@ int NativeState(void *context, const char *key, const char *value, const char **
     }
     try {
         if (!m.native_active) {
-            throw std::runtime_error("owned state requires a native tick, event or menu callback");
+            throw std::runtime_error("owned state requires a native tick, event, menu or service callback");
         }
         if (++m.native_calls > 128) {
             throw std::runtime_error("native callback host-call limit reached");
@@ -592,6 +634,9 @@ int NativeState(void *context, const char *key, const char *value, const char **
             const auto &state = *m.state;
             m.native_result = state.contains("values") && state["values"].contains(key) ? state["values"][key].dump() : "null";
         } else {
+            if (m.read_only) {
+                throw std::runtime_error("query exports cannot write owned state");
+            }
             if (std::strlen(value) > 16384) {
                 throw std::runtime_error("state JSON exceeds 16384 bytes");
             }
@@ -970,7 +1015,7 @@ struct Runtime::Impl {
             }
             auto &exports = command ? m.command_exports : m.exports;
             auto  found = exports.find(name);
-            if (m.failed || !m.lua || found == exports.end()) {
+            if (m.failed || found == exports.end() || (found->second == LUA_NOREF ? !m.native : !m.lua)) {
                 error = "service provider or export is unavailable";
                 return false;
             }
@@ -995,7 +1040,10 @@ struct Runtime::Impl {
                     m.service_budget = &m.services_left;
                     m.transaction = nullptr;
                     m.service_caller.clear();
-                    lua_settop(m.lua, 0);
+                    m.native_active = false;
+                    if (m.lua) {
+                        lua_settop(m.lua, 0);
+                    }
                 }
             } restore{m};
 
@@ -1015,6 +1063,19 @@ struct Runtime::Impl {
             m.service_reference = found->second;
             m.service_arguments = args;
             m.call_error.clear();
+            if (found->second == LUA_NOREF) {
+                m.native_active = true;
+                m.native_calls = 0;
+                std::string text;
+                const auto  request = args.dump();
+                if (!m.native->InvokeService(name, command, request.c_str(), caller.package.id.c_str(), text, error)) {
+                    error = m.package.id + "/" + name + ": " + error;
+                    return false;
+                }
+                result = Json::parse(text);
+                error = ValidateArguments(result);
+                return error.empty();
+            }
             lua_pushcfunction(m.lua, DispatchQuery);
             ResetBudget(m);
             const int status = lua_pcall(m.lua, 0, 0, 0);
@@ -1283,6 +1344,17 @@ void Runtime::Start(const Manager &manager) {
                 m.native.reset();
             } else {
                 try {
+                    auto queries = m.exports;
+                    auto commands = m.command_exports;
+                    for (const auto &service : m.native->Services()) {
+                        auto &exports = service.kind == CHRONICLE_SERVICE_COMMAND ? commands : queries;
+                        if (!Key(service.name) || exports.contains(service.name) || queries.size() + commands.size() >= 32) {
+                            throw std::runtime_error("invalid/duplicate native service name or more than 32 combined exports");
+                        }
+                        exports.emplace(service.name, LUA_NOREF);
+                    }
+                    m.exports = std::move(queries);
+                    m.command_exports = std::move(commands);
                     auto actions = m.actions;
                     for (const auto &action : m.native->Actions()) {
                         if (!Key(action.id) || actions.contains(action.id) || actions.size() >= 32) {

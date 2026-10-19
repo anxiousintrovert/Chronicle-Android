@@ -99,13 +99,14 @@ struct NativeLibrary::Impl {
 #else
     SDL_SharedObject *library = nullptr;
 #endif
-    const ChronicleModPluginV1 *plugin = nullptr;
-    const ChronicleModPluginV2 *plugin2 = nullptr;
-    const ChronicleModMenuV1   *menu = nullptr;
-    ChronicleModHostV1          host{};
-    ChronicleModHostV2          host2{};
-    void                       *state = nullptr;
-    bool                        started = false;
+    const ChronicleModPluginV1   *plugin = nullptr;
+    const ChronicleModPluginV2   *plugin2 = nullptr;
+    const ChronicleModMenuV1     *menu = nullptr;
+    const ChronicleModServicesV1 *services = nullptr;
+    ChronicleModHostV1            host{};
+    ChronicleModHostV2            host2{};
+    void                         *state = nullptr;
+    bool                          started = false;
 
     ~Impl() {
         if (started && plugin2) {
@@ -144,10 +145,12 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleMo
 #ifdef _WIN32
         auto entry2 = reinterpret_cast<ChronicleModEntryV2>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV2"));
         auto menu_entry = reinterpret_cast<ChronicleModMenuEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetMenuV1"));
+        auto services_entry = reinterpret_cast<ChronicleModServicesEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetServicesV1"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV1"));
 #else
         auto entry2 = reinterpret_cast<ChronicleModEntryV2>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV2"));
         auto menu_entry = reinterpret_cast<ChronicleModMenuEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetMenuV1"));
+        auto services_entry = reinterpret_cast<ChronicleModServicesEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetServicesV1"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV1"));
 #endif
         if (entry2) {
@@ -158,6 +161,21 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleMo
                 throw std::runtime_error("incompatible native ABI 2 descriptor");
             }
             impl_->host2 = host2;
+            if (services_entry) {
+                const auto *services = services_entry();
+                if (!services || services->size < sizeof(ChronicleModServicesV1) || services->abi != 1 ||
+                    !services->id || p.id != services->id || services->count > 32 || (services->count && !services->services)) {
+                    throw std::runtime_error("incompatible native services descriptor");
+                }
+                for (uint32_t i = 0; i < services->count; ++i) {
+                    const auto &service = services->services[i];
+                    if (service.size != sizeof(ChronicleModServiceV1) || !service.name || !service.invoke ||
+                        service.kind > CHRONICLE_SERVICE_COMMAND) {
+                        throw std::runtime_error("invalid native service descriptor");
+                    }
+                }
+                impl_->services = services;
+            }
             if (menu_entry) {
                 const auto *menu = menu_entry();
                 if (!menu || menu->size < sizeof(ChronicleModMenuV1) || menu->abi != 1 || !menu->id || p.id != menu->id ||
@@ -180,8 +198,8 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleMo
             }
             return true;
         }
-        if (menu_entry) {
-            throw std::runtime_error("native menu actions require plugin ABI 2");
+        if (menu_entry || services_entry) {
+            throw std::runtime_error("native menu/services extensions require plugin ABI 2");
         }
         if (!entry) {
             throw std::runtime_error("missing ChronicleMod_GetPluginV1 or ChronicleMod_GetPluginV2");
@@ -230,6 +248,43 @@ bool NativeLibrary::RunAction(std::string_view id, const char *world_json) {
             return action.run(&impl_->host2, impl_->state, world_json);
         }
     }
+    return false;
+}
+
+std::span<const ChronicleModServiceV1> NativeLibrary::Services() const {
+    if (!impl_->started || !impl_->services) {
+        return {};
+    }
+    return {impl_->services->services, impl_->services->count};
+}
+
+bool NativeLibrary::InvokeService(std::string_view name, bool command, const char *arguments, const char *caller,
+                                  std::string &result, std::string &error) {
+    for (const auto &service : Services()) {
+        if (name != service.name || service.kind != (command ? CHRONICLE_SERVICE_COMMAND : CHRONICLE_SERVICE_QUERY)) {
+            continue;
+        }
+        const char *value = nullptr;
+        if (!service.invoke(&impl_->host2, impl_->state, arguments, caller, &value)) {
+            error = "native service returned failure";
+            return false;
+        }
+        if (!value) {
+            error = "native service returned no JSON object";
+            return false;
+        }
+        size_t length = 0;
+        while (length <= 16384 && value[length]) {
+            ++length;
+        }
+        if (length > 16384) {
+            error = "native service result exceeds 16 KiB";
+            return false;
+        }
+        result.assign(value, length);
+        return true;
+    }
+    error = "native service is unavailable";
     return false;
 }
 } // namespace mods

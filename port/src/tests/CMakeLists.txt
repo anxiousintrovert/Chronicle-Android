@@ -46,6 +46,19 @@ target_compile_definitions(darkcloud_tests PRIVATE
     CHRONICLE_NATIVE_V2_MENU_FIXTURE="$<TARGET_FILE:chronicle_native_v2_menu_fixture>"
     CHRONICLE_NATIVE_V2_MENU_BAD_FIXTURE="$<TARGET_FILE:chronicle_native_v2_menu_bad_fixture>")
 
+foreach(variant services services_bad services_bad_kind)
+    add_library(chronicle_native_${variant}_fixture SHARED mod_native_services_fixture.c)
+    target_include_directories(chronicle_native_${variant}_fixture PRIVATE ${PORT_DIR})
+    set_target_properties(chronicle_native_${variant}_fixture PROPERTIES C_STANDARD 99)
+    add_dependencies(darkcloud_tests chronicle_native_${variant}_fixture)
+endforeach()
+target_compile_definitions(chronicle_native_services_bad_fixture PRIVATE FIXTURE_SERVICE_ABI=99)
+target_compile_definitions(chronicle_native_services_bad_kind_fixture PRIVATE FIXTURE_SERVICE_KIND=99)
+target_compile_definitions(darkcloud_tests PRIVATE
+    CHRONICLE_NATIVE_SERVICES_FIXTURE="$<TARGET_FILE:chronicle_native_services_fixture>"
+    CHRONICLE_NATIVE_SERVICES_BAD_FIXTURE="$<TARGET_FILE:chronicle_native_services_bad_fixture>"
+    CHRONICLE_NATIVE_SERVICES_BAD_KIND_FIXTURE="$<TARGET_FILE:chronicle_native_services_bad_kind_fixture>")
+
 # A case is a unit test: it finishes in milliseconds, and one that does not is cut off. The clock
 # cases measure short sleeps, which the parallel gfx cases skew, so they run on their own.
 set(DC_TEST_TIMEOUT 5 CACHE STRING "Seconds a test case may run before it is cut off")

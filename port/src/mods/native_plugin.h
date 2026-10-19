@@ -17,7 +17,8 @@ typedef struct ChronicleModHostV1 {
     void    *context;
     int (*available)(void *, const char *operation);
     /* Returns 1 for success, 0 for a JSON error string. Writes are queued until
-     * the callback succeeds; the response for a write is {"queued":true}. */
+     * the callback succeeds; ordinary writes return {"queued":true}.
+     * services.query/command return the exported service's JSON object. */
     int (*call)(void *, const char *operation, const char *arguments_json, const char **result_json);
     void (*log)(void *, const char *message);
 } ChronicleModHostV1;
@@ -34,7 +35,7 @@ typedef const ChronicleModPluginV1 *(*ChronicleModEntryV1)(void);
 /* Export ChronicleMod_GetPluginV1 returning a descriptor with static lifetime. */
 
 /* ABI 2 is a separate entry point and table; ABI 1 layouts never change.
- * State access is allowed only inside tick/event/menu callbacks. It addresses this
+ * State access is allowed inside tick/event/menu/service callbacks. It addresses this
  * package's scalar save values (shared with Lua get/set), not plugin heap memory. */
 typedef struct ChronicleModHostV2 {
     uint32_t size, abi;
@@ -96,6 +97,34 @@ typedef struct ChronicleModMenuV1 {
 } ChronicleModMenuV1;
 
 typedef const ChronicleModMenuV1 *(*ChronicleModMenuEntryV1)(void);
+
+/* Optional service extension for ABI 2. Export ChronicleMod_GetServicesV1.
+ * Descriptor arrays and names have static lifetime. No existing layout changes. */
+enum ChronicleModServiceKindV1 {
+    CHRONICLE_SERVICE_QUERY = 0,
+    CHRONICLE_SERVICE_COMMAND = 1
+};
+
+typedef struct ChronicleModServiceV1 {
+    uint32_t    size, kind;
+    const char *name;
+    /* args_json is a bounded object; caller_id is the trusted immediate caller.
+     * QUERY denies host managed/game writes. COMMAND shares the outer transaction.
+     * Return 1 and a UTF-8 JSON object (<=16 KiB), or 0 for failure.
+     * Result storage belongs to the plugin and must remain valid until its next
+     * service invocation or stop; never return stack-local storage. */
+    int (*invoke)(const ChronicleModHostV2 *, void *state, const char *args_json,
+                  const char *caller_id, const char **result_json);
+} ChronicleModServiceV1;
+
+typedef struct ChronicleModServicesV1 {
+    uint32_t                     size, abi;
+    const char                  *id;    /* Exact package ID. */
+    uint32_t                     count; /* At most 32, shared with Lua query/command exports. */
+    const ChronicleModServiceV1 *services;
+} ChronicleModServicesV1;
+
+typedef const ChronicleModServicesV1 *(*ChronicleModServicesEntryV1)(void);
 #ifdef __cplusplus
 }
 #endif

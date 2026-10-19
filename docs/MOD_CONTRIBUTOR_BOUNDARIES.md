@@ -77,3 +77,7 @@ Validation (Windows, 2026-10-19): Clang 23.1.2 game/test builds passed;
 62 affected tests passed, with optional seed-export and symlink privilege skips.
 The separate 3,840-case empty/disabled-mod seed comparison still matched pinned
 upstream exactly. No PS2 diff. Other native-loader platforms remain unverified.
+
+Native ABI 2 services now share the generic dependency boundary with Lua. They
+allocate no content IDs or contributor registries and require explicit package
+trust and enablement.

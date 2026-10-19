@@ -388,7 +388,7 @@ export is an intentional read/calculation service, not a transfer of native writ
 authority. Lua-local variables and diagnostic logs are not transactional save data;
 authors should keep query calculations stateless and read persistent values through
 `chronicle.get`. Mutating dependency commands and package-owned custom events
-are documented below. Native plugin exports remain separate work. This API does not implement
+are documented below. Native exports are supported through services.native.v1. This API does not implement
 custom item/weapon registration or the contributor's cutscene framework.
 
 ## Retail attachment bag and status-break
@@ -775,7 +775,7 @@ These notifications are transient, not a durable message log or synchronous
 command RPC. Events are discarded on gameplay exit, changed mode/map/dungeon/floor,
 successful load/reset/restart, or an unavailable/failed sender. They are not saved
 or replayed. No listeners, native hooks or engine behavior are added when packages
-do not use the capability. Native-ready events and native plugin exports remain separate APIs still to implement.
+do not use the capability. Native-ready events remain outstanding.
 
 ## Transactional dependency commands
 
@@ -813,9 +813,7 @@ The request has exactly `provider`, `name` and an object `arguments`. Requests
 and object results use the common bounded structured transport; arrays/scalars
 are not valid roots. Input/output tables are detached. Native ABI 1/2 callers use
 the same operation and JSON shape through `host->call`; the response is the
-provider's JSON object, not a generic queued boolean. Providers are currently Lua
-functions, including scripts in packages that also contain native plugins. This
-does not yet supply native-function export descriptors.
+provider's JSON object, not a generic queued boolean. Providers may be Lua functions or native ABI 2 services.
 
 Exports are intentional permission delegation: game reads/writes inside them use
 the **provider's** permissions and trusted `GameCommand.owner`. A consumer's
@@ -855,3 +853,15 @@ memory limits. Query exports cannot invoke mutating commands. Game queries still
 observe committed native state, while managed state reads can see staged provider
 changes within the same outer transaction. There is no background dispatcher or
 engine hook; registration and transaction state are rebuilt on load/reset/restart.
+
+## Native dependency services
+
+`services.native.v1` provides optional ABI 2 query/command exports; see
+[the SDK](MOD_NATIVE_SDK.md#native-service-exports). Lua/native callers use
+`services.query` (`game.read`) with the same `{provider,name,arguments}` object as
+`services.command`, receiving the exported object. The older Lua invoke_query
+helper retains its existing permission semantics. Declared dependencies, active
+gameplay and shared 16-call/8-depth budgets apply. Native queries deny managed
+state writes, events and commands through the host; invalid results are recoverable.
+Native command failures poison the outer transaction. These guarantees cover
+host-managed operations, not trusted DLL private memory or arbitrary native code.

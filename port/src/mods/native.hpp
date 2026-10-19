@@ -23,6 +23,9 @@ public:
     bool                                      Event(uint32_t event, const char *world_json);
     std::span<const ChronicleModMenuActionV1> Actions() const;
     bool                                      RunAction(std::string_view id, const char *world_json);
+    std::span<const ChronicleModServiceV1>    Services() const;
+    bool                                      InvokeService(std::string_view name, bool command, const char *arguments, const char *caller,
+                                                            std::string &result, std::string &error);
 
 private:
     struct Impl;

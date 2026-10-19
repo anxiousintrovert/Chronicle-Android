@@ -2002,3 +2002,208 @@ TEST_F(ModRuntime, CommandExportsRebindAfterSaveLoadAndReset) {
     EXPECT_EQ(State()["values"]["last"], 1);
     EXPECT_TRUE(runtime.Diagnostics().empty());
 }
+
+class ModNativeServices : public ModRuntime {
+protected:
+    void LoadServices(const fs::path    &source = CHRONICLE_NATIVE_SERVICES_FIXTURE,
+                      const std::string &script = {}, const std::vector<std::string> &dependencies = {}, bool trust = true) {
+        mods::Manager empty;
+        runtime.Start(empty);
+        runtime.ResetState();
+        auto manifest = Manifest("test.native.services");
+        manifest.erase("quests");
+        manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
+        manifest["requires_capabilities"] = {"services.native.v1"};
+        manifest["requires"] = dependencies;
+        manifest["native_library"] = "plugin" + source.extension().string();
+        const auto package = root / "mods/test.native.services";
+        if (script.empty()) {
+            manifest.erase("script");
+        } else {
+            Write(package / "main.lua", script);
+        }
+        Write(package / "mod.json", manifest.dump());
+        fs::copy_file(source, package / manifest["native_library"].get<std::string>(), fs::copy_options::overwrite_existing);
+        mods::Session preview;
+        preview.Start({root / "mods"}, {}, root / "save");
+        const auto native = std::ranges::find(preview.Preview().Packages(), "test.native.services", &mods::Package::id);
+        ASSERT_NE(native, preview.Preview().Packages().end());
+        ASSERT_TRUE(preview.SetTrusted("test.native.services", native->native_fingerprint, trust));
+        const auto packages = preview.Preview().Packages();
+        for (const auto &p : packages) {
+            ASSERT_TRUE(preview.SetEnabled(p.id, true));
+        }
+        mods::Session active;
+        active.Start({root / "mods"}, {}, root / "save");
+        runtime.Start(active.Active());
+    }
+
+    void Consumer(const std::string &script) {
+        auto m = Manifest();
+        m["requires"] = {"test.native.services"};
+        m["permissions"] = {"game.read", "game.write", "economy.write"};
+        Add(script, m);
+    }
+
+    Json Provider() { return Json::parse(runtime.SaveState())["mods"]["test.native.services"]; }
+
+    void Run(const mods::CommitGame &commit = {}) {
+        runtime.Tick({1, 0, 0, true}, {}, {}, [](auto operation, const auto &) {
+            EXPECT_EQ(operation,"economy.get");return Json{{"money",40}}; }, commit);
+    }
+
+    void TearDown() override {
+        mods::Manager empty;
+        runtime.Start(empty);
+        ModRuntime::TearDown();
+    }
+};
+
+TEST_F(ModNativeServices, LuaQueriesAndCommandsUseNativeExportsAndTrustedOwnership) {
+    Consumer(R"(local once=false
+        assert(chronicle.subscribe_custom('test.native.services','changed',function(w)
+            assert(w.event.owner=='test.native.services')
+            assert(chronicle.set('event_seen',true))
+        end))
+        return {on_tick=function()
+            if once then return end;once=true
+            local first=assert(chronicle.invoke_query('test.native.services','inspect',{}))
+            assert(first.value==0 and first.caller=='test.mod')
+            assert(chronicle.call('economy.add',{amount=1}))
+            local r=assert(chronicle.call('services.command',{provider='test.native.services',name='change',arguments={}}))
+            assert(r.value==9 and r.caller=='test.mod')
+            local q=assert(chronicle.call('services.query',{provider='test.native.services',name='inspect',arguments={}}))
+            assert(q.value==9 and q.caller=='test.mod')
+            assert(chronicle.call('economy.add',{amount=2}))
+            assert(chronicle.set('done',true))
+        end})");
+    LoadServices();
+    ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    int commits = 0;
+    Run([&](const auto &commands, int money, auto &) {
+        ++commits;
+        EXPECT_EQ(money, 0);
+        EXPECT_EQ(commands.size(), 3);
+        if (commands.size() == 3) {
+            EXPECT_EQ(commands[1].owner, "test.native.services");
+            EXPECT_EQ(commands[1].arguments["amount"], 7);
+        }
+        return true;
+    });
+    ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    EXPECT_EQ(commits, 1);
+    EXPECT_EQ(Provider()["values"]["value"], 9);
+    EXPECT_TRUE(State()["values"]["done"]);
+    Run();
+    EXPECT_TRUE(State()["values"]["event_seen"]);
+}
+
+TEST_F(ModNativeServices, QueryFailuresAndInvalidResultsAreRecoverableAndNeverWriteState) {
+    Consumer(R"(return {on_tick=function()
+        for _,kind in ipairs({'bad_array','bad_json','bad_utf8','null_result','oversize','fail'}) do
+            local r,e=chronicle.call('services.query',{provider='test.native.services',name='inspect',arguments={kind=kind}})
+            assert(not r and e)
+        end
+        assert(chronicle.invoke_query('test.native.services','inspect',{}).value==0)
+        assert(chronicle.set('ticks',(chronicle.get('ticks') or 0)+1))
+    end})");
+    LoadServices();
+    Run();
+    Run();
+    EXPECT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    EXPECT_FALSE(Provider().contains("values"));
+    EXPECT_EQ(State()["values"]["ticks"], 2);
+}
+
+TEST_F(ModNativeServices, CommandAndConsumerFailuresRollbackNativeOwnedStateWritesAndNotifications) {
+    for (int failure = 0; failure < 4; ++failure) {
+        Consumer(std::string(R"(return {on_tick=function()
+            local r,e=chronicle.call('services.command',{provider='test.native.services',name='change',arguments={kind=')") +
+                 (failure == 0 ? "fail" : failure == 1 ? "bad_array"
+                                                       : "ok") +
+                 R"('}})
+            assert(chronicle.set('changed',true))
+        )" + (failure == 2 ? "error('consumer failed')" : "") +
+                 " end}");
+        auto observer = Manifest("z.observer");
+        observer["requires"] = {"test.native.services"};
+        Add(R"(assert(chronicle.subscribe_custom('test.native.services','changed',function() error('event leaked') end));return {})", observer);
+        LoadServices();
+        int commits = 0;
+        Run([&](const auto &, int, auto &) {++commits;return false; });
+        EXPECT_EQ(commits, failure == 3 ? 1 : 0);
+        EXPECT_FALSE(Provider().contains("values"));
+        EXPECT_FALSE(State().contains("values"));
+        Run();
+        ASSERT_EQ(runtime.Diagnostics().size(), 1) << Json(runtime.Diagnostics()).dump();
+        EXPECT_EQ(runtime.Diagnostics()[0].find("event leaked"), std::string::npos);
+    }
+}
+
+TEST_F(ModNativeServices, NativeExportsRelayToLuaQueriesAndCommandsWithSharedIdentityAndBudgets) {
+    auto base = Manifest("test.base");
+    base["permissions"] = {"economy.write"};
+    Add(R"(assert(chronicle.export_query('read',function() return {value=22} end))
+        assert(chronicle.export_command('change',function(a,caller)
+            assert(caller=='test.native.services')
+            assert(chronicle.set('changed',true))
+            assert(chronicle.call('economy.add',{amount=4}))
+            return {value=23}
+        end));return {})",
+        base);
+    Consumer(R"(local once=false;return {on_tick=function()
+        if once then return end;once=true
+        assert(chronicle.invoke_query('test.native.services','relay',{}).value==22)
+        assert(chronicle.call('services.command',{provider='test.native.services',name='relay',arguments={}}).value==23)
+        local budget=assert(chronicle.call('services.query',{provider='test.native.services',name='budget',arguments={}}))
+        assert(budget.calls==11)
+        local r,e=chronicle.invoke_query('test.native.services','inspect',{})
+        assert(not r and e:find('limit'))
+    end})");
+    LoadServices(CHRONICLE_NATIVE_SERVICES_FIXTURE, {}, {"test.base"});
+    int commits = 0;
+    Run([&](const auto &commands, int, auto &) {++commits;EXPECT_EQ(commands.size(),1);EXPECT_EQ(commands[0].owner,"test.base");return true; });
+    EXPECT_EQ(commits, 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    EXPECT_TRUE(Json::parse(runtime.SaveState())["mods"]["test.base"]["values"]["changed"]);
+}
+
+TEST_F(ModNativeServices, InvalidDescriptorsAndLuaCollisionsRejectThePackage) {
+    for (const auto &source : {fs::path(CHRONICLE_NATIVE_SERVICES_BAD_FIXTURE), fs::path(CHRONICLE_NATIVE_SERVICES_BAD_KIND_FIXTURE)}) {
+        LoadServices(source);
+        EXPECT_FALSE(runtime.HasGameplay());
+        ASSERT_FALSE(runtime.Diagnostics().empty());
+    }
+    LoadServices(CHRONICLE_NATIVE_SERVICES_FIXTURE, R"(assert(chronicle.export_query('inspect',function() return {} end));return {})");
+    EXPECT_FALSE(runtime.HasGameplay());
+    ASSERT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_NE(runtime.Diagnostics()[0].find("duplicate native service"), std::string::npos);
+    LoadServices(CHRONICLE_NATIVE_SERVICES_FIXTURE, R"(for i=1,28 do assert(chronicle.export_query('q'..i,function() return {} end)) end;return {})");
+    EXPECT_FALSE(runtime.HasGameplay());
+    ASSERT_FALSE(runtime.Diagnostics().empty());
+    LoadServices(CHRONICLE_NATIVE_SERVICES_FIXTURE, R"(for i=1,27 do assert(chronicle.export_query('q'..i,function() return {} end)) end;return {})");
+    EXPECT_TRUE(runtime.HasGameplay());
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModNativeServices, NativeServicesExpireOnUnloadAndRebindAfterSaveLoadOrReset) {
+    Consumer(R"(return {on_tick=function()
+        local r=assert(chronicle.invoke_query('test.native.services','inspect',{}))
+        assert(chronicle.set('seen',r.value))
+    end})");
+    LoadServices();
+    Run();
+    EXPECT_EQ(State()["values"]["seen"], 0);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error));
+    Run();
+    EXPECT_EQ(State()["values"]["seen"], 0);
+    runtime.ResetState();
+    Run();
+    EXPECT_EQ(State()["values"]["seen"], 0);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    LoadServices(CHRONICLE_NATIVE_SERVICES_FIXTURE, {}, {}, false);
+    EXPECT_FALSE(runtime.HasGameplay());
+    Run();
+    EXPECT_TRUE(runtime.SaveState().empty());
+}
