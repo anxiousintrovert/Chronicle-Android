@@ -41,6 +41,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `player.max_water_set` | `max_water`, optional `character` | `game.write` | Set capacity (1–32767, fractional allowed); clamp water and cancel interpolation |
 | `player.defense_set` | `defense`, optional `character` | `game.write` | Set base defense (integer 0–32767) |
 | `player.status_get` | optional `character` | `game.read` | Native ailment mask and shared duration counter; does not introduce independent effect timers |
+| `player.status_add` | `status`, optional active `character` | `game.write` | Apply freeze/stamina/poison/curse/goo using retail interactions and durations |
+| `player.status_remove` | `status`, optional active `character` | `game.write` | Remove one named ailment; preserve other bits and any remaining timed effect |
 | `weapons.durability_set` | `slot`, `durability`, optional `character` | `game.write` | Set WHP gauge within native maximum; not repair-powder item use, broken-default-weapon conversion, or weapon-break logic |
 | `story.flag_get` / `story.flag_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global bit 0–8191, value 0 or 1 |
 | `story.int_get` / `story.int_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global integer 0–31, signed 32-bit value |
@@ -66,6 +68,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
+Status add/remove target only the controlled character and require its native
+status object to be active; an explicit benched character is rejected.
 Weapon slots are 0–10. Amount and HP arguments are integers 0–32767. Water values
 may be fractional, finite and 0–32767. Lua arguments use a root object with string keys. Values can be finite numbers,
 booleans, UTF-8 strings, nested objects, or consecutive 1-based arrays. Empty Lua
@@ -84,6 +88,41 @@ delta is staged before the named commands. Prefer one currency API style within
 a callback. Separate callbacks/mods commit in deterministic dependency order;
 there is no transaction spanning multiple callbacks. Native plugin ticks and Lua
 callbacks are separate transactions.
+
+### Retail player statuses
+
+`player.status_add/remove` accept exactly `freeze`, `stamina`, `poison`, `curse`
+or `goo`. They do not accept numeric masks, custom names, knockout or duration
+overrides. Use HP operations for knockout/revival. The add operation follows
+`BtSetStatusErr`:
+
+| Requested status | Retail behavior |
+|---|---|
+| freeze | Applies, removes stamina/poison/goo, sets the shared counter to 300 |
+| stamina | Applies unless frozen; sets the shared counter to 1800 |
+| poison | Applies unless frozen or under stamina; removes goo |
+| curse | Applies without replacing other statuses |
+| goo | Applies unless frozen, under stamina or poisoned |
+
+If the requested status is absent after native interaction rules, the commit
+fails and the entire callback rolls back. Reapplying freeze/stamina refreshes
+its retail counter. Other statuses retain the existing counter on addition.
+Removal clears only the named bit and clears the counter if neither freeze nor
+stamina remains. Removing an absent effect is allowed. The engine advances the
+shared counter for freeze/stamina and clears the native mask on expiration;
+these APIs do not add independent timers or modify that retail behavior.
+
+Native application sounds are deferred until the complete write batch commits;
+rejected callbacks play none. Stamina/removal have no application sound. Statuses
+are native saved gameplay mutations, not owner-scoped overlays restored when the
+mod is disabled. No hit animation, damage, knockback or item consumption is added.
+Queries in the same callback still see pre-commit state; inspect the next callback
+to read the result. For example, in a registered menu action:
+
+```lua
+assert(chronicle.call('player.status_remove', {status='freeze'}))
+assert(chronicle.call('player.status_add', {status='stamina'}))
+```
 
 Story and map writes update saved flags; they do not replay a cutscene, rebuild
 live town objects, trigger transitions, or grant objects implicitly. Use actual

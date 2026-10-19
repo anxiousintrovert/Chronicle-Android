@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 46 implemented operations, native plugins and author
+a real host-call boundary, 48 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -15,7 +15,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua action lists with queued execution/results | Richer journal/skills UI, custom controls and native action registration |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | More native events and custom events; mutating dependency commands; native plugin exports |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
@@ -29,6 +29,33 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Player status validation (2026-10-19)
+
+`player.status_add/remove` cover the active character's five retail effects,
+native interaction rules and shared timer. Save changes and bounded application
+sound notifications are staged together; sounds dispatch only after the entire
+callback commits. Calls reject inactive native status objects and benched targets.
+No status engine override, new timer, arbitrary status registry or contributor-owned
+framework is added. The removal adapter clears the shared counter when neither
+freeze nor stamina remains, since only those effects advance it in the engine.
+
+Clang 23.1.2 Windows Release game/test builds passed. CTest discovered 490 tests:
+482 passed, eight skipped (mouse-focus, high-address arena, unavailable Vulkan
+validation, symlink privilege and optional seed export). All 13 Python tooling
+tests passed. New coverage compares the linked native `BtSetStatusErr` with the
+staged adapter for 1,920 character/mask/request combinations, verifies RNG and
+unrelated-byte preservation, and checks removal, invalid targets, atomic save
+rollback and deferred notification counts.
+
+An isolated PAL Divine Beast Cave replay ran the status action through the shared
+manager, verified all five effects' application/removal and timer values, restored
+clear status and displayed PASS. A town replay verified explicit rejection when
+the native active-character status object was unavailable. This does not claim
+an audio-listening test or every combat animation/expiration path. No gameplay
+package was installed into normal saves or the build. The 3,840-case empty/disabled
+generator comparison still matches pinned upstream exactly, and `ps2/` is unchanged.
+Linux/macOS/Android execution remains unverified.
 
 ## Native ABI 2 validation (2026-10-19)
 

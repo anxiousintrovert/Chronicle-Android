@@ -2,9 +2,11 @@
 
 #include <cstring>
 
+#include "dun/gameloop.hpp"
 #include "mods/api.hpp"
 #include "mods/native.hpp"
 #include "savedata.hpp"
+#include "shot_freefuncs.hpp"
 #include "userstatus.hpp"
 
 namespace {
@@ -219,6 +221,148 @@ TEST(ModApi, CapacityAndWeaponWritesAreBoundedAndAtomic) {
                                                                        {"durability", 1}
     })
                      .empty());
+}
+
+TEST(ModApi, StatusAddMatchesNativeForAllAilmentCombinationsAndPreservesRng) {
+    const std::pair<const char *, int> ailments[] = {
+        {"freeze",  AILMENT_FREEZE },
+        {"stamina", AILMENT_STAMINA},
+        {"poison",  AILMENT_POISON },
+        {"curse",   AILMENT_CURSE  },
+        {"goo",     AILMENT_GOO    }
+    };
+    for (int owner = 0; owner < 6; ++owner) {
+        for (int bits = 0; bits < 64; ++bits) {
+            for (const auto &[name, flag] : ailments) {
+                SCOPED_TRACE(std::to_string(owner) + ":" + std::to_string(bits) + ":" + name);
+                CUserStatus original{};
+                original.party_size = 6;
+                original.cur_chara = owner;
+                original.ailments[owner] = (bits << 1) | 0x100; // Preserve unknown bits too.
+                original.ailment_frames[owner] = 127;
+                auto  native = original;
+                auto *previous = UserStatus;
+                UserStatus = &native;
+                BtSetStatusErr(flag);
+                UserStatus = previous;
+                auto                actual = original;
+                mods::CommitEffects effects;
+                std::string         error;
+                srand(812);
+                const int next = rand();
+                srand(812);
+                const bool accepted = mods::ApplyStatus(actual, {
+                                                                    {"player.status_add", {{"status", name}}}
+                },
+                                                        0, error, &effects);
+                EXPECT_EQ(accepted, (native.ailments[owner] & flag) != 0);
+                EXPECT_EQ(std::memcmp(&actual, accepted ? &native : &original, sizeof(actual)), 0);
+                EXPECT_EQ(rand(), next);
+                const bool sound = flag == AILMENT_FREEZE || flag == AILMENT_CURSE ||
+                                   (flag == AILMENT_POISON && !(original.ailments[owner] & (AILMENT_FREEZE | AILMENT_STAMINA))) ||
+                                   (flag == AILMENT_GOO && !(original.ailments[owner] & (AILMENT_FREEZE | AILMENT_STAMINA | AILMENT_POISON)));
+                EXPECT_EQ(effects.status_sounds, accepted && sound ? 1u : 0u);
+            }
+        }
+    }
+}
+
+TEST(ModApi, StatusRemovalPreservesOtherBitsAndOnlyLiveTimedEffectsKeepTheCounter) {
+    CUserStatus status{};
+    status.party_size = 2;
+    status.cur_chara = 1;
+    status.ailments[0] = AILMENT_POISON;
+    status.ailments[1] = AILMENT_FREEZE | AILMENT_CURSE | AILMENT_KNOCKED_OUT;
+    status.ailment_frames[1] = 123;
+    std::string         error;
+    mods::CommitEffects effects{42};
+    ASSERT_TRUE(mods::ApplyStatus(status, {
+                                              {"player.status_remove", {{"status", "curse"}, {"character", 1}}}
+    },
+                                  0, error, &effects));
+    EXPECT_EQ(status.ailments[1], AILMENT_FREEZE | AILMENT_KNOCKED_OUT);
+    EXPECT_EQ(status.ailment_frames[1], 123);
+    EXPECT_EQ(effects.status_sounds, 0u);
+    ASSERT_TRUE(mods::ApplyStatus(status, {
+                                              {"player.status_remove", {{"status", "freeze"}}}
+    },
+                                  0, error));
+    EXPECT_EQ(status.ailments[1], AILMENT_KNOCKED_OUT);
+    EXPECT_EQ(status.ailment_frames[1], 0);
+    EXPECT_EQ(status.ailments[0], AILMENT_POISON);
+    const auto before = status;
+    ASSERT_TRUE(mods::ApplyStatus(status, {
+                                              {"player.status_remove", {{"status", "goo"}}}
+    },
+                                  0, error));
+    EXPECT_EQ(std::memcmp(&status, &before, sizeof(status)), 0);
+}
+
+TEST(ModApi, StatusWritesAndNotificationsCommitAtomicallyWithOtherSaveCommands) {
+    auto  save = std::make_unique<CSaveData>();
+    auto *s = save->GetDngStatus();
+    s->party_size = 1;
+    s->cur_chara = 0;
+    s->ailments[0] = 0;
+    s->ailment_frames[0] = 0;
+    const auto          before = std::make_unique<CSaveData>(*save);
+    std::string         error;
+    mods::CommitEffects effects{99};
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            {"story.flag_set",    {{"id", 5}, {"value", 1}}},
+                                            {"player.status_add", {{"status", "freeze"}}   },
+                                            {"player.status_add", {{"status", "stamina"}}  }
+    },
+                                 0, error, &effects));
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    EXPECT_EQ(effects.status_sounds, 0u);
+    EXPECT_NE(error.find("native status rules rejected"), std::string::npos);
+    ASSERT_TRUE(mods::ApplySave(*save, {
+                                           {"player.status_add", {{"status", "poison"}}   },
+                                           {"player.status_add", {{"status", "freeze"}}   },
+                                           {"story.flag_set",    {{"id", 5}, {"value", 1}}}
+    },
+                                0, error, &effects));
+    EXPECT_EQ(effects.status_sounds, 2u);
+    EXPECT_EQ(s->ailments[0], AILMENT_FREEZE);
+    EXPECT_EQ(s->ailment_frames[0], 300);
+    EXPECT_EQ(save->GetGameFlag(5), 1);
+    ASSERT_TRUE(mods::ApplySave(*save, {}, 0, error, &effects));
+    EXPECT_EQ(effects.status_sounds, 0u);
+}
+
+TEST(ModApi, StatusValidationRejectsInventedEffectsTimersAndNonActiveTargets) {
+    for (const auto &args : std::vector<Json>{
+             Json::object(), {{"status", "knockout"}},
+              {{"status", "freeze"}, {"duration_frames", 1}},
+              {{"status", "Freeze"}},
+              {{"status", 4}},
+              {{"status", "curse"}, {"character", 6}},
+              {{"status", "curse"}, {"character", true}}
+    }) {
+        EXPECT_FALSE(mods::ValidateOperation("player.status_add", args).empty()) << args;
+        EXPECT_FALSE(mods::ValidateOperation("player.status_remove", args).empty()) << args;
+    }
+    CUserStatus s{};
+    s.party_size = 2;
+    s.cur_chara = 0;
+    const auto          before = s;
+    std::string         error;
+    mods::CommitEffects effects;
+    for (const auto *op : {"player.status_add", "player.status_remove"}) {
+        EXPECT_FALSE(mods::ApplyStatus(s, {
+                                              {op, {{"status", "poison"}, {"character", 1}}}
+        },
+                                       0, error, &effects));
+        EXPECT_EQ(std::memcmp(&s, &before, sizeof(s)), 0);
+        EXPECT_EQ(effects.status_sounds, 0u);
+        s.cur_chara = 5;
+        EXPECT_FALSE(mods::ApplyStatus(s, {
+                                              {op, {{"status", "poison"}}}
+        },
+                                       0, error));
+        s.cur_chara = 0;
+    }
 }
 
 TEST(ModNative, Sha256MatchesStandardVectors) {

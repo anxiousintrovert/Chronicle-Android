@@ -1,11 +1,15 @@
+#include "sound_effect.h"
+
 #include <algorithm>
 
 #include "api.hpp"
 #include "dngstatusdata.hpp"
+#include "dun/gameloop.hpp"
 #include "gamemode.hpp"
 #include "main.hpp"
 #include "runtime.hpp"
 #include "savedata.hpp"
+#include "snd.hpp"
 extern s32 mode;
 
 namespace mods {
@@ -94,6 +98,16 @@ void TickGame() {
 }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
-        return ApplySave(*SaveData, commands, money, error); });
+        for (const auto &command : commands) {
+            if ((command.operation == "player.status_add" || command.operation == "player.status_remove") &&
+                UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus())) {
+                error = "native active-character status is unavailable";
+                return false;
+            }
+        }
+        CommitEffects effects;
+        if (!ApplySave(*SaveData, commands, money, error, &effects)) { return false; }
+        for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
+        return true; });
 }
 } // namespace mods

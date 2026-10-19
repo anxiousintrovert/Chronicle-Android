@@ -45,6 +45,8 @@ constexpr Operation operations[] = {
     {"player.max_water_set",    "game.write",    "Set water capacity and clamp the current gauge.",                            true },
     {"player.defense_set",      "game.write",    "Set joined character base defense.",                                         true },
     {"player.status_get",       "game.read",     "Read native status mask and shared duration counter.",                       false},
+    {"player.status_add",       "game.write",    "Apply an active-character ailment using retail rules and durations.",        true },
+    {"player.status_remove",    "game.write",    "Remove one active-character ailment; preserve unrelated bits.",              true },
     {"weapons.durability_set",  "game.write",    "Set an owned weapon WHP gauge, without item-use effects.",                   true },
     {"inventory.count",         "game.read",     "Count owned retail bag and quick-slot copies.",                              false},
     {"inventory.give",          "game.write",    "Grant retail items using an explicit local random seed.",                    true },
@@ -67,6 +69,66 @@ int CharacterId(const CUserStatus &s, const Json &a) {
         throw std::runtime_error("character is not a joined party member");
     }
     return id;
+}
+
+int Ailment(std::string_view name) {
+    if (name == "freeze") {
+        return AILMENT_FREEZE;
+    }
+    if (name == "stamina") {
+        return AILMENT_STAMINA;
+    }
+    if (name == "poison") {
+        return AILMENT_POISON;
+    }
+    if (name == "curse") {
+        return AILMENT_CURSE;
+    }
+    if (name == "goo") {
+        return AILMENT_GOO;
+    }
+    return 0;
+}
+
+bool AddAilment(CUserStatus &s, int id, int ailment) {
+    // BtSetStatusErr's save-field rules, staged without its immediate sound or
+    // temporary rebinding of the engine's global UserStatus pointer. Verified
+    // against the linked native routine over all retail ailment combinations.
+    auto &mask = s.ailments[id];
+    bool  sound = false;
+    switch (ailment) {
+        case AILMENT_FREEZE:
+            mask = (mask | ailment) & ~(AILMENT_STAMINA | AILMENT_POISON | AILMENT_GOO);
+            s.ailment_frames[id] = 300;
+            sound = true;
+            break;
+        case AILMENT_STAMINA:
+            if (!(mask & AILMENT_FREEZE)) {
+                mask |= ailment;
+                s.ailment_frames[id] = 1800;
+            }
+            break;
+        case AILMENT_POISON:
+            if (!(mask & (AILMENT_FREEZE | AILMENT_STAMINA))) {
+                mask = (mask | ailment) & ~AILMENT_GOO;
+                sound = true;
+            }
+            break;
+        case AILMENT_CURSE:
+            mask |= ailment;
+            sound = true;
+            break;
+        case AILMENT_GOO:
+            if (!(mask & (AILMENT_FREEZE | AILMENT_STAMINA | AILMENT_POISON))) {
+                mask |= ailment;
+                sound = true;
+            }
+            break;
+    }
+    if (!(mask & ailment)) {
+        throw std::runtime_error("native status rules rejected the effect");
+    }
+    return sound;
 }
 
 Json Character(const CUserStatus &s, int id) {
@@ -119,6 +181,22 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (!a.is_object()) {
         return "arguments must be an object";
+    }
+    if (name == "player.status_add" || name == "player.status_remove") {
+        for (const auto &[key, value] : a.items()) {
+            if (key == "status") {
+                if (!value.is_string() || !Ailment(value.get_ref<const std::string &>())) {
+                    return "status must be freeze, stamina, poison, curse or goo";
+                }
+            } else if (key == "character") {
+                if (!value.is_number_integer() || value.get<double>() < 0 || value.get<double>() > 5) {
+                    return "character must be an integer from 0 to 5";
+                }
+            } else {
+                return "unknown status argument: " + key;
+            }
+        }
+        return a.contains("status") ? "" : "status is required";
     }
     if (name.starts_with("story.") || name.starts_with("map.")) {
         const bool map = name.starts_with("map.");
@@ -323,8 +401,13 @@ Json ReadStatus(const CUserStatus &s, const World &w, std::string_view op, const
     throw std::runtime_error("operation is not a query");
 }
 
-bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, int money_delta, std::string &error) {
+bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects) {
+    if (effects) {
+        *effects = {};
+    }
+    CommitEffects pending;
     if (commands.empty() && money_delta == 0) {
+        error.clear();
         return true;
     }
     if (commands.size() > 64 || money_delta < -32767 || money_delta > 32767) {
@@ -372,7 +455,21 @@ bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, 
                 throw std::runtime_error("operation requires save host");
             }
             const int id = CharacterId(s, a);
-            if (op == "player.defense_set") {
+            if (op == "player.status_add" || op == "player.status_remove") {
+                if (id != s.cur_chara) {
+                    throw std::runtime_error("status changes require the active character");
+                }
+                const int ailment = Ailment(a.at("status").get_ref<const std::string &>());
+                if (op == "player.status_add") {
+                    pending.status_sounds += AddAilment(s, id, ailment);
+                } else {
+                    s.ailments[id] &= ~ailment;
+                    // Only freeze/stamina advance the shared native timer.
+                    if (!(s.ailments[id] & (AILMENT_FREEZE | AILMENT_STAMINA))) {
+                        s.ailment_frames[id] = 0;
+                    }
+                }
+            } else if (op == "player.defense_set") {
                 s.defense[id] = a.at("defense").get<int>();
             } else if (op == "player.max_hp_set") {
                 s.max_hp[id] = a.at("max_hp").get<int>();
@@ -414,6 +511,9 @@ bool ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands, 
         return false;
     }
     status = s;
+    if (effects) {
+        *effects = pending;
+    }
     error.clear();
     return true;
 }
@@ -495,7 +595,11 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     return ReadStatus(*save.GetDngStatus(), world, op, a);
 }
 
-bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error) {
+bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects) {
+    if (effects) {
+        *effects = {};
+    }
+    CommitEffects pending;
     if (commands.empty() && money_delta == 0) {
         error.clear();
         return true;
@@ -537,8 +641,12 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                     return false;
                 }
                 staged->SetFishingPoint(balance + (op == "fishing.spend" ? -amount : amount));
-            } else if (!ApplyStatus(*staged->GetDngStatus(), {command}, 0, error)) {
-                return false;
+            } else {
+                CommitEffects current;
+                if (!ApplyStatus(*staged->GetDngStatus(), {command}, 0, error, &current)) {
+                    return false;
+                }
+                pending.status_sounds += current.status_sounds;
             }
         }
     } catch (const std::exception &e) {
@@ -546,6 +654,9 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
         return false;
     }
     save = *staged;
+    if (effects) {
+        *effects = pending;
+    }
     error.clear();
     return true;
 }
