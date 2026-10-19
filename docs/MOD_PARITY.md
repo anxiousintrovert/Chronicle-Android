@@ -809,3 +809,53 @@ framework and disabled-package configurations, SHA-256
 This is dungeon generation evidence, not town rendering evidence. The queued
 resource loader, exclusive owner/scene lifetime, restoration and retail town
 replay from the audit above remain required before publishing town operations.
+
+## Retail town resource and motion audit (2026-10-19)
+
+The opt-in `ModTownRetail.RepeatedBodiesAndMappedMotionsUseBoundedSeparateStorage`
+now boots the owned PAL data into Norune, ends the frame loop, and loads all five
+replacement bodies three times into a separate arena. It resolves and steps all
+11 town motions and their shadows, then restores Toan in the original arena. It
+checks unchanged dungeon status bytes and original arena base/limit/usage, stable
+replacement arena usage across cycles, and presence of model/shadow motion data.
+No retail assets are committed. The test skips unless both `DC_DATA` and
+`DC_TOWN_RESOURCE_AUDIT` are supplied; run it alone with a disposable output
+folder, which receives config and `resources.json` evidence.
+
+This exposed a real problem with copying the reference motion map unchanged:
+Goro's `base.cfg` declares motion 32 as `NONE`, with start/end/speed all zero.
+Playing town motion 8 through that slot faulted in native `MotionProc`, reached
+from `CCharacter::Step`; LLDB confirmed the stack. Our scoped Goro binding now
+uses idle motion 0 for that unavailable town action. The other four characters
+retain motion 32. This is an explicit fallback pose, not a newly authored Goro
+animation. The change applies only to a bound replacement character in edit mode.
+
+The final retail test passes with a separate arena requested at the original
+115000 quadwords, using the existing port's fourfold pointer-size headroom
+(460000 host quadwords). Measured used host quadwords are stable in all cycles:
+
+| Character | Used host quadwords |
+|---|---:|
+| Xiao | 135130 |
+| Goro | 82240 |
+| Ruby | 88630 |
+| Ungaga | 78916 |
+| Osmond | 69864 |
+
+These measurements do not justify an unconditional town allocation increase.
+They cover these retail packs on this host, not arbitrary replacements, other
+platform layouts, or resource release while a scene is running. The test arena
+uses the existing process-lifetime arena registry; it does not establish the
+production unload contract.
+
+Clang 23.1.2 builds pass. The full suite registered 722 tests: 710 passed, 11
+skipped and one disabled; the opt-in retail test passed separately after reducing
+its arena request to the original size. All 16 Python tests pass. The refreshed
+3,840-case no-mod/disabled-mod seed matrix retains the identical hash above; the
+PS2 tree has no differences from the pinned baseline.
+
+This is native load/animation-step evidence, not a rendered town playthrough.
+Queued owner-controlled loading, walking/conversation/event behavior, transitions,
+restoration on disable, and shared-manager invocation still need implementation
+and end-to-end verification before town API publication. The operation count
+remains 81 and the broader coverage goal remains open.

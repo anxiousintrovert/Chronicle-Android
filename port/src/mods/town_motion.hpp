@@ -17,6 +17,7 @@ public:
 
 private:
     const CCharacter *character_;
+    int               member_;
 };
 
 int ResolveTownMotion(const CCharacter *character, int motion);

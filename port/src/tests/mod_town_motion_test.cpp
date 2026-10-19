@@ -39,7 +39,7 @@ TEST_F(ModTownMotion, ScopedBindingMapsOnlySelectedCharacterInTown) {
         {
             mods::TownMotionBinding binding(character, member);
             for (int motion = 0; motion < static_cast<int>(expected.size()); ++motion) {
-                EXPECT_EQ(mods::ResolveTownMotion(&character, motion), expected[motion]);
+                EXPECT_EQ(mods::ResolveTownMotion(&character, motion), member == 2 && motion == 8 ? 0 : expected[motion]);
                 EXPECT_EQ(mods::ResolveTownMotion(&other, motion), motion);
             }
             EXPECT_EQ(mods::ResolveTownMotion(&character, -1), -1);
