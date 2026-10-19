@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "api.hpp"
+#include "character.hpp"
 #include "dngstatusdata.hpp"
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
@@ -13,13 +14,40 @@
 #include "gamemode.hpp"
 #include "georama.hpp"
 #include "main.hpp"
+#include "menu_dungeon.hpp"
+#include "menu_misc.hpp"
 #include "runtime.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
 extern s32 mode;
+extern s32 gameTask;
 
 namespace mods {
 namespace {
+std::optional<EquipmentContext> CurrentEquipment() {
+    if (mode != GAME_MODE_DUNGEON || !SaveData ||
+        (gameTask != GAME_TASK_PLAY && gameTask != GAME_TASK_EYE_CAMERA) || BtEventMode != 0 ||
+        UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus()) ||
+        !NowWeaponHave || !NowWeapon || !NowWeapon->frame) {
+        return {};
+    }
+    const auto &s = *SaveData->GetDngStatus();
+    const int   character = s.cur_chara;
+    if (character < 0 || character >= std::clamp(static_cast<int>(s.party_size), 0, 6)) {
+        return {};
+    }
+    const int slot = s.equipped_weapon_slot[character];
+    if (slot < 0 || slot > 10) {
+        return {};
+    }
+    const auto &weapon = s.chara_weapons[character][slot];
+    if (weapon.item_no < ITEM_WEAPON_START || weapon.item_no >= ITEM_WEAPON_END ||
+        NowWeaponHave->item_no != weapon.item_no || NowWeaponHave->best_elem != weapon.best_elem) {
+        return {};
+    }
+    return EquipmentContext{character, weapon.item_no, weapon.best_elem};
+}
+
 struct LoadedGeorama {
     GeoramaState                     state;
     std::array<EDITPARTS_INFO *, 24> plots{};
@@ -166,6 +194,22 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "weapons.refresh_state") {
+            const auto equipment = CurrentEquipment();
+            nlohmann::json result = {{"ready", equipment.has_value()},
+                {"reason", equipment ? "" : "requires stable dungeon play and a synchronized loaded weapon"}};
+            if (equipment) {
+                result["character"] = equipment->character;
+                result["item"] = equipment->item;
+                result["element"] = equipment->element;
+                result["slot"] = SaveData->GetDngStatus()->equipped_weapon_slot[equipment->character];
+                result["cached"] = {{"level", NowWeaponHave->level}, {"attack", NowWeaponHave->attack},
+                    {"magic", NowWeaponHave->magic}, {"endurance", NowWeaponHave->endurance},
+                    {"speed", NowWeaponHave->speed}, {"max_durability", NowWeaponHave->durability},
+                    {"flags", NowWeaponHave->flags}};
+            }
+            return result;
+        }
         if (operation.starts_with("entities.") || operation.starts_with("physics.")) {
             return ReadEntities(world.playing && world.mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr, operation, arguments);
         }
@@ -191,11 +235,23 @@ void TickGame() {
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "georama.element_set"; })) {
             georama.emplace();
         }
+        std::optional<EquipmentContext> equipment;
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation.starts_with("weapons."); })) {
+            equipment = CurrentEquipment();
+        }
         CommitEffects effects;
         if (!ApplyEntityAndSave(*SaveData, mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr,
-                               commands, money, error, &effects, georama ? &georama->state : nullptr)) { return false; }
+                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr)) { return false; }
         if (georama){ georama->Commit();
 }
+        if (effects.refresh_weapon) {
+            SetWeaponAttachStatus(NowWeaponHave);
+            SetWeaponColor();
+            auto &s = *SaveData->GetDngStatus();
+            const int character = s.cur_chara;
+            const int slot = s.equipped_weapon_slot[character];
+            MenuWeaponSpSet(NowWeapon, &s.chara_weapons[character][slot]);
+        }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
     EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());

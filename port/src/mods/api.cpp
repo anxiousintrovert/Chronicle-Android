@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <optional>
 #include <set>
 
@@ -26,6 +27,7 @@ constexpr Operation operations[] = {
     {"entities.scale_reset",      "game.write",    "Release this package's visual scale for a live enemy.",                        true },
     {"entities.set_stats",        "game.write",    "Own selected live enemy stats with conditional restoration.",                  true },
     {"entities.reset_stats",      "game.write",    "Release this package's live enemy stat changes.",                              true },
+    {"weapons.refresh_state",     "game.read",     "Inspect native equipment readiness before requesting equipped mutations.",     false},
     {"combat.get",                "game.read",     "Read native floor enemy count and recorded kills.",                            false},
     {"combat.damage",             "game.write",    "Apply bounded scripted enemy damage and queue native hit/death processing.",   true },
     {"combat.heal",               "game.write",    "Restore bounded HP to an active live enemy without exceeding native maximum.", true },
@@ -81,10 +83,10 @@ constexpr Operation operations[] = {
     {"attachments.give",          "game.write",    "Grant existing retail attachments into free regular bag slots.",               true },
     {"attachments.remove",        "game.write",    "Discard one owned attachment by its current bag slot.",                        true },
     {"weapons.build_up_list",     "game.read",     "Inspect native build-up targets and owned weapon requirements without RNG.",   false},
-    {"weapons.attachment_set",    "game.write",    "Fit or swap a bag attachment into an unequipped weapon socket.",               true },
-    {"weapons.attachment_remove", "game.write",    "Move an unequipped weapon attachment into a free regular bag slot.",           true },
-    {"weapons.upgrade",           "game.write",    "Level up an unequipped weapon using ABS or Powerup Powder and a local seed.",  true },
-    {"weapons.build_up",          "game.write",    "Evolve an unequipped retail weapon using saved native requirements.",          true },
+    {"weapons.attachment_set",    "game.write",    "Fit or swap attachments; equipped mutations require native readiness.",        true },
+    {"weapons.attachment_remove", "game.write",    "Return attachments to the bag; equipped changes require native readiness.",    true },
+    {"weapons.upgrade",           "game.write",    "Level up using ABS or Powder; equipped mutations require native readiness.",   true },
+    {"weapons.build_up",          "game.write",    "Evolve a retail weapon; active model changes require a separate loader.",      true },
     {"weapons.synthesize",        "game.write",    "Status-break an unequipped level 5+ weapon into a native SynthSphere.",        true },
 };
 
@@ -240,6 +242,9 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
             return "event name must be 1-64 lowercase letters, digits, underscores or dots";
         }
         return {};
+    }
+    if (name == "weapons.refresh_state") {
+        return a.empty() ? "" : "weapons.refresh_state takes no arguments";
     }
     if (name == "combat.get") {
         return a.empty() ? "" : "combat.get takes no arguments";
@@ -666,7 +671,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     return ReadStatus(*save.GetDngStatus(), world, op, a);
 }
 
-bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama) {
+bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment) {
     if (effects) {
         *effects = {};
     }
@@ -702,7 +707,9 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 return false;
             }
             if (op == "weapons.build_up") {
-                retail::BuildUp(*staged, a);
+                retail::BuildUp(*staged, a, equipment != nullptr);
+            } else if (op == "weapons.upgrade" || op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
+                retail::Apply(*staged->GetDngStatus(), op, a, equipment != nullptr);
             } else if (op == "georama.element_set") {
                 if (!staged_georama) {
                     throw std::runtime_error("native Georama scene is unavailable");
@@ -734,6 +741,33 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
     } catch (const std::exception &e) {
         error = e.what();
         return false;
+    }
+    if (equipment) {
+        const auto &before = *save.GetDngStatus();
+        const auto &after = *staged->GetDngStatus();
+        const int   character = equipment->character;
+        if (character < 0 || character >= std::clamp(static_cast<int>(before.party_size), 0, 6) ||
+            before.cur_chara != character || after.cur_chara != character) {
+            error = "native equipment context is stale";
+            return false;
+        }
+        const int slot = before.equipped_weapon_slot[character];
+        if (slot < 0 || slot > 10 || after.equipped_weapon_slot[character] != slot) {
+            error = "active equipment slot changed during transaction";
+            return false;
+        }
+        const auto &old_weapon = before.chara_weapons[character][slot];
+        const auto &new_weapon = after.chara_weapons[character][slot];
+        if (old_weapon.item_no != equipment->item || old_weapon.best_elem != equipment->element) {
+            error = "native weapon cache is not synchronized";
+            return false;
+        }
+        if (new_weapon.item_no != old_weapon.item_no ||
+            (character == CHARA_RUBY && new_weapon.best_elem != old_weapon.best_elem)) {
+            error = "equipped mutation requires loading a different native model or Ruby effect";
+            return false;
+        }
+        pending.refresh_weapon = std::memcmp(&old_weapon, &new_weapon, sizeof(old_weapon)) != 0;
     }
     save = *staged;
     if (georama) {

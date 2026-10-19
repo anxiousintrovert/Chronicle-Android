@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 70 implemented operations, native plugins and author
+a real host-call boundary, 71 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional unequipped attachment fit/swap/removal, level-up/build-up and status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, equipped upgrade/build-up and fitted attachment mutation with active effect refresh |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
@@ -589,3 +589,25 @@ All 15 Python tests and 3,840 upstream/empty/disabled same-seed cases passed.
 A PAL shared-manager action displayed PASS fit swap remove after verifying each
 committed socket and returned bag record. Other-platform runtime behavior remains
 unverified; normal builds install no audit package.
+
+## Native equipped-weapon refresh (2026-10-19)
+
+Added weapons.refresh_state and a native readiness context passed through save
+and mixed entity transactions. Equipped upgrades and attachment mutations now
+refresh combat values, colour and damaged Lamb's Sword visibility after commit,
+without resource loading. Inactive party equipped build-up is also supported.
+Active model changes and Ruby effect-form changes reject before publication.
+No gameplay mod, custom content registry, PS2 edit or unconditional hook was added.
+
+Five new tests cover readiness schema, successful deferred refresh, failed-batch
+rollback, stale contexts, active-model rejection, inactive evolution and Ruby
+form restrictions. A PAL probe upgraded the equipped weapon during stable play,
+verified the committed level and WHP capacity in the native combat cache, and
+showed PASS equipped cache through a shared-manager action. This is not complete
+resource reload or all-character visual verification.
+
+Validation: Clang 23.1.2 Windows game/test builds passed. Full suite: 670
+registered, 663 passed, six skipped, one disabled. After limiting context capture
+to explicit weapon writes, all 84 affected API/inventory/entity tests passed and
+the final PAL build repeated PASS equipped cache. All 15 Python tests and 3,840
+upstream/empty/disabled same-seed cases passed. PS2 files remain unchanged.

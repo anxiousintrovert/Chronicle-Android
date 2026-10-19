@@ -67,10 +67,11 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `attachments.give` | `item`, `quantity`, optional `level` | `game.write` | Grant existing retail attachments to free regular slots; stat boosters accept level 1-3 |
 | `attachments.remove` | `bag_slot` | `game.write` | Discard one owned bag attachment, including an existing overflow record |
 | `weapons.build_up_list` | `slot`, optional `character` | `game.read` | Native evolution targets, requirements, and current eligibility without consuming RNG |
-| `weapons.attachment_set` | `slot`, `socket`, `bag_slot`, optional `character` | `game.write` | Fit/swap an owned bag attachment into an unequipped weapon |
+| `weapons.refresh_state` | none | `game.read` | Native equipment readiness and detached cached combat values |
+| `weapons.attachment_set` | `slot`, `socket`, `bag_slot`, optional `character` | `game.write` | Fit/swap an owned bag attachment; equipped changes require readiness |
 | `weapons.attachment_remove` | `slot`, `socket`, optional `character` | `game.write` | Move a fitted attachment to a free regular bag slot |
-| `weapons.upgrade` | `slot`, `seed`, optional `character` | `game.write` | Level up an unequipped retail weapon using full ABS or one Powerup Powder; absorb attachments atomically |
-| `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve an unequipped retail weapon after rechecking native requirements; atomic Mardan counter reset |
+| `weapons.upgrade` | `slot`, `seed`, optional `character` | `game.write` | Level up using ABS or Powder; equipped changes require readiness |
+| `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve a retail weapon after rechecking requirements; active model changes remain gated |
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
 
@@ -448,8 +449,8 @@ assert(chronicle.call("attachments.give", {item=91, quantity=1, level=3}))
 local targets = assert(chronicle.call("weapons.build_up_list", {slot=0}))
 ```
 
-Active equipment refresh (including fitted attachment changes, build-up and
-level-up of equipped weapons) remains to implement. The contributor still
+Loading a new active weapon model or Ruby effect form remains to implement.
+Same-resource equipped changes use the native refresh path described below. The contributor still
 owns custom item/weapon registration and content formats.
 
 ### Fitting and removing retail attachments
@@ -468,11 +469,12 @@ overflow, empty socket or invalid record rejects the transaction. Fitting may
 consume an explicitly selected overflow record, enabling recovery; swapping it
 leaves the displaced record in that same position. Removing never creates overflow.
 
-Both operations require `game.write`, a joined owner and an unequipped weapon.
+Both operations require `game.write` and a joined owner. Equipped weapons require
+a ready native equipment context as described below.
 Declare the operation names in `requires_operations` when mandatory. They run
 through the shared Lua/native host boundary, apply the retail active-element
 correction, consume no global RNG and roll back with all other queued writes.
-Equipped mutation awaits native active-effect refresh. Slot coordinates are
+Active model or Ruby effect-form changes remain unavailable. Slot coordinates are
 mutable positions; inspect current inventory before selecting them.
 
 ```lua
@@ -492,7 +494,8 @@ packages, periodic scans or engine hooks.
 
 `weapons.upgrade {slot=0..10, seed=0..4294967295, character=optional}` performs one
 retail level-up. Declare it in `requires_operations` and grant `game.write`.
-The weapon must belong to a joined character, be unequipped and below level 99.
+The weapon must belong to a joined character and be below level 99. Equipped
+weapons additionally require native readiness as described below.
 If ABS meets the native threshold, no item is consumed. Otherwise exactly one
 owned Powerup Powder is consumed, bag first then quick slots. Missing payment,
 invalid attachments, synthesis counter overflow or a later failed command rolls
@@ -519,20 +522,22 @@ assert(chronicle.call('weapons.abs_add', {slot=1, amount=32767}))
 assert(chronicle.call('weapons.upgrade', {slot=1, seed=42}))
 ```
 
-Equipped weapons remain unavailable until active-effect refresh is implemented.
+Equipped upgrades use native readiness and refresh as described below.
 This API consumes existing retail definitions only; custom item/weapon frameworks
 remain contributor-owned. No package or gameplay change is enabled by default.
 
 ### Retail weapon evolution
 
 `weapons.build_up {slot=0..10, target=257..376, character=optional}` evolves an
-owned, unequipped weapon to one of its retail build-up targets. Declare
+owned weapon to one of its retail build-up targets. Unequipped weapons work
+without a native context; inactive party members' equipped weapons require readiness.
+Changing the active weapon model remains unavailable. Declare
 `weapons.build_up` in `requires_operations` and grant `game.write` (plus
 `game.read` for inspection). Both Lua and native callers use the normal host call.
 The owner must be joined. The host rechecks target membership, native stat/fish
 requirements and empty attachments at commit, against prior commands in the same
 transaction. `build_up_list.can_build` describes retail requirements; an equipped
-slot still cannot be mutated through this API until native model refresh exists.
+active slot still cannot evolve through this API until model loading exists.
 
 Evolution applies the retail completion data changes: destination ID, level/ABS
 reset, destination minimum endurance/speed/WHP capacity and native destination
@@ -558,6 +563,58 @@ end))
 This example requires `menu.actions.v1` and uses the shared manager. It selects the
 first eligible target; an author offering multiple paths should let the player
 choose. No custom weapon definition, path registration or contributor ID is added.
+
+### Equipped weapon readiness and refresh
+
+`weapons.refresh_state {}` (`game.read`) returns `{ready, reason}`. When ready it
+also includes active `character`, `slot`, `item`, `element` and `cached` combat
+values: level, attack, magic, endurance, speed, max_durability and flags. Cached
+combat values include native attachment and WHP-rate calculations; they are not
+necessarily the raw saved weapon values. This query is an explicit observation,
+not a subscription or polling loop installed by the engine.
+
+Readiness requires stable dungeon play or first-person view, no native event,
+a loaded weapon frame, the active native save binding and a synchronized weapon
+ID/element cache. Town scenes, loading and character/menu transitions return false.
+This is readiness to try a transaction, not a guarantee that every mutation can
+succeed: the host rechecks the final staged weapon before committing anything.
+
+When ready, equipped level-up and fitted attachment mutations can commit without
+changing the active weapon's item/model or Ruby's effect form. Equipped build-up
+of an inactive party member is also supported. Active build-up or a Ruby element
+change that needs another effect resource rejects the whole callback, preserving
+save, bag, payment, fish counters and queued entity effects. Equipped status-break
+remains unavailable because it requires selecting a replacement weapon.
+
+After successful commit, the bridge refreshes the native combat cache, weapon
+colour and the retail Lamb's Sword damaged-model visibility. It performs no file
+loads, model replacement or scene allocation. It does not alter already-created
+projectiles. Failed batches emit no refresh. The bridge examines equipment only
+for explicit weapon writes (or this query); no installed/enabled gameplay package
+means none of this runs.
+
+A shared-manager action can request an upgrade and wait until play resumes:
+
+```lua
+local requested = false
+assert(chronicle.action('upgrade', 'Upgrade equipped weapon',
+    'Upgrades once after you resume play; requires ABS or Powerup Powder.',
+    function() requested = true end))
+return {
+    on_game_leave = function() requested = false end,
+    on_tick = function()
+        if not requested then return end
+        local state = assert(chronicle.call('weapons.refresh_state'))
+        if not state.ready then return end
+        assert(chronicle.call('weapons.upgrade', {slot=state.slot, seed=42}))
+        requested = false
+    end
+}
+```
+
+Declare `menu.actions.v1`, both operation names and `game.read`/`game.write` in the
+manifest. Handle missing payment/other errors according to your package's UI;
+this small example uses assertions, so a failed batch stops its script.
 
 ## Mod manager actions
 

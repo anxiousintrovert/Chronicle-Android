@@ -99,9 +99,9 @@ bool IsEntityWrite(std::string_view operation) {
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
-                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama) {
+                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment) {
     if (!std::ranges::any_of(commands, [](const auto &command) { return IsEntityWrite(command.operation); })) {
-        return ApplySave(save, commands, money, error, effects, georama);
+        return ApplySave(save, commands, money, error, effects, georama, equipment);
     }
     if (effects) {
         *effects = {};
@@ -116,7 +116,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
             save_commands.push_back(command);
         }
     }
-    if (!ApplySave(save, save_commands, money, error, effects, georama)) {
+    if (!ApplySave(save, save_commands, money, error, effects, georama, equipment)) {
         return false;
     }
     entities.Commit();

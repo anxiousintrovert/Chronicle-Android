@@ -405,12 +405,12 @@ Json Read(const CUserStatus &s, std::string_view op, const Json &a, std::optiona
     throw std::runtime_error("retail operation is not a query");
 }
 
-void BuildUp(CSaveData &save, const Json &a) {
+void BuildUp(CSaveData &save, const Json &a, bool equipped) {
     auto       &s = *save.GetDngStatus();
     const auto &owned = Owned(s, a);
     const int   character = Character(s, a), slot = a.at("slot").get<int>();
-    if (s.equipped_weapon_slot[character] == slot) {
-        throw std::runtime_error("build-up requires an unequipped weapon until native model refresh is supported");
+    if (!equipped && s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("equipped build-up requires a ready native equipment context");
     }
     const int  target = a.at("target").get<int>();
     const auto targets = BuildUps(s, a, save.GetGameIntFlag(0x14));
@@ -436,12 +436,12 @@ void BuildUp(CSaveData &save, const Json &a) {
 }
 
 namespace {
-void MoveAttachment(CUserStatus &s, std::string_view op, const Json &a) {
+void MoveAttachment(CUserStatus &s, std::string_view op, const Json &a, bool equipped) {
     const auto &owned = Owned(s, a);
     const int   character = Character(s, a), slot = a.at("slot").get<int>(), socket = a.at("socket").get<int>();
     const auto &definition = Definition(owned.item_no);
-    if (s.equipped_weapon_slot[character] == slot) {
-        throw std::runtime_error("attachment mutation requires an unequipped weapon until active effect refresh is supported");
+    if (!equipped && s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("equipped attachment mutation requires a ready native equipment context");
     }
     if (socket >= definition.hole_num || definition.hole[socket] <= 0) {
         throw std::runtime_error("weapon socket does not exist");
@@ -493,11 +493,11 @@ void MoveAttachment(CUserStatus &s, std::string_view op, const Json &a) {
 } // namespace
 
 namespace {
-void Upgrade(CUserStatus &s, const Json &a) {
+void Upgrade(CUserStatus &s, const Json &a, bool equipped) {
     const int   character = Character(s, a), slot = a.at("slot").get<int>();
     const auto &checked = Owned(s, a);
-    if (s.equipped_weapon_slot[character] == slot) {
-        throw std::runtime_error("upgrade requires an unequipped weapon until active effect refresh is supported");
+    if (!equipped && s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("equipped upgrade requires a ready native equipment context");
     }
     if (checked.level >= 99 || checked.synthesis_count < 0) {
         throw std::runtime_error("weapon level or synthesis counter cannot be upgraded");
@@ -561,13 +561,13 @@ void Upgrade(CUserStatus &s, const Json &a) {
 }
 } // namespace
 
-void Apply(CUserStatus &s, std::string_view op, const Json &a) {
+void Apply(CUserStatus &s, std::string_view op, const Json &a, bool equipped) {
     if (op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
-        MoveAttachment(s, op, a);
+        MoveAttachment(s, op, a, equipped);
         return;
     }
     if (op == "weapons.upgrade") {
-        Upgrade(s, a);
+        Upgrade(s, a, equipped);
         return;
     }
     if (op == "weapons.build_up") {

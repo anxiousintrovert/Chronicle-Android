@@ -17,8 +17,9 @@ namespace mods {
 struct GameCommand;
 struct GeoramaState;
 struct CommitEffects;
+struct EquipmentContext;
 bool        ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
-                               int money, std::string &error, CommitEffects *effects, GeoramaState *georama);
+                               int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment = nullptr);
 bool        IsEntityWrite(std::string_view operation);
 std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json &arguments);
 

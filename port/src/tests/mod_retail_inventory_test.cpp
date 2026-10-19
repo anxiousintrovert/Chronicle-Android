@@ -907,3 +907,138 @@ TEST(ModRetailValidation, AttachmentMutationRequiresExactBoundedCoordinates) {
                      .empty());
 }
 } // namespace
+
+namespace {
+TEST_F(ModRetailInventory, ReadyEquipmentContextPermitsUpgradeAndDefersOneRefreshUntilCommit) {
+    auto &s = Status();
+    s.cur_chara = 0;
+    s.equipped_weapon_slot[0] = 0;
+    auto &w = s.chara_weapons[0][0];
+    WepDataListToHaveCopy(ITEM_WEAPON_START, &w);
+    w.experience = GetWeaponMaxExp(&w);
+    mods::EquipmentContext context{0, w.item_no, w.best_elem};
+    mods::CommitEffects    effects;
+    const GameCommand      upgrade{
+        "weapons.upgrade", {{"slot", 0}, {"seed", 9}}
+    };
+    const auto before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(mods::ApplySave(*save, {upgrade}, 0, error, &effects));
+    EXPECT_FALSE(effects.refresh_weapon);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            upgrade, {"economy.spend", {{"amount", 65535}}}
+    },
+                                 0, error, &effects, nullptr, &context));
+    EXPECT_FALSE(effects.refresh_weapon);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    ASSERT_TRUE(mods::ApplySave(*save, {upgrade}, 0, error, &effects, nullptr, &context)) << error;
+    EXPECT_TRUE(effects.refresh_weapon);
+    EXPECT_EQ(w.level, 1);
+    EXPECT_EQ(w.experience, 0);
+    ASSERT_TRUE(mods::ApplySave(*save, {
+                                           {"economy.add", {{"amount", 1}}}
+    },
+                                0, error, &effects, nullptr, &context))
+        << error;
+    EXPECT_FALSE(effects.refresh_weapon);
+}
+
+TEST_F(ModRetailInventory, ActiveModelEvolutionAndStaleEquipmentContextRollbackEveryWrite) {
+    auto &s = Status();
+    s.cur_chara = 0;
+    s.equipped_weapon_slot[0] = 0;
+    auto &w = s.chara_weapons[0][0];
+    WepDataListToHaveCopy(ITEM_WEAPON_MARDAN_EINS, &w);
+    save->SetGameIntFlag(0x14, 5);
+    mods::EquipmentContext context{0, w.item_no, w.best_elem};
+    mods::CommitEffects    effects;
+    const auto             before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            {"weapons.build_up", {{"slot", 0}, {"target", ITEM_WEAPON_MARDAN_TWEI}}}
+    },
+                                 0, error, &effects, nullptr, &context));
+    EXPECT_NE(error.find("different native model"), std::string::npos);
+    EXPECT_FALSE(effects.refresh_weapon);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    context.item++;
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            {"economy.add", {{"amount", 1}}}
+    },
+                                 0, error, &effects, nullptr, &context));
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    context.character = 6;
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            {"economy.add", {{"amount", 1}}}
+    },
+                                 0, error, &effects, nullptr, &context));
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+}
+
+TEST_F(ModRetailInventory, InactiveEquippedBuildUpNeedsNoActiveModelRefresh) {
+    auto &s = Status();
+    s.party_size = 2;
+    s.cur_chara = 1;
+    s.equipped_weapon_slot[0] = s.equipped_weapon_slot[1] = 0;
+    WepDataListToHaveCopy(GetDefaultWeaponNo(1), &s.chara_weapons[1][0]);
+    WepDataListToHaveCopy(ITEM_WEAPON_MARDAN_EINS, &s.chara_weapons[0][0]);
+    save->SetGameIntFlag(0x14, 5);
+    const auto            &active = s.chara_weapons[1][0];
+    mods::EquipmentContext context{1, active.item_no, active.best_elem};
+    mods::CommitEffects    effects;
+    ASSERT_TRUE(mods::ApplySave(*save, {
+                                           {"weapons.build_up", {{"character", 0}, {"slot", 0}, {"target", ITEM_WEAPON_MARDAN_TWEI}}}
+    },
+                                0, error, &effects, nullptr, &context))
+        << error;
+    EXPECT_FALSE(effects.refresh_weapon);
+    EXPECT_EQ(s.chara_weapons[0][0].item_no, ITEM_WEAPON_MARDAN_TWEI);
+    EXPECT_EQ(save->GetGameIntFlag(0x14), 0);
+}
+
+TEST_F(ModRetailInventory, RubyFormChangesRejectButSameFormAttachmentsCanCommit) {
+    auto &s = Status();
+    s.party_size = 4;
+    s.cur_chara = CHARA_RUBY;
+    s.equipped_weapon_slot[CHARA_RUBY] = 0;
+    auto &w = s.chara_weapons[CHARA_RUBY][0];
+    int   item = ITEM_WEAPON_START;
+    while (item < ITEM_WEAPON_END && (GetWeaponData(item)->owner != CHARA_RUBY || GetWeaponData(item)->hole[0] <= 0)) {
+        ++item;
+    }
+    ASSERT_LT(item, ITEM_WEAPON_END);
+    WepDataListToHaveCopy(item, &w);
+    for (auto &v : w.elem) {
+        v = 0;
+    }
+    w.elem[1] = 7;
+    w.best_elem = 0;
+    AttachDataListToHaveCopy(ITEM_ATTACH_FIRE, &w.attach[0]);
+    const mods::EquipmentContext context{CHARA_RUBY, w.item_no, 0};
+    mods::CommitEffects          effects;
+    const auto                   before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(mods::ApplySave(*save, {
+                                            {"weapons.attachment_remove", {{"slot", 0}, {"socket", 0}}}
+    },
+                                 0, error, &effects, nullptr, &context));
+    EXPECT_NE(error.find("Ruby effect"), std::string::npos);
+    EXPECT_FALSE(effects.refresh_weapon);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    w.elem[0] = 3;
+    ASSERT_TRUE(mods::ApplySave(*save, {
+                                           {"weapons.attachment_remove", {{"slot", 0}, {"socket", 0}}}
+    },
+                                0, error, &effects, nullptr, &context))
+        << error;
+    EXPECT_TRUE(effects.refresh_weapon);
+    EXPECT_EQ(w.best_elem, 0);
+    EXPECT_LT(w.attach[0].item_no, ITEM_ATTACH_START);
+}
+
+TEST(ModRetailValidation, EquipmentReadinessQueryTakesNoArguments) {
+    EXPECT_TRUE(mods::ValidateOperation("weapons.refresh_state", Json::object()).empty());
+    EXPECT_FALSE(mods::ValidateOperation("weapons.refresh_state", {
+                                                                      {"slot", 0}
+    })
+                     .empty());
+}
+} // namespace

@@ -10,6 +10,6 @@ namespace mods::retail {
 bool           Handles(std::string_view operation);
 std::string    Validate(std::string_view operation, const nlohmann::json &arguments);
 nlohmann::json Read(const CUserStatus &status, std::string_view operation, const nlohmann::json &arguments, std::optional<int> mardan_fish = {});
-void           BuildUp(CSaveData &staged, const nlohmann::json &arguments);
-void           Apply(CUserStatus &staged, std::string_view operation, const nlohmann::json &arguments);
+void           BuildUp(CSaveData &staged, const nlohmann::json &arguments, bool equipped = false);
+void           Apply(CUserStatus &staged, std::string_view operation, const nlohmann::json &arguments, bool equipped = false);
 } // namespace mods::retail
