@@ -7,14 +7,14 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 64 implemented operations, native plugins and author
+a real host-call boundary, 65 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
-| Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events; mutating dependency commands; native plugin exports |
+| Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events; native plugin exports |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
@@ -23,12 +23,37 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No framework renderer/timing hooks; native enemy model/shadow scale on explicit request | Owned overlays/camera/lighting/audio controls, activated only by callers |
-| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions | Native-ready events, cross-package exports, broader host domains; Linux/macOS/Android verification |
+| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; calls to Lua dependency commands | Native-ready events, native export descriptors, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Transactional dependency commands (2026-10-19)
+
+`services.command.v1` supplies explicit Lua command exports and a shared host
+operation callable by Lua and native dependents. The caller's transaction now
+includes invoked providers' managed state, ordered game commands and owned custom
+emissions. Trusted immediate-caller identity supports authorization; provider
+permissions and engine ownership apply. Nested invocations share bounded service,
+write, emission and currency budgets. Failed providers poison the root transaction
+without permanently disabling a reusable provider. Native export descriptors
+remain outstanding; this capability does not allocate contributor content IDs.
+
+Validation: Clang 23.1.2 Windows Release game/test builds pass. All 89 affected
+runtime/native/API tests passed, including ten command cases covering ordered
+writes, trusted caller/provider identities, multi-provider rollback, ignored
+errors, invalid results, permissions, shared limits, save/reset rebinding and a
+real native DLL invoking Lua commands. The full 648-case suite completed with
+641 passes, six skips and one disabled optional benchmark. All 15 Python checks
+pass. All 3,840 empty/disabled generator cases match pinned upstream exactly;
+`ps2/` remains unchanged. Other platforms remain unverified.
+
+An isolated PAL dungeon shared-manager action invoked a separate provider's
+currency grant, checked committed wallet/owned state on the following tick, then
+restored both through another command. Its consumer displayed `PASS dependency
+commands`. Audit packages and retail assets remain outside the repository.
 
 ## Custom event delivery (2026-10-19)
 
@@ -38,8 +63,8 @@ Sources are assigned by the runtime; only the sender and declared dependents
 receive events. Publication follows successful callback commit. Delivery is
 bounded and deferred until the next tick, with detached payloads, per-recipient
 rollback and context/load/reset cancellation. No engine hooks or ABI structure
-layout changes were introduced. Mutating dependency commands and native exports
-remain outstanding; these notifications do not pretend to provide synchronous RPC.
+layout changes were introduced. Notifications do not supply synchronous RPC;
+transactional dependency commands were added separately, as described above.
 
 Validation: Clang 23.1.2 Windows Release game/test builds pass. All 79 focused
 runtime/native/API tests passed, including eight new custom-event cases and a
@@ -482,8 +507,9 @@ source remains unchanged. These local workflows do not provide a remote mod stor
 Owned startup-registered listeners now cover simulation ticks, observed map/floor
 entry, gameplay enter/leave and deferred save-loaded notifications. Read-only Lua
 exports allow declared dependencies to exchange detached structured requests and
-results with shared invocation/depth limits. These are not native floor-ready,
-entity-kill or cutscene hooks, and they do not provide mutating cross-mod commands.
+results with shared invocation/depth limits. Those lifecycle observations do not replace native floor-ready or cutscene
+hooks. Subsequent enemy-kill/custom events and transactional dependency commands
+are documented in their separate validation sections above.
 
 Validation: Clang 23.1.2 Windows Release builds; 458 C++ tests passed, 6 environment/
 optional skips, no failures; 13 Python tests passed. New runtime cases cover listener

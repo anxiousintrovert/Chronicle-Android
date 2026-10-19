@@ -230,3 +230,21 @@ separate managed transactions; a failed native callback cannot publish its own
 queued emissions. Limits, next-tick ordering and context cancellation are specified
 in [MOD_HOST_API.md](MOD_HOST_API.md#package-owned-custom-events). Notifications
 are transient; no background thread, polling loop or native engine hook is added.
+
+### Calling dependency commands
+
+ABI 1 and ABI 2 plugins can call `services.command` during gameplay callbacks.
+Require `services.command.v1`, grant `game.write`, and declare the Lua provider in
+`requires`. JSON is `{ "provider":"author.rewards", "name":"reward",
+"arguments":{"amount":5} }`; a successful host call returns the export's JSON
+object, valid until the next host call. Its result remains provisional until the
+native callback succeeds and the outer game transaction commits.
+
+Provider managed state, game writes, custom emissions and the native caller's
+managed values commit together. Native callback failure or rejected commit rolls
+back the providers too. Provider exceptions poison the outer transaction even if
+the plugin ignores the failed host call. Limits and authorization are documented
+in [MOD_HOST_API.md](MOD_HOST_API.md#transactional-dependency-commands). A real
+ABI 2 DLL test covers success, caller failure, trusted provider ownership and
+legacy reads/currency through the Lua export. Native export descriptors remain
+future work; no existing C ABI structure was changed.

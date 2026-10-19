@@ -354,7 +354,7 @@ must not treat this bounded notification stream as a durable kill journal.
 ## Dependency query exports
 
 Require `services.query.v1` for shared read/calculation services. A provider declares
-up to 32 uniquely named functions during initialization:
+up to 32 exports in total (queries and commands) during initialization:
 
 ```lua
 assert(chronicle.export_query('price', function(request)
@@ -387,8 +387,8 @@ or native write operations. Host reads use the **provider's** permissions; an
 export is an intentional read/calculation service, not a transfer of native write
 authority. Lua-local variables and diagnostic logs are not transactional save data;
 authors should keep query calculations stateless and read persistent values through
-`chronicle.get`. Mutating cross-mod commands and native plugin exports remain
-separate work. Package-owned custom events are documented below. This API does not implement
+`chronicle.get`. Mutating dependency commands and package-owned custom events
+are documented below. Native plugin exports remain separate work. This API does not implement
 custom item/weapon registration or the contributor's cutscene framework.
 
 ## Retail attachment bag and status-break
@@ -775,5 +775,83 @@ These notifications are transient, not a durable message log or synchronous
 command RPC. Events are discarded on gameplay exit, changed mode/map/dungeon/floor,
 successful load/reset/restart, or an unavailable/failed sender. They are not saved
 or replayed. No listeners, native hooks or engine behavior are added when packages
-do not use the capability. Native-ready events, mutating dependency commands and
-native plugin exports remain separate APIs still to implement.
+do not use the capability. Native-ready events and native plugin exports remain separate APIs still to implement.
+
+## Transactional dependency commands
+
+Require `services.command.v1` when mandatory. A Lua provider registers a named
+function during initialization using `chronicle.export_command(name, function)`.
+Queries and commands share a maximum of 32 exports per package. Names follow the
+1-64 lowercase-letter/digit/underscore/dot rule. The same name can identify a
+query and a command; each category rejects its own duplicates.
+
+```lua
+assert(chronicle.export_command('reward', function(request, caller)
+    -- caller is assigned by the runtime, never taken from request data.
+    if caller ~= 'author.challenge' or request.amount ~= 5 then
+        return {accepted = false, reason = 'unsupported request'}
+    end
+    assert(chronicle.set('rewards', (chronicle.get('rewards') or 0) + 1))
+    assert(chronicle.call('economy.add', {amount = request.amount}))
+    return {accepted = true}
+end))
+return {}
+```
+
+The example provider needs `economy.write`. Consumers declare the provider in
+`requires`, need `game.write`, and call during a gameplay callback:
+
+```lua
+local result, reason = chronicle.call('services.command', {
+    provider = 'author.rewards', name = 'reward', arguments = {amount = 5}
+})
+assert(result, reason)
+assert(result.accepted, result.reason)
+```
+
+The request has exactly `provider`, `name` and an object `arguments`. Requests
+and object results use the common bounded structured transport; arrays/scalars
+are not valid roots. Input/output tables are detached. Native ABI 1/2 callers use
+the same operation and JSON shape through `host->call`; the response is the
+provider's JSON object, not a generic queued boolean. Providers are currently Lua
+functions, including scripts in packages that also contain native plugins. This
+does not yet supply native-function export descriptors.
+
+Exports are intentional permission delegation: game reads/writes inside them use
+the **provider's** permissions and trusted `GameCommand.owner`. A consumer's
+`game.write` alone cannot directly use `economy.write`, but a provider with that
+permission can explicitly offer a reward service. Providers must validate inputs
+and authorize callers where appropriate. The second Lua argument is the immediate
+caller's package ID, including at each nested dependency call. Engine ownership
+belongs to the provider; disabling a consumer does not implicitly release the
+provider's effects. Providers should expose release commands for temporary leases.
+No contributor content IDs, schemas or registries are prescribed by this API.
+
+The result is provisional until the outer callback commits. Root and provider
+managed values/quest progress form one transaction. Their game commands retain
+call order in one shared batch; legacy `add_money` deltas still aggregate before
+that batch. Custom emissions retain each provider's identity and publish only
+with the outer commit. A failed consumer, provider exception/invalid result,
+instruction limit, rejected/throwing game commit, or event publication overflow
+restores all participating managed state and publishes no queued effects. Earlier
+independently completed callbacks remain committed.
+
+An invoked provider error makes the outer transaction uncommittable, even if its
+caller ignores `nil, reason`. Missing exports/providers and exceeded invocation
+limits also fail that transaction. The root package stops with a manager diagnostic;
+a provider is not stopped merely because its exported command failed. An expected
+business rejection should return an object such as `{accepted=false, reason=...}`
+before writing anything. Permission/schema/undeclared-dependency errors reject
+that individual host request before invoking any provider and can be handled.
+Lua locals, closures, diagnostic logs and native plugin private memory are not
+managed save state and cannot be rolled back; use `chronicle.set`/quest APIs for
+transactional persistent state and keep temporary calculations local to a call.
+
+Queries and commands share 16 service invocations per outer callback and maximum
+depth eight. Provider reentry is rejected; calls flow only to declared dependencies.
+Nested commands also share the root's 64 game-write limit, 16 custom-emission limit
+and bounded legacy currency delta. Each Lua execution retains its instruction and
+memory limits. Query exports cannot invoke mutating commands. Game queries still
+observe committed native state, while managed state reads can see staged provider
+changes within the same outer transaction. There is no background dispatcher or
+engine hook; registration and transaction state are rebuilt on load/reset/restart.

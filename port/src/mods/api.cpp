@@ -16,6 +16,7 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"services.command",        "game.write",    "Invoke a dependency's Lua command within the caller's transaction.",           true },
     {"events.emit",             "game.write",    "Queue a package-owned notification after commit for next tick.",               true },
     {"physics.query",           "game.read",     "Find active revealed enemy origins inside a sphere (not collision geometry).", false},
     {"physics.velocity_get",    "game.read",     "Read native enemy movement intent before collision.",                          false},
@@ -206,6 +207,21 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (!a.is_object()) {
         return "arguments must be an object";
+    }
+    if (name == "services.command") {
+        if (a.size() != 3 || !a.contains("provider") || !a["provider"].is_string() ||
+            !a.contains("name") || !a["name"].is_string() || !a.contains("arguments") || !a["arguments"].is_object()) {
+            return "provide provider, name and object arguments only";
+        }
+        const auto &provider = a["provider"].get_ref<const std::string &>();
+        const auto &service = a["name"].get_ref<const std::string &>();
+        const auto  key_char = [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '.'; };
+        if (provider.empty() || provider.size() > 96 || provider.front() < 'a' || provider.front() > 'z' ||
+            !std::ranges::all_of(provider, [&](char c) { return key_char(c) || c == '-'; }) ||
+            service.empty() || service.size() > 64 || !std::ranges::all_of(service, key_char)) {
+            return "invalid service identity";
+        }
+        return {};
     }
     if (name == "events.emit") {
         if (a.size() != 2 || !a.contains("name") || !a["name"].is_string() ||

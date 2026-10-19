@@ -39,42 +39,50 @@ struct CustomEvent {
     World       context;
 };
 
+struct Emission {
+    std::string owner;
+    Json        arguments;
+};
+
 struct Module {
-    Package                                                                                        package;
-    lua_State                                                                                     *lua = nullptr;
-    std::size_t                                                                                    memory = 0;
-    int                                                                                            remaining = 0, pending_money = 0;
-    int                                                                                            reference = LUA_NOREF;
-    int                                                                                            action_reference = LUA_NOREF;
-    std::map<std::string, Action>                                                                  actions;
-    bool                                                                                           failed = false, playing = false;
-    Json                                                                                          *state = nullptr;
-    const World                                                                                   *world = nullptr;
-    const char                                                                                    *callback = nullptr;
-    const ReadGame                                                                                *read_game = nullptr;
-    const QueryGame                                                                               *query_game = nullptr;
-    const CommitGame                                                                              *commit_game = nullptr;
-    bool                                                                                           initializing = true, read_only = false;
-    unsigned                                                                                       service_depth = 0;
-    int                                                                                            services_left = 16;
-    int                                                                                           *service_budget = &services_left;
-    int                                                                                            service_reference = LUA_NOREF;
-    Json                                                                                           service_arguments, service_result;
-    std::map<std::string, std::vector<int>>                                                        listeners;
-    unsigned                                                                                       listener_count = 0;
-    std::map<std::string, int>                                                                     exports;
-    std::function<bool(Module &, const char *, const char *, const Json &, Json &, std::string &)> invoke;
-    Json                                                                                           arguments;
-    std::string                                                                                    call_error;
-    std::vector<GameCommand>                                                                       commands;
-    std::vector<Json>                                                                              emissions;
-    std::unique_ptr<NativeLibrary>                                                                 native;
-    std::string                                                                                    native_result;
-    unsigned                                                                                       native_calls = 0;
-    bool                                                                                           native_active = false;
-    Json                                                                                           snapshot;
-    std::map<std::string, std::string>                                                             resources;
-    std::vector<std::string>                                                                      *logs = nullptr;
+    Package                                                                                              package;
+    lua_State                                                                                           *lua = nullptr;
+    std::size_t                                                                                          memory = 0;
+    int                                                                                                  remaining = 0, pending_money = 0;
+    int                                                                                                  reference = LUA_NOREF;
+    int                                                                                                  action_reference = LUA_NOREF;
+    std::map<std::string, Action>                                                                        actions;
+    bool                                                                                                 failed = false, playing = false;
+    Json                                                                                                *state = nullptr;
+    const World                                                                                         *world = nullptr;
+    const char                                                                                          *callback = nullptr;
+    const ReadGame                                                                                      *read_game = nullptr;
+    const QueryGame                                                                                     *query_game = nullptr;
+    const CommitGame                                                                                    *commit_game = nullptr;
+    bool                                                                                                 initializing = true, read_only = false;
+    unsigned                                                                                             service_depth = 0;
+    int                                                                                                  services_left = 16;
+    int                                                                                                 *service_budget = &services_left;
+    int                                                                                                  service_reference = LUA_NOREF;
+    Json                                                                                                 service_arguments, service_result;
+    std::map<std::string, std::vector<int>>                                                              listeners;
+    unsigned                                                                                             listener_count = 0;
+    std::map<std::string, int>                                                                           exports, command_exports;
+    std::function<bool(Module &, const char *, const char *, const Json &, Json &, std::string &, bool)> invoke;
+    Json                                                                                                 arguments;
+    std::string                                                                                          call_error;
+    std::vector<GameCommand>                                                                             commands;
+    std::vector<Emission>                                                                                emissions;
+    Module                                                                                              *transaction = nullptr;
+    std::map<Module *, Json>                                                                             command_states;
+    std::string                                                                                          command_error, service_caller;
+    std::unique_ptr<NativeLibrary>                                                                       native;
+    std::string                                                                                          native_result;
+    unsigned                                                                                             native_calls = 0;
+    bool                                                                                                 native_active = false;
+    Json                                                                                                 snapshot;
+    std::map<std::string, std::string>                                                                   resources;
+    std::vector<std::string>                                                                            *logs = nullptr;
 
     ~Module() {
         playing = false;
@@ -84,6 +92,19 @@ struct Module {
         }
     }
 };
+
+Module &Transaction(Module &m) { return m.transaction ? *m.transaction : m; }
+
+void FinishCommands(Module &m, bool accepted) {
+    if (!accepted) {
+        for (auto &[provider, before] : m.command_states) {
+            provider->state->swap(before);
+        }
+    }
+    m.command_states.clear();
+    m.command_error.clear();
+    m.transaction = nullptr;
+}
 
 void *Allocate(void *user, void *ptr, std::size_t old_size, std::size_t size) {
     auto &m = *static_cast<Module *>(user);
@@ -240,10 +261,10 @@ int AddMoney(lua_State *L) {
     if (!m.playing || std::ranges::find(m.package.permissions, "economy.write") == m.package.permissions.end()) {
         return Failure(L, "economy.write permission and active gameplay required");
     }
-    if (amount < -32767 || amount > 32767 || std::abs(m.pending_money + amount) > 32767) {
+    if (amount < -32767 || amount > 32767 || std::abs(Transaction(m).pending_money + amount) > 32767) {
         return Failure(L, "currency delta exceeds callback limit");
     }
-    m.pending_money += static_cast<int>(amount);
+    Transaction(m).pending_money += static_cast<int>(amount);
     lua_pushboolean(L, true);
     return 1;
 }
@@ -362,6 +383,36 @@ int ApiList(lua_State *L) {
     return 1;
 }
 
+bool InvokeCommand(Module &m, const Json &a, Json &result, std::string &error) {
+    if (!m.playing || m.read_only || !m.transaction || !m.invoke) {
+        error = "command invocation requires a writable gameplay callback";
+        return false;
+    }
+    const auto &provider = a.at("provider").get_ref<const std::string &>();
+    if (std::ranges::find(m.package.dependencies, provider) == m.package.dependencies.end()) {
+        error = "command provider must be a declared dependency";
+        return false;
+    }
+    if (m.service_depth >= 8 || --*m.service_budget < 0) {
+        error = "service invocation depth or call limit exceeded";
+        Transaction(m).command_error = error;
+        return false;
+    }
+    bool accepted = false;
+    try {
+        accepted = m.invoke(m, provider.c_str(), a.at("name").get_ref<const std::string &>().c_str(), a.at("arguments"), result, error, true);
+    } catch (const std::exception &e) {
+        error = e.what();
+    }
+    if (!accepted) {
+        if (error.empty()) {
+            error = "command export failed";
+        }
+        Transaction(m).command_error = error;
+    }
+    return accepted;
+}
+
 int ApiCall(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
     const auto *op = FindOperation(name);
@@ -385,25 +436,32 @@ int ApiCall(lua_State *L) {
     if (!m.call_error.empty()) {
         return Failure(L, m.call_error.c_str());
     }
+    if (op->name == "services.command") {
+        if (!InvokeCommand(m, m.arguments, m.snapshot, m.call_error)) {
+            return Failure(L, m.call_error.c_str());
+        }
+        PushJson(L, m.snapshot);
+        return 1;
+    }
     if (op->writes) {
         if (m.read_only) {
             return Failure(L, "query exports cannot write game state");
         }
         if (op->name == "events.emit") {
-            if (m.emissions.size() >= 16) {
+            if (Transaction(m).emissions.size() >= 16) {
                 return Failure(L, "at most 16 custom events per callback");
             }
-            m.emissions.push_back(m.arguments);
+            Transaction(m).emissions.push_back({m.package.id, m.arguments});
             lua_pushboolean(L, true);
             return 1;
         }
         if (!m.commit_game || !*m.commit_game) {
             return Failure(L, "game write provider unavailable");
         }
-        if (m.commands.size() >= 64) {
+        if (Transaction(m).commands.size() >= 64) {
             return Failure(L, "callback write budget exceeded");
         }
-        m.commands.push_back({name, m.arguments, m.package.id});
+        Transaction(m).commands.push_back({name, m.arguments, m.package.id});
         lua_pushboolean(L, true); // Queued; the whole callback commits or fails together.
         return 1;
     }
@@ -472,20 +530,30 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         if (!error.empty()) {
             throw std::runtime_error(error);
         }
+        if (op->name == "services.command") {
+            Json        value;
+            std::string error;
+            if (!InvokeCommand(m, args, value, error)) {
+                throw std::runtime_error(error);
+            }
+            m.native_result = value.dump();
+            *result = m.native_result.c_str();
+            return 1;
+        }
         if (op->writes) {
             if (op->name == "events.emit") {
-                if (m.emissions.size() >= 16) {
+                if (Transaction(m).emissions.size() >= 16) {
                     throw std::runtime_error("at most 16 custom events per callback");
                 }
-                m.emissions.push_back(args);
+                Transaction(m).emissions.push_back({m.package.id, args});
                 m.native_result = "{\"queued\":true}";
                 *result = m.native_result.c_str();
                 return 1;
             }
-            if (!m.commit_game || !*m.commit_game || m.commands.size() >= 64) {
+            if (!m.commit_game || !*m.commit_game || Transaction(m).commands.size() >= 64) {
                 throw std::runtime_error("write provider unavailable or callback write budget exceeded");
             }
-            m.commands.push_back({name, args, m.package.id});
+            Transaction(m).commands.push_back({name, args, m.package.id});
             m.native_result = "{\"queued\":true}";
         } else {
             if (!m.query_game || !*m.query_game) {
@@ -649,12 +717,27 @@ int ExportQuery(lua_State *L) {
     if (!m.initializing || !Key(name) || lua_rawlen(L, 1) != std::strlen(name) || !lua_isfunction(L, 2)) {
         return Failure(L, "export_query requires a named function during initialization");
     }
-    if (m.exports.size() >= 32 || m.exports.contains(name)) {
-        return Failure(L, "duplicate export or at most 32 query exports");
+    if (m.exports.size() + m.command_exports.size() >= 32 || m.exports.contains(name)) {
+        return Failure(L, "duplicate query export or at most 32 combined exports");
     }
     lua_pushvalue(L, 2);
     const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
     m.exports.emplace(name, ref);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+int ExportCommand(lua_State *L) {
+    auto       &m = Self(L);
+    const char *name = luaL_checkstring(L, 1);
+    if (!m.initializing || lua_gettop(L) != 2 || !Key(name) || lua_rawlen(L, 1) != std::strlen(name) || !lua_isfunction(L, 2)) {
+        return Failure(L, "export_command requires a named function during initialization");
+    }
+    if (m.exports.size() + m.command_exports.size() >= 32 || m.command_exports.contains(name)) {
+        return Failure(L, "duplicate command export or at most 32 combined exports");
+    }
+    lua_pushvalue(L, 2);
+    m.command_exports.emplace(name, luaL_ref(L, LUA_REGISTRYINDEX));
     lua_pushboolean(L, true);
     return 1;
 }
@@ -679,7 +762,7 @@ int InvokeQuery(lua_State *L) {
     }
     m.call_error.clear();
     try {
-        if (!m.invoke(m, provider, name, m.arguments, m.snapshot, m.call_error) && m.call_error.empty()) {
+        if (!m.invoke(m, provider, name, m.arguments, m.snapshot, m.call_error, false) && m.call_error.empty()) {
             m.call_error = "query export failed";
         }
     } catch (const std::exception &e) {
@@ -696,9 +779,12 @@ int DispatchQuery(lua_State *L) {
     auto &m = Self(L);
     lua_rawgeti(L, LUA_REGISTRYINDEX, m.service_reference);
     PushJson(L, m.service_arguments);
-    lua_call(L, 1, 1);
+    if (!m.read_only) {
+        lua_pushlstring(L, m.service_caller.data(), m.service_caller.size());
+    }
+    lua_call(L, m.read_only ? 1 : 2, 1);
     if (!lua_istable(L, -1)) {
-        return luaL_error(L, "query export must return an object");
+        return luaL_error(L, "service export must return an object");
     }
     if (!ReadArguments(L, -1, m.service_result, m.call_error)) {
         return luaL_error(L, "%s", m.call_error.c_str());
@@ -728,6 +814,7 @@ int Bootstrap(lua_State *L) {
         {"action",           RegisterAction },
         {"subscribe",        Subscribe      },
         {"subscribe_custom", SubscribeCustom},
+        {"export_command",   ExportCommand  },
         {"export_query",     ExportQuery    },
         {"invoke_query",     InvokeQuery    },
         {"get",              Get            },
@@ -851,7 +938,7 @@ struct Runtime::Impl {
         auto        next = pending_events;
         const World context{world.mode, world.map, 0, world.playing, world.dungeon, world.floor};
         for (const auto &args : m.emissions) {
-            next.push_back({m.package.id, args, context});
+            next.push_back({args.owner, args.arguments, context});
         }
         return next;
     }
@@ -875,21 +962,22 @@ struct Runtime::Impl {
         lua_sethook(m.lua, Budget, LUA_MASKCOUNT, 1000);
     }
 
-    bool Invoke(Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error) {
+    bool Invoke(Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error, bool command) {
         for (auto &ptr : modules) {
             auto &m = *ptr;
             if (m.package.id != provider) {
                 continue;
             }
-            auto found = m.exports.find(name);
-            if (m.failed || !m.lua || found == m.exports.end()) {
-                error = "query provider or export is unavailable";
+            auto &exports = command ? m.command_exports : m.exports;
+            auto  found = exports.find(name);
+            if (m.failed || !m.lua || found == exports.end()) {
+                error = "service provider or export is unavailable";
                 return false;
             }
             // Provider callbacks have completed earlier in dependency order. No reentrant
             // provider may be entered; requests only flow toward declared dependencies.
             if (m.world) {
-                error = "query provider is already executing";
+                error = "service provider is already executing";
                 return false;
             }
 
@@ -905,6 +993,8 @@ struct Runtime::Impl {
                     m.playing = false;
                     m.service_depth = 0;
                     m.service_budget = &m.services_left;
+                    m.transaction = nullptr;
+                    m.service_caller.clear();
                     lua_settop(m.lua, 0);
                 }
             } restore{m};
@@ -913,7 +1003,13 @@ struct Runtime::Impl {
             m.read_game = caller.read_game;
             m.query_game = caller.query_game;
             m.playing = caller.playing;
-            m.read_only = true;
+            m.read_only = !command;
+            if (command) {
+                m.transaction = &Transaction(caller);
+                m.transaction->command_states.try_emplace(&m, *m.state);
+                m.commit_game = caller.commit_game;
+                m.service_caller = caller.package.id;
+            }
             m.service_depth = caller.service_depth + 1;
             m.service_budget = caller.service_budget;
             m.service_reference = found->second;
@@ -924,13 +1020,13 @@ struct Runtime::Impl {
             const int status = lua_pcall(m.lua, 0, 0, 0);
             if (status != LUA_OK) {
                 const char *text = lua_type(m.lua, -1) == LUA_TSTRING ? lua_tostring(m.lua, -1) : "non-text export error";
-                error = std::string(text ? text : "query export failed").substr(0, 1024);
+                error = std::string(text ? text : "service export failed").substr(0, 1024);
                 return false;
             }
             result = m.service_result;
             return true;
         }
-        error = "query provider is unavailable";
+        error = "service provider is unavailable";
         return false;
     }
 
@@ -941,6 +1037,8 @@ struct Runtime::Impl {
         }
         auto      *L = m.lua;
         const Json before = *m.state;
+        m.transaction = &m;
+        m.command_error.clear();
         m.pending_money = 0;
         m.commands.clear();
         m.services_left = 16;
@@ -957,6 +1055,7 @@ struct Runtime::Impl {
         ResetBudget(m);
         if (!Check(m, lua_pcall(L, 0, 0, 0))) {
             *m.state = before;
+            FinishCommands(m, false);
             m.commands.clear();
             m.emissions.clear();
             m.playing = false;
@@ -971,6 +1070,9 @@ struct Runtime::Impl {
         const bool  writes = m.pending_money || !m.commands.empty();
         bool        accepted = !writes;
         try {
+            if (!m.command_error.empty()) {
+                throw std::runtime_error(m.command_error);
+            }
             auto events = PrepareEvents(m, world);
             if (writes) {
                 accepted = commit_game ? commit_game(m.commands, m.pending_money, error)
@@ -988,6 +1090,7 @@ struct Runtime::Impl {
             m.failed = true;
             diagnostics.push_back(m.package.id + ": game operation was rejected; script stopped: " + error);
         }
+        FinishCommands(m, accepted);
         m.pending_money = 0;
         m.commands.clear();
         m.emissions.clear();
@@ -1001,11 +1104,18 @@ struct Runtime::Impl {
         }
     }
 
-    void NativeCallback(Module &m, const World &world, const QueryGame &query, const CommitGame &commit, uint32_t event = 0, const char *action = nullptr) {
+    void NativeCallback(Module &m, const World &world, const QueryGame &query, const CommitGame &commit, uint32_t event = 0, const char *action = nullptr, const ReadGame &read_game = {}) {
         if (m.failed || !m.native || (event && !m.native->WantsEvent(event))) {
             return;
         }
         const Json before = *m.state;
+        m.transaction = &m;
+        m.command_error.clear();
+        m.pending_money = 0;
+        m.services_left = 16;
+        m.service_budget = &m.services_left;
+        m.world = &world;
+        m.read_game = &read_game;
         m.native_active = true;
         m.playing = world.playing;
         m.query_game = &query;
@@ -1037,9 +1147,12 @@ struct Runtime::Impl {
                 error = "callback returned failure";
             }
             if (accepted) {
+                if (!m.command_error.empty()) {
+                    throw std::runtime_error(m.command_error);
+                }
                 auto events = PrepareEvents(m, world);
-                if (!m.commands.empty()) {
-                    accepted = commit && commit(m.commands, 0, error);
+                if (!m.commands.empty() || m.pending_money) {
+                    accepted = commit && commit(m.commands, m.pending_money, error);
                 }
                 if (accepted && events) {
                     pending_events.swap(*events);
@@ -1049,6 +1162,10 @@ struct Runtime::Impl {
             accepted = false;
             error = e.what();
         }
+        FinishCommands(m, accepted);
+        m.world = nullptr;
+        m.read_game = nullptr;
+        m.pending_money = 0;
         m.playing = false;
         m.native_active = false;
         m.query_game = nullptr;
@@ -1090,7 +1207,7 @@ void Runtime::Start(const Manager &manager) {
         auto  module = std::make_unique<Module>();
         auto &m = *module;
         m.package = *found;
-        m.invoke = [host = impl_.get()](Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error) { return host->Invoke(caller, provider, name, args, result, error); };
+        m.invoke = [host = impl_.get()](Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error, bool command) { return host->Invoke(caller, provider, name, args, result, error, command); };
         m.logs = &impl_->logs;
         if (!impl_->state.contains(id)) {
             impl_->state[id] = Json::object();
@@ -1233,15 +1350,15 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         }
         if (world.playing && impl_->loaded_pending) {
             impl_->Call(m, "on_save_loaded", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_SAVE_LOADED);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_SAVE_LOADED, nullptr, read_game);
         }
         if (game_enter) {
             impl_->Call(m, "on_game_enter", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_ENTER);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_ENTER, nullptr, read_game);
         }
         if (game_leave) {
             impl_->Call(m, "on_game_leave", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_LEAVE);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_LEAVE, nullptr, read_game);
         }
         if (entered && !m.failed) {
             for (const auto &q : m.package.quests) {
@@ -1255,11 +1372,11 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             }
             (*m.state)["last_map"] = world.map;
             impl_->Call(m, "on_map_enter", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_MAP_ENTER);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_MAP_ENTER, nullptr, read_game);
         }
         if (floor_enter) {
             impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER, nullptr, read_game);
         }
         if (world.playing) {
             for (const auto &event : events) {
@@ -1284,7 +1401,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                 if (m.listeners.contains(key)) {
                     impl_->Call(m, key.c_str(), event_world, money, read_game, query_game, commit_game);
                 }
-                impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_CUSTOM);
+                impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_CUSTOM, nullptr, read_game);
             }
             if (!game_enter && !floor_enter && !impl_->loaded_pending) {
                 for (const auto &death : deaths.first(std::min<std::size_t>(deaths.size(), 64))) {
@@ -1303,14 +1420,14 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                     if (m.listeners.contains("on_enemy_killed")) {
                         impl_->Call(m, "on_enemy_killed", event_world, money, read_game, query_game, commit_game);
                     }
-                    impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_ENEMY_KILLED);
+                    impl_->NativeCallback(m, event_world, query_game, commit_game, CHRONICLE_EVENT_ENEMY_KILLED, nullptr, read_game);
                 }
             }
             for (const auto &[owner, id] : actions) {
                 if (owner == m.package.id && action_context && !m.failed) {
                     auto &action = m.actions.at(id);
                     if (action.native) {
-                        impl_->NativeCallback(m, world, query_game, commit_game, 0, id.c_str());
+                        impl_->NativeCallback(m, world, query_game, commit_game, 0, id.c_str(), read_game);
                     } else {
                         impl_->Call(m, "menu action", world, money, read_game, query_game, commit_game, action.reference);
                     }
@@ -1318,7 +1435,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                 }
             }
             impl_->Call(m, "on_tick", world, money, read_game, query_game, commit_game);
-            impl_->NativeCallback(m, world, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, 0, nullptr, read_game);
         }
     }
     impl_->was_playing = world.playing;

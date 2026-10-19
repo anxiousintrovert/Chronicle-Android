@@ -976,7 +976,7 @@ TEST_F(ModRuntime, MenuActionsCancelOnWorldChangeAndKeepNormalCallbackBudgets) {
 
 class ModNativeV2 : public ModRuntime {
 protected:
-    void LoadPlugin(const std::string &mode = {}, const fs::path &source = CHRONICLE_NATIVE_V2_FIXTURE, bool trust = true, bool enable = true, const std::string &script = {}) {
+    void LoadPlugin(const std::string &mode = {}, const fs::path &source = CHRONICLE_NATIVE_V2_FIXTURE, bool trust = true, bool enable = true, const std::string &script = {}, const std::vector<std::string> &dependencies = {}) {
         mods::Manager empty;
         runtime.Start(empty);
         runtime.ResetState();
@@ -984,6 +984,7 @@ protected:
         manifest.erase("quests");
         manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
         manifest["requires_capabilities"] = {"plugins.native.v2"};
+        manifest["requires"] = dependencies;
         manifest["native_library"] = "plugin" + source.extension().string();
         const auto package = root / "mods/test.native.v2";
         if (mode.empty() && script.empty()) {
@@ -995,8 +996,12 @@ protected:
         fs::copy_file(source, package / manifest["native_library"].get<std::string>(), fs::copy_options::overwrite_existing);
         mods::Session preview;
         preview.Start({root / "mods"}, {}, root / "save");
-        ASSERT_EQ(preview.Preview().Packages().size(), 1u);
-        ASSERT_TRUE(preview.SetTrusted("test.native.v2", preview.Preview().Packages()[0].native_fingerprint, trust));
+        const auto found = std::ranges::find(preview.Preview().Packages(), "test.native.v2", &mods::Package::id);
+        ASSERT_NE(found, preview.Preview().Packages().end());
+        ASSERT_TRUE(preview.SetTrusted("test.native.v2", found->native_fingerprint, trust));
+        for (const auto &id : dependencies) {
+            ASSERT_TRUE(preview.SetEnabled(id, true));
+        }
         ASSERT_TRUE(preview.SetEnabled("test.native.v2", enable));
         mods::Session active;
         active.Start({root / "mods"}, {}, root / "save");
@@ -1629,5 +1634,371 @@ TEST_F(ModNativeV2, CustomNativeFailureAndOptOutDoNotLeakManagedChanges) {
     runtime.Tick({1, 0, 0, true});
     EXPECT_TRUE(Values()["emitted"]);
     EXPECT_FALSE(Values().contains("custom"));
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, DependencyCommandsCommitOrderedWritesWithProviderIdentityAndOwnedEvents) {
+    auto provider = Manifest("test.provider");
+    provider["permissions"] = {"game.write", "economy.write"};
+    provider["requires_capabilities"] = {"services.command.v1"};
+    provider["quests"][0].erase("map");
+    Add(R"(assert(chronicle.subscribe_custom('test.provider','changed',function(w)
+        assert(w.event.owner=='test.provider' and w.event.payload.value==5)
+        assert(chronicle.set('event_seen',true))
+    end))
+    assert(chronicle.export_command('reward',function(a,caller)
+        assert(caller=='test.mod')
+        assert(chronicle.set('value',a.value))
+        assert(chronicle.quest_add('visit',1)==1)
+        assert(chronicle.add_money(2))
+        assert(chronicle.call('economy.add',{amount=9}))
+        assert(chronicle.call('events.emit',{name='changed',payload={value=a.value}}))
+        a.value=100
+        return {value=chronicle.get('value')}
+    end)); return {})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    consumer["permissions"] = {"game.write", "economy.write"};
+    Add(R"(local once=false; return {on_tick=function()
+        if once then return end;once=true
+        assert(chronicle.call('economy.add',{amount=1}))
+        local a={value=5}
+        local r=assert(chronicle.call('services.command',{provider='test.provider',name='reward',arguments=a}))
+        assert(a.value==5 and r.value==5)
+        r.value=200
+        assert(chronicle.call('economy.add',{amount=3}))
+        assert(chronicle.set('done',true))
+    end})",
+        consumer);
+    Start();
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const std::vector<mods::GameCommand> &commands, int money, auto &) {
+        ++commits;
+        EXPECT_EQ(money, 2);
+        EXPECT_EQ(commands.size(), 3);
+        if (commands.size() == 3) {
+            EXPECT_EQ(commands[0].owner, "test.mod");
+            EXPECT_EQ(commands[0].arguments["amount"], 1);
+            EXPECT_EQ(commands[1].owner, "test.provider");
+            EXPECT_EQ(commands[1].arguments["amount"], 9);
+            EXPECT_EQ(commands[2].owner, "test.mod");
+            EXPECT_EQ(commands[2].arguments["amount"], 3);
+        }
+        return true;
+    });
+    EXPECT_EQ(commits, 1);
+    ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    EXPECT_TRUE(State()["values"]["done"]);
+    auto state = Json::parse(runtime.SaveState())["mods"]["test.provider"];
+    EXPECT_EQ(state["values"]["value"], 5);
+    EXPECT_EQ(state["quests"]["visit"], 1);
+    EXPECT_FALSE(state["values"].contains("event_seen"));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(Json::parse(runtime.SaveState())["mods"]["test.provider"]["values"]["event_seen"]);
+}
+
+TEST_F(ModRuntime, DependencyCommandRollbackCoversEveryProviderAndPreservesPriorCallbacks) {
+    for (int failure = 0; failure < 3; ++failure) {
+        auto base = Manifest("test.base");
+        base["permissions"] = {"game.write", "economy.write"};
+        Add(R"(assert(chronicle.set('ticks',0))
+          assert(chronicle.export_command('change',function(a,caller)
+            assert(caller=='test.middle')
+            assert(chronicle.set('changed',true))
+            assert(chronicle.call('economy.add',{amount=7}))
+            assert(chronicle.call('events.emit',{name='changed',payload={}}))
+            return {}
+          end))
+          assert(chronicle.subscribe_custom('test.base','changed',function() error('event leaked') end))
+          return {on_tick=function() assert(chronicle.set('ticks',chronicle.get('ticks')+1)) end})",
+            base);
+        auto middle = Manifest("test.middle");
+        middle["requires"] = {"test.base"};
+        middle["permissions"] = {"game.write"};
+        Add(R"(assert(chronicle.export_command('change',function()
+            assert(chronicle.set('changed',true))
+            return assert(chronicle.call('services.command',{provider='test.base',name='change',arguments={}}))
+        end)); return {})",
+            middle);
+        auto consumer = Manifest();
+        consumer["requires"] = {"test.middle"};
+        consumer["permissions"] = {"game.write"};
+        Add(std::string(R"(return {on_tick=function()
+            assert(chronicle.set('changed',true))
+            assert(chronicle.call('services.command',{provider='test.middle',name='change',arguments={}}))
+        )") + (failure == 0 ? "error('consumer failed')" : "") +
+                " end}",
+            consumer);
+        Start();
+        int commits = 0;
+        runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &, int, auto &) -> bool {++commits;if(failure==2){throw std::runtime_error("commit failed");
+}return false; });
+        EXPECT_EQ(commits, failure == 0 ? 0 : 1);
+        auto states = Json::parse(runtime.SaveState())["mods"];
+        EXPECT_EQ(states["test.base"]["values"]["ticks"], 1);
+        EXPECT_FALSE(states["test.base"]["values"].contains("changed"));
+        EXPECT_FALSE(states["test.middle"].contains("values"));
+        EXPECT_FALSE(State().contains("values"));
+        runtime.Tick({1, 0, 0, true});
+        EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["test.base"]["values"]["ticks"], 2);
+        ASSERT_EQ(runtime.Diagnostics().size(), 1);
+        EXPECT_EQ(runtime.Diagnostics()[0].find("event leaked"), std::string::npos);
+    }
+}
+
+TEST_F(ModRuntime, FailedCommandPoisonsCallerEvenWhenHandledAndProviderRemainsUsable) {
+    auto provider = Manifest("test.provider");
+    provider["permissions"] = {"economy.write"};
+    Add(R"(assert(chronicle.export_command('bad',function()
+        assert(chronicle.set('value',99))
+        assert(chronicle.call('economy.add',{amount=99}))
+        error('bad provider')
+    end))
+    assert(chronicle.export_command('good',function()
+        assert(not chronicle.get('value'))
+        assert(chronicle.set('value',7))
+        assert(chronicle.call('economy.add',{amount=7}))
+        return {value=7}
+    end));return {})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    consumer["permissions"] = {"game.write"};
+    Add(R"(return {on_tick=function()
+        local value,error=chronicle.call('services.command',{provider='test.provider',name='bad',arguments={}})
+        assert(not value and error:find('bad provider'))
+        assert(chronicle.set('ignored_failure',true))
+    end})",
+        consumer);
+    auto other = Manifest("z.consumer");
+    other["requires"] = {"test.provider"};
+    other["permissions"] = {"game.write"};
+    Add(R"(return {on_tick=function()
+        assert(chronicle.call('services.command',{provider='test.provider',name='good',arguments={}}).value==7)
+    end})",
+        other);
+    Start();
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &commands, int, auto &) {++commits;EXPECT_EQ(commands.size(),1);EXPECT_EQ(commands[0].arguments["amount"],7);return true; });
+    EXPECT_EQ(commits, 1);
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["test.provider"]["values"]["value"], 7);
+    ASSERT_EQ(runtime.Diagnostics().size(), 1);
+    EXPECT_EQ(runtime.ActiveOwners(), (std::vector<std::string>{"test.provider", "z.consumer"}));
+}
+
+TEST_F(ModRuntime, CommandRegistrationAuthorizationAndReadOnlyQueriesStayBounded) {
+    auto base = Manifest("test.base");
+    base["permissions"] = {"game.write"};
+    Add(R"(assert(chronicle.export_command('change',function() error('unauthorized command') end));return {})", base);
+    auto query = Manifest("test.query");
+    query["requires"] = {"test.base"};
+    query["permissions"] = {"game.write"};
+    Add(R"(assert(chronicle.export_query('probe',function()
+        local r,e=chronicle.call('services.command',{provider='test.base',name='change',arguments={}})
+        assert(not r and e:find('writable'))
+        return {ok=true}
+    end));return {})",
+        query);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.query"};
+    consumer["permissions"] = {"game.write"};
+    Add(R"(assert(not chronicle.export_command('bad:name',function() end))
+        for i=1,16 do
+            assert(chronicle.export_command('name'..i,function() return {} end))
+            assert(chronicle.export_query('name'..i,function() return {} end))
+        end
+        assert(not chronicle.export_command('extra',function() end))
+        assert(not chronicle.export_query('extra',function() end))
+        assert(not chronicle.call('services.command',{provider='test.query',name='probe',arguments={}}))
+        return {on_tick=function()
+            assert(not chronicle.export_command('late',function() end))
+            assert(chronicle.invoke_query('test.query','probe',{}).ok)
+            local r,e=chronicle.call('services.command',{provider='test.base',name='change',arguments={}})
+            assert(not r and e:find('declared dependency'))
+            assert(not chronicle.call('services.command',{provider='test.query',name='bad\0name',arguments={}}))
+            assert(not chronicle.call('services.command',{provider='test.query',name='probe',arguments={},caller='spoof'}))
+        end})",
+        consumer);
+    auto denied = Manifest("z.denied");
+    denied["requires"] = {"test.base"};
+    Add(R"(return {on_tick=function()
+        local r,e=chronicle.call('services.command',{provider='test.base',name='change',arguments={}})
+        assert(not r and e:find('permission'))
+    end})",
+        denied);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, CommandWritesEventsAndLegacyMoneyShareRootLimits) {
+    auto provider = Manifest("test.provider");
+    provider["permissions"] = {"game.write", "economy.write"};
+    Add(R"(assert(chronicle.export_command('bulk',function()
+        for i=1,32 do assert(chronicle.call('economy.add',{amount=1})) end
+        for i=1,8 do assert(chronicle.call('events.emit',{name='bulk',payload={}})) end
+        return {money=not not chronicle.add_money(20000)}
+    end));return {})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    consumer["permissions"] = {"game.write", "economy.write"};
+    Add(R"(return {on_tick=function()
+        assert(chronicle.call('services.command',{provider='test.provider',name='bulk',arguments={}}).money)
+        assert(not chronicle.call('services.command',{provider='test.provider',name='bulk',arguments={}}).money)
+        assert(not chronicle.call('economy.add',{amount=1}))
+        assert(not chronicle.call('events.emit',{name='overflow',payload={}}))
+    end})",
+        consumer);
+    Start();
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &commands, int money, auto &) {++commits;EXPECT_EQ(commands.size(),64);EXPECT_EQ(money,20000);return true; });
+    EXPECT_EQ(commits, 1);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, QueryAndCommandInvocationsShareBudgetAndCommandFailureRollsBack) {
+    auto provider = Manifest("test.provider");
+    Add(R"(assert(chronicle.export_query('read',function() return {} end))
+        assert(chronicle.export_command('change',function()
+            assert(chronicle.set('count',(chronicle.get('count') or 0)+1));return {}
+        end));return {})",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    consumer["permissions"] = {"game.write"};
+    Add(R"(return {on_tick=function()
+        assert(chronicle.invoke_query('test.provider','read',{}))
+        for i=1,15 do assert(chronicle.call('services.command',{provider='test.provider',name='change',arguments={}})) end
+        local r,e=chronicle.call('services.command',{provider='test.provider',name='change',arguments={}})
+        assert(not r and e:find('limit'))
+        assert(chronicle.set('ignored_limit',true))
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.provider"].contains("values"));
+    ASSERT_EQ(runtime.Diagnostics().size(), 1);
+}
+
+TEST_F(ModRuntime, InvalidCommandResultsCannotCommitProviderChanges) {
+    for (const std::string body : {"return {1,2}", "return function() end", "return {x=0/0}", "while true do end"}) {
+        auto provider = Manifest("test.provider");
+        Add("assert(chronicle.export_command('bad',function() assert(chronicle.set('changed',true)); " + body + " end)); return {}", provider);
+        auto consumer = Manifest();
+        consumer["requires"] = {"test.provider"};
+        consumer["permissions"] = {"game.write"};
+        Add(R"(return {on_tick=function()
+            local r,e=chronicle.call('services.command',{provider='test.provider',name='bad',arguments={}})
+            assert(not r and e)
+        end})",
+            consumer);
+        Start();
+        runtime.Tick({1, 0, 0, true});
+        EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.provider"].contains("values"));
+        EXPECT_EQ(runtime.Diagnostics().size(), 1);
+    }
+}
+
+TEST_F(ModNativeV2, NativeDependencyCommandsCommitAndRollbackProviderAndCallerTogether) {
+    for (const auto &mode : {std::string("command"), std::string("fail_command")}) {
+        auto provider = Manifest("test.provider");
+        provider["permissions"] = {"game.read", "game.write", "economy.write"};
+        Add(R"(assert(chronicle.export_command('reward',function(a,caller)
+            assert(caller=='test.native.v2')
+            assert(chronicle.player().hp==30)
+            assert(chronicle.set('changed',true))
+            assert(chronicle.call('economy.add',{amount=a.value}))
+            assert(chronicle.add_money(2))
+            return {value=a.value+100}
+        end)); return {})",
+            provider);
+        LoadPlugin(mode, CHRONICLE_NATIVE_V2_FIXTURE, true, true, {}, {"test.provider"});
+        int commits = 0;
+        runtime.Tick({1, 0, 0, true}, {}, [](auto) { return Json{
+                                                         {"hp", 30}
+ }; }, {}, [&](const auto &commands, int money, auto &) {
+            ++commits;EXPECT_EQ(commands.size(),1);EXPECT_EQ(commands[0].owner,"test.provider");EXPECT_EQ(commands[0].arguments["amount"],5);EXPECT_EQ(money,2);return true; });
+        const auto provider_state = Json::parse(runtime.SaveState())["mods"]["test.provider"];
+        if (mode == "command") {
+            EXPECT_EQ(commits, 1);
+            EXPECT_EQ(Values()["command_calls"], 1);
+            EXPECT_TRUE(provider_state["values"]["changed"]);
+            EXPECT_TRUE(runtime.Diagnostics().empty());
+        } else {
+            EXPECT_EQ(commits, 0);
+            EXPECT_FALSE(Values().contains("command_calls"));
+            EXPECT_FALSE(provider_state.contains("values"));
+            ASSERT_EQ(runtime.Diagnostics().size(), 1);
+        }
+    }
+}
+
+TEST_F(ModRuntime, CommandDepthLimitAndMissingExportsPoisonTheOuterTransaction) {
+    for (int i = 8; i >= 0; --i) {
+        auto manifest = Manifest("chain." + std::to_string(i));
+        manifest["permissions"] = {"game.write"};
+        const auto next = "chain." + std::to_string(i + 1);
+        if (i < 8) {
+            manifest["requires"] = {next};
+        }
+        const std::string body = i == 8 ? "return {}" : "return assert(chronicle.call('services.command',{provider='" + next + "',name='next',arguments={}}))";
+        Add("assert(chronicle.export_command('next',function() assert(chronicle.set('visited',true)); " + body + " end));return {}", manifest);
+    }
+    auto consumer = Manifest();
+    consumer["permissions"] = {"game.write"};
+    consumer["requires"] = {"chain.0"};
+    Add(R"(return {on_tick=function()
+        assert(not chronicle.call('services.command',{provider='chain.0',name='next',arguments={}}))
+        assert(chronicle.set('ignored',true))
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_EQ(runtime.Diagnostics().size(), 1);
+    auto states = Json::parse(runtime.SaveState())["mods"];
+    for (int i = 0; i <= 8; ++i) {
+        EXPECT_FALSE(states["chain." + std::to_string(i)].contains("values"));
+    }
+    EXPECT_FALSE(State().contains("values"));
+    Add(R"(return {on_tick=function()
+        assert(not chronicle.call('services.command',{provider='chain.0',name='missing',arguments={}}))
+        assert(chronicle.set('ignored',true))
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_EQ(runtime.Diagnostics().size(), 1);
+    EXPECT_FALSE(State().contains("values"));
+}
+
+TEST_F(ModRuntime, CommandExportsRebindAfterSaveLoadAndReset) {
+    auto provider = Manifest("test.provider");
+    Add(R"(assert(chronicle.export_command('add',function()
+        local n=(chronicle.get('count') or 0)+1
+        assert(chronicle.set('count',n));return {count=n}
+    end));return {})",
+        provider);
+    auto consumer = Manifest();
+    consumer["permissions"] = {"game.write"};
+    consumer["requires"] = {"test.provider"};
+    Add(R"(return {on_tick=function()
+        local r=assert(chronicle.call('services.command',{provider='test.provider',name='add',arguments={}}))
+        assert(chronicle.set('last',r.count))
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["last"], 1);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["last"], 2);
+    runtime.ResetState();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["last"], 1);
     EXPECT_TRUE(runtime.Diagnostics().empty());
 }

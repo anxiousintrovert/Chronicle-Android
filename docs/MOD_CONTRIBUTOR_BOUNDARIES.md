@@ -25,6 +25,11 @@ silently replace with competing implementations.
   callers; future domains can use it for ownership without trusting a caller's
   JSON identity. The current enemy-stat adapter owns only live retail fields;
   its forced-drop selector does not allocate or reserve custom item identities.
+- `services.command.v1` and `events.custom.v1`: generic dependency commands and
+  deferred owned notifications are available without defining contributor content
+  formats. A Lua command export receives the runtime-assigned caller identity and
+  shares the consumer's transaction. Provider permissions and engine ownership
+  apply; irreversible resource/cutscene work still needs a staged commit design.
 - `port/src/mods/manager.hpp`: package discovery, explicit local enable selection,
   dependency order, permissions, claims and diagnostics. Custom content should
   remain in separate packages, disabled by default. The existing parser rejects

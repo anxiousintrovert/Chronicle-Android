@@ -71,6 +71,15 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
             return 0;
         return !mode(host, "\"fail_emit_custom\"");
     }
+    if (mode(host, "\"command\"") || mode(host, "\"fail_command\"")) {
+        if (*(int *)state != 1)
+            return 1;
+        if (!increment(host, "command_calls") ||
+            !host->call(host->context, "services.command", "{\"provider\":\"test.provider\",\"name\":\"reward\",\"arguments\":{\"value\":5}}", &result) ||
+            !strstr(result, "\"value\":105"))
+            return 0;
+        return !mode(host, "\"fail_command\"");
+    }
     if (!increment(host, "ticks"))
         return 0;
     host->log(host->context, "v2 tick");
