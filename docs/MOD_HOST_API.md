@@ -67,6 +67,7 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `attachments.give` | `item`, `quantity`, optional `level` | `game.write` | Grant existing retail attachments to free regular slots; stat boosters accept level 1-3 |
 | `attachments.remove` | `bag_slot` | `game.write` | Discard one owned bag attachment, including an existing overflow record |
 | `weapons.build_up_list` | `slot`, optional `character` | `game.read` | Native evolution targets, requirements, and current eligibility without consuming RNG |
+| `weapons.upgrade` | `slot`, `seed`, optional `character` | `game.write` | Level up an unequipped retail weapon using full ABS or one Powerup Powder; absorb attachments atomically |
 | `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve an unequipped retail weapon after rechecking native requirements; atomic Mardan counter reset |
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
@@ -446,8 +447,43 @@ local targets = assert(chronicle.call("weapons.build_up_list", {slot=0}))
 ```
 
 Fitted attachment insertion/removal, active equipment refresh (including
-build-up of equipped weapons), and automatic level-up remain APIs to implement. The contributor still
+build-up and level-up of equipped weapons) remain APIs to implement. The contributor still
 owns custom item/weapon registration and content formats.
+
+### Retail weapon level-up
+
+`weapons.upgrade {slot=0..10, seed=0..4294967295, character=optional}` performs one
+retail level-up. Declare it in `requires_operations` and grant `game.write`.
+The weapon must belong to a joined character, be unequipped and below level 99.
+If ABS meets the native threshold, no item is consumed. Otherwise exactly one
+owned Powerup Powder is consumed, bag first then quick slots. Missing payment,
+invalid attachments, synthesis counter overflow or a later failed command rolls
+back the whole transaction, including payment and absorbed attachments.
+
+The operation applies the menu's attachment calculation, doubled socket values,
+native caps and option handling, adds one to attack/endurance/speed/magic, adds
+1-3 to WHP capacity up to 99, resets ABS, increments level and records absorbed
+SynthSpheres. Current WHP is preserved; this is not a repair. All six fitted
+attachment records are cleared on successful completion. Only the first five
+eligible, non-permanent sockets are rerolled, matching the retail menu's bounds.
+
+Random draws use the same package-local 32-bit LCG as retail grant operations,
+with the supplied seed; eligible socket rolls precede the capacity roll. Once a
+double socket is selected, later eligible sockets consume no further rolls.
+Results are deterministic for the same input weapon and seed, but do not promise
+the same outcome as the retail global RNG. No global RNG state is read or changed.
+The framework does not automatically level up weapons when ABS is granted.
+
+```lua
+-- Run from a gameplay callback or shared-manager action. Queued writes see
+-- earlier staged writes; queries see committed state until the next callback.
+assert(chronicle.call('weapons.abs_add', {slot=1, amount=32767}))
+assert(chronicle.call('weapons.upgrade', {slot=1, seed=42}))
+```
+
+Equipped weapons remain unavailable until active-effect refresh is implemented.
+This API consumes existing retail definitions only; custom item/weapon frameworks
+remain contributor-owned. No package or gameplay change is enabled by default.
 
 ### Retail weapon evolution
 

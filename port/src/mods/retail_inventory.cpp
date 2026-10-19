@@ -252,7 +252,7 @@ bool Handles(std::string_view op) {
            op == "weapons.give" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
            op == "weapons.attachments_get" || op == "items.native_definition" ||
            op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
-           op == "weapons.build_up_list" || op == "weapons.build_up" || op == "weapons.synthesize";
+           op == "weapons.build_up_list" || op == "weapons.build_up" || op == "weapons.upgrade" || op == "weapons.synthesize";
 }
 
 std::string Validate(std::string_view op, const Json &a) {
@@ -279,7 +279,7 @@ std::string Validate(std::string_view op, const Json &a) {
     if (op == "inventory.give" || op == "inventory.remove") {
         fields["quantity"] = {1, 100};
     }
-    if (op == "inventory.give" || op == "weapons.give") {
+    if (op == "inventory.give" || op == "weapons.give" || op == "weapons.upgrade") {
         fields["seed"] = {0, 4294967295.0};
     }
     if (op == "weapons.build_up") {
@@ -428,7 +428,80 @@ void BuildUp(CSaveData &save, const Json &a) {
     }
 }
 
+namespace {
+void Upgrade(CUserStatus &s, const Json &a) {
+    const int   character = Character(s, a), slot = a.at("slot").get<int>();
+    const auto &checked = Owned(s, a);
+    if (s.equipped_weapon_slot[character] == slot) {
+        throw std::runtime_error("upgrade requires an unequipped weapon until active effect refresh is supported");
+    }
+    if (checked.level >= 99 || checked.synthesis_count < 0) {
+        throw std::runtime_error("weapon level or synthesis counter cannot be upgraded");
+    }
+    const auto &definition = Definition(checked.item_no);
+    auto       &weapon = s.chara_weapons[character][slot];
+    if (weapon.experience < GetWeaponMaxExp(&weapon)) {
+        Apply(s, "inventory.remove", {
+                                         {"item",     ITEM_POWERUP_POWDER},
+                                         {"quantity", 1                  }
+        });
+    }
+    // SetLevelUpValue's data calculation, followed by SetLevelUpWeaponData and
+    // the menu's completion changes. Random draws are package-local, never rand().
+    ATTACH_LIST total{};
+    int         flags = 1 | weapon.flags;
+    int         spheres = 0;
+    for (int i = 0; i < 6; ++i) {
+        const auto &attachment = weapon.attach[i];
+        if (definition.hole[i] <= 0 || attachment.item_no < ITEM_ATTACH_START) {
+            continue;
+        }
+        AttachmentDefinition(attachment.item_no);
+        auto copy = attachment;
+        AttachMentValuePlus(&total, &copy, weapon.attach_kind[i] == 3 ? 2.0f : 1.0f);
+        if (attachment.item_no == ITEM_ATTACH_SYNTHESIS_SPHERE) {
+            ++spheres;
+            if (attachment.sphere_flags != 0 && attachment.sphere_flags != 1) {
+                flags |= attachment.sphere_flags;
+            }
+        }
+    }
+    if (weapon.synthesis_count > std::numeric_limits<int32_t>::max() - spheres) {
+        throw std::runtime_error("synthesis counter overflow");
+    }
+    weapon.flags |= CheckWeaponOptionStatus(flags);
+    weapon.attack = std::min(static_cast<int>(weapon.attack) + total.status[0] + 1, static_cast<int>(definition.attack_max));
+    weapon.endurance = std::min(static_cast<int>(weapon.endurance) + total.status[1] + 1, 99);
+    weapon.speed = std::min(static_cast<int>(weapon.speed) + total.status[2] + 1, 99);
+    weapon.magic = std::min(static_cast<int>(weapon.magic) + total.status[3] + 1, static_cast<int>(definition.magic_max));
+    for (int i = 0; i < 5; ++i) {
+        weapon.elem[i] = std::min(static_cast<int>(weapon.elem[i]) + total.elem[i], 99);
+    }
+    for (int i = 0; i < 10; ++i) {
+        weapon.vs_monster[i] = std::min(static_cast<int>(weapon.vs_monster[i]) + total.vs_monster[i], 99);
+    }
+    uint32_t seed = a.at("seed").get<uint32_t>();
+    bool     doubled = false;
+    // Retail menu rerolls only the first five sockets and preserves permanent ones.
+    for (int i = 0; i < 5; ++i) {
+        if (definition.hole[i] > 0 && definition.hole[i] != 2) {
+            weapon.attach_kind[i] = !doubled && Next(seed) % 50 == 5 ? 3 : 0;
+            doubled |= weapon.attach_kind[i] == 3;
+        }
+    }
+    weapon.durability = std::min(static_cast<int>(weapon.durability) + 1 + static_cast<int>(Next(seed) % 3), 99);
+    weapon.experience = 0;
+    ++weapon.level;
+    weapon.synthesis_count += spheres;
+    std::memset(weapon.attach, 0, sizeof(weapon.attach));
+}
+} // namespace
+
 void Apply(CUserStatus &s, std::string_view op, const Json &a) {
+    if (op == "weapons.upgrade") {
+        Upgrade(s, a);
+        return;
+    }
     if (op == "weapons.build_up") {
         throw std::runtime_error("build-up requires the save host");
     }

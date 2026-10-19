@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 67 implemented operations, native plugins and author
+a real host-call boundary, 68 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional unequipped build-up and status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, equipped build-up and fitted attachment insertion/removal with active effect refresh |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional unequipped level-up/build-up and status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, equipped upgrade/build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
@@ -550,3 +550,23 @@ All 15 Python tests and 3,840 upstream/empty/disabled same-seed cases passed.
 A PAL dungeon probe invoked the shared-manager action and displayed PASS retail
 build-up after checking the evolved weapon and committed fish-counter reset.
 No PS2 files changed. Other-platform runtime behavior remains unverified.
+
+## Retail weapon level-up (2026-10-19)
+
+`weapons.upgrade` supplies an explicit, transactional retail progression action
+for unequipped weapons. It uses full ABS or consumes one Powerup Powder, absorbs
+fitted attachments with native caps, increments level/synthesis, and rerolls
+eligible sockets with an explicit local seed. The global RNG is untouched.
+No engine override, automatic progression or contributor registry was added.
+Equipped progression remains gated pending active-effect refresh.
+
+Windows Clang 23.1.2 game/test builds passed. Final suite: 661 registered tests,
+654 passed, six skipped, one disabled. Four new tests cover native base-stat
+completion across retail definitions, deterministic rolls/global RNG isolation,
+attachment doubling/caps, payment, rollback, limits and argument validation.
+The first run exposed an incorrect saturation expectation in the test fixture;
+the corrected fixture and final full suite passed without a production-code fix.
+All 15 Python tests and 3,840 upstream/empty/disabled same-seed cases passed.
+A PAL shared-manager action displayed PASS retail upgrade after verifying both
+Powder and ABS payment paths and committed level changes. PS2 remains unchanged.
+Other-platform runtime behavior and equipped effect refresh remain unverified.

@@ -537,3 +537,189 @@ TEST(ModRetailValidation, BuildUpRequiresBoundedExactArgumentsAndSaveHost) {
     EXPECT_EQ(std::memcmp(&s, &before, sizeof(s)), 0);
 }
 } // namespace
+
+namespace {
+TEST_F(ModRetailInventory, UpgradeMatchesRetailBaseStatCompletionAcrossDefinitionsAndKeepsGlobalRng) {
+    auto &s = Status();
+    s.party_size = 6;
+    for (int item = ITEM_WEAPON_START; item < ITEM_WEAPON_END; ++item) {
+        const auto *d = GetWeaponData(item);
+        s.equipped_weapon_slot[d->owner] = 0;
+        auto &w = s.chara_weapons[d->owner][1];
+        WepDataListToHaveCopy(item, &w);
+        w.experience = GetWeaponMaxExp(&w);
+        w.durability_f = 1.5f;
+        w.synthesis_count = 3;
+        const auto     initial = w;
+        auto           expected = w;
+        CWeaponLevelUp native{};
+        native.weapon = &expected;
+        native.SetLevelUpWeaponData();
+        srand(81);
+        const int next = rand();
+        srand(81);
+        ASSERT_TRUE(Apply({
+            {"weapons.upgrade", {{"character", d->owner}, {"slot", 1}, {"seed", 27}}}
+        }))
+            << error;
+        EXPECT_EQ(rand(), next);
+        EXPECT_EQ(w.attack, expected.attack) << item;
+        EXPECT_EQ(w.magic, expected.magic) << item;
+        EXPECT_EQ(w.endurance, expected.endurance) << item;
+        EXPECT_EQ(w.speed, expected.speed) << item;
+        EXPECT_EQ(w.experience, expected.experience) << item;
+        EXPECT_EQ(w.item_no, item);
+        EXPECT_EQ(w.level, initial.level + 1);
+        EXPECT_EQ(w.synthesis_count, 3);
+        EXPECT_EQ(w.durability_f, 1.5f);
+        EXPECT_GE(w.durability, std::min(static_cast<int>(initial.durability) + 1, 99));
+        EXPECT_LE(w.durability, std::min(static_cast<int>(initial.durability) + 3, 99));
+        EXPECT_EQ(std::memcmp(w.elem, initial.elem, sizeof(w.elem)), 0);
+        EXPECT_EQ(std::memcmp(w.vs_monster, initial.vs_monster, sizeof(w.vs_monster)), 0);
+        int doubled = 0;
+        for (int i = 0; i < 5; ++i) {
+            if (d->hole[i] > 0 && d->hole[i] != 2) {
+                EXPECT_TRUE(w.attach_kind[i] == 0 || w.attach_kind[i] == 3);
+                doubled += w.attach_kind[i] == 3;
+            } else {
+                EXPECT_EQ(w.attach_kind[i], initial.attach_kind[i]);
+            }
+        }
+        EXPECT_LE(doubled, 1);
+        const auto first = w;
+        w = initial;
+        ASSERT_TRUE(Apply({
+            {"weapons.upgrade", {{"character", d->owner}, {"slot", 1}, {"seed", 27}}}
+        }))
+            << error;
+        EXPECT_EQ(std::memcmp(&w, &first, sizeof(w)), 0);
+    }
+}
+
+TEST_F(ModRetailInventory, UpgradeConsumesPowderOnlyWhenNeededAndRollsBackPaymentOnFailure) {
+    auto &s = Status();
+    auto &w = s.chara_weapons[0][1];
+    s.equipped_weapon_slot[0] = 0;
+    WepDataListToHaveCopy(ITEM_WEAPON_MARDAN_EINS, &w);
+    const GameCommand upgrade{
+        "weapons.upgrade", {{"slot", 1}, {"seed", 91}}
+    };
+    auto reject = [&](std::vector<GameCommand> commands) {
+        const auto before = std::make_unique<CSaveData>(*save);
+        EXPECT_FALSE(Apply(std::move(commands)));
+        EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    };
+    reject({upgrade});
+    s.item_pack.num = 3;
+    ASSERT_TRUE(Apply({
+        {"inventory.give", {{"item", ITEM_POWERUP_POWDER}, {"quantity", 1}, {"seed", 1}}}
+    }))
+        << error;
+    reject({
+        upgrade, {"economy.spend", {{"amount", 65535}}}
+    });
+    s.equipped_weapon_slot[0] = 1;
+    reject({upgrade});
+    s.equipped_weapon_slot[0] = 0;
+    w.level = 99;
+    reject({upgrade});
+    w.level = 0;
+    ASSERT_TRUE(Apply({upgrade})) << error;
+    EXPECT_EQ(w.level, 1);
+    EXPECT_EQ(Read("inventory.count", {
+                                          {"item", ITEM_POWERUP_POWDER}
+    })["quantity"],
+              0);
+    s.item_pack.quick_item_slot[0] = ITEM_POWERUP_POWDER;
+    s.item_pack.quick_item_qty[0] = 1;
+    s.item_pack.item_count = 1;
+    ASSERT_TRUE(Apply({
+        {"weapons.abs_add", {{"slot", 1}, {"amount", 32767}}},
+        upgrade
+    }))
+        << error;
+    EXPECT_EQ(w.level, 2);
+    EXPECT_EQ(s.item_pack.quick_item_qty[0], 1);
+    ASSERT_TRUE(Apply({upgrade})) << error;
+    EXPECT_EQ(w.level, 3);
+    EXPECT_EQ(s.item_pack.quick_item_qty[0], 0);
+}
+
+TEST_F(ModRetailInventory, UpgradeAbsorbsDoubledAttachmentsAndSpheresWithRetailCaps) {
+    auto &s = Status();
+    s.equipped_weapon_slot[0] = 0;
+    auto &w = s.chara_weapons[0][1];
+    int   item = ITEM_WEAPON_START;
+    for (; item < ITEM_WEAPON_END; ++item) {
+        const auto *d = GetWeaponData(item);
+        if (d->owner == 0 && d->hole[0] > 0 && d->hole[1] > 0) {
+            break;
+        }
+    }
+    ASSERT_LT(item, ITEM_WEAPON_END);
+    WepDataListToHaveCopy(item, &w);
+    w.attack = GetWeaponData(item)->attack_max - 1;
+    w.endurance = 90;
+    w.speed = 90;
+    w.magic = GetWeaponData(item)->magic_max - 1;
+    w.elem[0] = 90;
+    w.vs_monster[0] = 90;
+    w.durability = 99;
+    w.experience = GetWeaponMaxExp(&w);
+    AttachDataListToHaveCopy(ITEM_ATTACH_FIRE, &w.attach[0]);
+    w.attach_kind[0] = 3;
+    w.attach[0].elem[1] = 4;
+    w.elem[1] = 10;
+    w.attach[1] = {};
+    w.attach[1].item_no = ITEM_ATTACH_SYNTHESIS_SPHERE;
+    w.attach[1].sphere_weapon_no = item;
+    for (auto &v : w.attach[1].status) {
+        v = 20;
+    }
+    w.attach[1].vs_monster[0] = 20;
+    w.attach[1].elem[0] = 20;
+    w.synthesis_count = std::numeric_limits<int32_t>::max();
+    const auto before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(Apply({
+        {"weapons.upgrade", {{"slot", 1}, {"seed", 91}}}
+    }));
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    w.synthesis_count = 4;
+    ASSERT_TRUE(Apply({
+        {"weapons.upgrade", {{"slot", 1}, {"seed", 91}}}
+    }))
+        << error;
+    EXPECT_EQ(w.synthesis_count, 5);
+    EXPECT_EQ(w.attack, GetWeaponData(item)->attack_max);
+    EXPECT_EQ(w.magic, GetWeaponData(item)->magic_max);
+    EXPECT_EQ(w.endurance, 99);
+    EXPECT_EQ(w.speed, 99);
+    EXPECT_EQ(w.elem[0], 99);
+    EXPECT_EQ(w.elem[1], 18);
+    EXPECT_EQ(w.vs_monster[0], 99);
+    EXPECT_EQ(w.durability, 99);
+    for (const auto &attachment : w.attach) {
+        const ATTACH_LIST empty{};
+        EXPECT_EQ(std::memcmp(&attachment, &empty, sizeof(empty)), 0);
+    }
+}
+
+TEST(ModRetailValidation, UpgradeRequiresExplicitSeedAndRejectsUnknownArguments) {
+    EXPECT_TRUE(mods::ValidateOperation("weapons.upgrade", {
+                                                               {"slot", 1          },
+                                                               {"seed", 4294967295u}
+    })
+                    .empty());
+    for (const auto &args : std::vector<Json>{
+             {{"slot", 1}},
+             {{"slot", 1}, {"seed", -1}},
+             {{"slot", 1}, {"seed", 4294967296ull}},
+             {{"slot", 1}, {"seed", 1.5}},
+             {{"slot", 11}, {"seed", 1}},
+             {{"slot", 1}, {"seed", 1}, {"levels", 2}},
+             {{"slot", 1}, {"seed", 1}, {"character", 6}}
+    }) {
+        EXPECT_FALSE(mods::ValidateOperation("weapons.upgrade", args).empty());
+    }
+}
+} // namespace
