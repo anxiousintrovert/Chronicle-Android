@@ -859,3 +859,46 @@ Queued owner-controlled loading, walking/conversation/event behavior, transition
 restoration on disable, and shared-manager invocation still need implementation
 and end-to-end verification before town API publication. The operation count
 remains 81 and the broader coverage goal remains open.
+
+## Town selection ownership coordinator (2026-10-19; internal)
+
+`mods::TownSelection` now coordinates pending selection, exclusive ownership and
+restoration independently of native resource storage. It is not yet connected to
+the runtime host-operation catalog or the main loop, so it adds no active engine
+behavior and the implemented public operation count remains 81.
+
+The coordinator accepts one owned `party.town_set_active` command with an integer
+`character` from 0 to 5, rejecting mixed writes/currency and competing owners. It
+checks scene readiness, joined membership and asset preflight at enqueue and again
+at the post-frame boundary. Selecting the existing member is a no-op; selecting
+Toan releases ownership after a successful restoration. An idle coordinator does
+not inspect owners, probe files, call a loader or consume RNG.
+
+Owner shutdown, runtime epoch change or removal of the selected party member
+creates a restoration obligation. Menus/events or missing resources defer it with
+a reason. Failed or throwing native loaders retain that obligation even for the
+first switch, because failure may have happened after partial resource changes.
+No competing owner can acquire the character until restoration succeeds or the
+native adapter acknowledges scene retirement. A scene-token mismatch does not
+silently release ownership or run a loader against the new scene. Queries report
+state, reason, owner, last successfully selected character, pending target and
+restoration status; a failed partial load is not a confirmed displayed character.
+
+Eight Clang tests cover dormant/no-op behavior, delayed loads, exact arguments,
+exclusive transactions, conflicts, repeated selections, preflight/readiness
+rechecks, cancellation, epoch changes, deferred cleanup, partial-load exceptions,
+failed restoration preflight, scene retirement and lost party membership. The
+native adapter must still supply verified readiness, scene tokens and actual
+resource retirement notifications. These unit tests do not establish those hooks,
+real menu/transition cleanup or rendered behavior.
+
+The 16 Python tests pass and the refreshed 3,840-case seed matrix remains identical
+to the pinned baseline for empty and disabled mod configurations. No PS2 files
+changed. The next integration step is the native post-frame loader/retirement
+adapter and then the public host calls through the existing shared manager actions;
+all broader coverage gaps remain open.
+
+Validation receipt: llvm-mingw Clang 23.1.2 Release game/tests build passed; full
+suite 730 registered, 718 passed, 11 skipped, one disabled, no failures. After
+making the coordinator non-copyable, the final rebuild and all eight focused
+tests passed again. No production caller instantiates this coordinator yet.
