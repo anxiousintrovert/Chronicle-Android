@@ -32,6 +32,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `player.get` | optional `character` | `game.read` | Character, HP/capacity, defense, water/capacity, ailments, equipped slot |
 | `party.active` | none | `game.read` | Same snapshot for controlled character |
 | `party.list` | none | `game.read` | Joined character snapshots |
+| `party.switch_state` | none | `game.read` | Dungeon switch readiness, per-member reasons and last deferred request |
+| `party.set_active` | `character` | `game.write` | Request native switch to a joined retail character (0–5) after the frame; exclusive engine write |
 | `player.thirst_get` | optional `character` | `game.read` | Water/capacity and native drain/step enable flags |
 | `inventory.get` | none | `game.read` | Capacity, bag slots and quick-use slots |
 | `weapons.list` | none | `game.read` | Owned native weapons, character/slot, item, level, stats, WHP and ABS |
@@ -104,6 +106,44 @@ delta is staged before the named commands. Prefer one currency API style within
 a callback. Separate callbacks/mods commit in deterministic dependency order;
 there is no transaction spanning multiple callbacks. Native plugin ticks and Lua
 callbacks are separate transactions.
+
+### Deferred native character switching
+
+`party.set_active` is a resource-loading request, not an atomic save edit. It must
+be the callback's only engine write, including writes from dependency commands and
+legacy currency calls. A successful call queues the command; successful callback
+validation publishes the request. Native loading runs after `MGEndFrame`, outside
+the frame that used the old character resources. Do not treat the call's return
+value as proof that loading completed.
+
+`party.switch_state` returns `ready`, `reason`, `character`, `members` (each with
+`character`, `allowed`, `reason`) and `request`. The request begins as
+`{state="idle"}`; thereafter it reports `state` (`pending`, `complete`, `failed`
+or `cancelled`), `owner`, `from`, `target` and `reason`. This is the most recent
+request across all mods. Only one request can be pending; a second caller receives
+the current owner's conflict reason. Use the existing shared-manager action API
+to offer a switch button, and let an `on_tick` callback submit it once ready after
+the menu closes.
+
+Switches require stable dungeon play, synchronized native character/weapon
+resources, a joined living target with a valid equipped weapon, and no action,
+jump, event, presentation, first-person view, restrictive character floor, active
+knockout or blocked Osmond ground. The host rechecks these conditions at execution
+and cancels requests whose owner stopped or whose runtime epoch changed. It also
+checks required character, weapon, effect, voice and menu files before and after
+queuing. `ready` describes gameplay readiness; missing or invalid assets can still
+reject a request. Preflight checks file availability, not arbitrary pack validity.
+
+The native loader updates the model, weapon/effect resources, attachment statistics,
+voice and loaded-character cache. Selecting the already active member is a no-op.
+Completed switches persist like a player's native switch and are not reversed on
+mod disable. Failed callbacks publish no request; a later load failure is reported
+through `request` and does not roll back already committed mod scalar state. Native
+resource loading is not a rollback-capable transaction. Town-character selection
+and party recruitment remain separate APIs, not aliases for this request.
+
+With no request pending, the end-of-frame hook returns immediately without reading
+game state, checking assets or loading resources.
 
 ### Retail player statuses
 

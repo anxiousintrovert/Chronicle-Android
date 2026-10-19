@@ -27,7 +27,7 @@ TEST(ModApi, DetachedQueriesAndEmptyWritesPreserveEveryNativeByteAndRng) {
     const int expected = rand();
     srand(715);
     for (const auto &op : mods::Operations()) {
-        if (!op.writes && op.name != "weapons.refresh_state" && op.name != "combat.get" && !op.name.starts_with("entities.") && !op.name.starts_with("physics.") && !op.name.starts_with("services.") && !op.name.starts_with("shops.") && !op.name.starts_with("story.") && !op.name.starts_with("map.") && !op.name.starts_with("fishing.") && !op.name.starts_with("georama.")) {
+        if (!op.writes && op.name != "party.switch_state" && op.name != "weapons.refresh_state" && op.name != "combat.get" && !op.name.starts_with("entities.") && !op.name.starts_with("physics.") && !op.name.starts_with("services.") && !op.name.starts_with("shops.") && !op.name.starts_with("story.") && !op.name.starts_with("map.") && !op.name.starts_with("fishing.") && !op.name.starts_with("georama.")) {
             Json args = Json::object();
             if (op.name.starts_with("weapons.") && op.name != "weapons.list") {
                 args["slot"] = 0;
@@ -143,7 +143,7 @@ TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
     const auto expected = rand();
     srand(811);
     for (const auto &op : mods::Operations()) {
-        if (op.writes || op.name == "weapons.refresh_state" || op.name == "combat.get" || (op.name.starts_with("entities.") || op.name.starts_with("physics.") || op.name.starts_with("services.") || op.name.starts_with("shops."))) {
+        if (op.writes || op.name == "party.switch_state" || op.name == "weapons.refresh_state" || op.name == "combat.get" || (op.name.starts_with("entities.") || op.name.starts_with("physics.") || op.name.starts_with("services.") || op.name.starts_with("shops."))) {
             continue;
         }
         Json a = Json::object();

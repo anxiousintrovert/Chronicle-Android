@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string_view>
 
 #include "common.h"
 
@@ -11,3 +12,6 @@ std::vector<s32> DataLanguages();
 // The languages the game can offer: the disc's own. A localization pack, once the port has them,
 // adds the languages it carries here.
 std::vector<s32> SupportedLanguages();
+
+// Read-only preflight against the already initialized data index and active replacements.
+bool DataFileAvailable(std::string_view path);

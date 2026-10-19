@@ -190,6 +190,15 @@ PORT_OVERRIDE int LoadFile(char *path, void *buffer, int *out_size) {
     return 1;
 }
 
+bool DataFileAvailable(std::string_view path) {
+    if (!data_indexed) return false;
+    const auto* file = Lookup(path);
+    if (!file) return false;
+    std::error_code error;
+    const auto size = fs::file_size(*file, error);
+    return !error && size > 0 && size <= INT32_MAX && std::ifstream(*file, std::ios::binary).good();
+}
+
 PORT_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
     if (out_size) {
         *out_size = 0;

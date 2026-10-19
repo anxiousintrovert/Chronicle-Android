@@ -20,6 +20,7 @@
 #include "runtime.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
+#include "party.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -219,6 +220,7 @@ void TickGame() {
             result["writable"] = ShopWritesReady();
             return result;
         }
+        if (operation == "party.switch_state") return ReadPartySwitchState();
         if (operation == "weapons.refresh_state") {
             const auto equipment = CurrentEquipment();
             nlohmann::json result = {{"ready", equipment.has_value()},
@@ -249,6 +251,9 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "party.set_active"; })) {
+            return QueuePartySwitch(commands, money, error);
+        }
         for (const auto &command : commands) {
             if ((command.operation == "combat.damage" || command.operation == "player.status_add" || command.operation == "player.status_remove") &&
                 UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus())) {

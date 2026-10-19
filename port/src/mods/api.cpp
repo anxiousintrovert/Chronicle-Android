@@ -11,6 +11,7 @@
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
+#include "party.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -18,6 +19,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"party.switch_state", "game.read", "Inspect native party-switch readiness and the last request.", false},
+    {"party.set_active", "game.write", "Request a native character switch after the current frame.", true},
     {"shops.list",                "game.read",     "List native shop lineups and shared base prices.",                             false},
     {"shops.get",                 "game.read",     "Inspect one native shop and its current resource owners.",                     false},
     {"shops.set_items",           "game.write",    "Own a native shop lineup of up to 20 retail goods.",                           true },
@@ -215,6 +218,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name.starts_with("shops.")) {
         return ValidateShop(name, a);
     }
+    if (name == "party.switch_state" || name == "party.set_active") return ValidatePartySwitch(name, a);
     if (retail::Handles(name)) {
         return retail::Validate(name, a);
     }

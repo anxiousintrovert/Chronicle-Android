@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 79 implemented operations, native plugins and author
+a real host-call boundary, 81 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -15,7 +15,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload | Recruitment, town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
@@ -671,3 +671,36 @@ PASS shop restore in the shared mod manager; its log reported no unreadable bank
 or sequence. This is Windows runtime evidence, not a listening assessment or
 Android/Linux/macOS certification. Official Chronicle master is a separate
 checkout and still needs its own migration PR; no upstream PR was opened here.
+
+## Native dungeon party switching (2026-10-19)
+
+`party.switch_state` reports gameplay readiness, per-member rejection reasons and
+last-request state. `party.set_active` queues an exclusive resource-changing
+request, revalidates ownership/native state/assets, then calls the native loader
+after the frame closes. It reloads the retail model, weapon/effect and voice;
+requests do not merely overwrite the save's current-character byte. A completed
+switch is a one-shot gameplay action, not an owned override to restore on disable.
+Town selection and recruitment remain in the coverage ledger.
+
+The idle end-of-frame hook returns before accessing native game state or assets.
+No shipped package enables this feature. Eight queue tests cover unchanged save
+bytes/RNG before execution, exactly-once completion, no-op selection, exclusive
+writes/conflicts, invalid native party/weapon state, owner/epoch cancellation,
+changed runtime guards, missing assets and loader failures. Clang 23.1.2 Windows
+game/test builds pass. The full suite registered 716 tests: 705 passed, ten skipped,
+one disabled. All 15 author-tool Python tests pass.
+
+The separately enabled `ModPartyRetail.SixMemberRoundTripThroughNativeResources`
+test passes against owned PAL data. Its test-only pump creates a six-member party;
+a Lua package switches Toan -> Xiao -> Goro -> Ruby -> Ungaga -> Osmond -> Toan,
+allows 45 ticks per character, verifies the native equipped cache after each load,
+and executes a verification action through the shared manager's action queue.
+It leaves its package/log/screenshot in the chosen disposable audit directory.
+Run this test alone, with `DC_DATA` and `DC_PARTY_AUDIT` set; it is skipped otherwise.
+No save/disc assets are committed, and the fixture is not part of the game binary.
+This does not verify every weapon/effect variant, town switching or other platforms.
+
+The refreshed 3,840-case seed matrix remains byte-identical to pinned upstream
+`50eaff633e4e02e5dbc6a7a6a84c7e34688cb738`, with both empty and installed-disabled
+mod sets. The `ps2/` diff remains empty. This matrix covers the documented generator
+cases, not an assertion of complete retail-gameplay equivalence.
