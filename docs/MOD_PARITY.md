@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 56 implemented operations, native plugins and author
+a real host-call boundary, 58 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live HP/maximum/defense/reward/drop fields with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned visual scale, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,29 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Owned enemy stat validation (2026-10-19)
+
+`entities.set_stats` and `entities.reset_stats` expose live HP, maximum HP,
+defense, experience/money parameters and retail forced drops through the shared
+Lua/native transaction boundary. Package identity is assigned by the runtime.
+Field conflicts identify the existing owner; failed mixed save/entity batches
+publish neither claims nor values. Port-side cleanup handles module failure,
+runtime replacement, dungeon exit, floor clearing and native slot reuse. Health
+restoration preserves subsequent combat changes proportionally and cannot revive
+a dead actor. These calls do not change templates or implement spawn-time tuning.
+
+Clang Windows Release game/test builds passed. The full 536-case run had 528
+passes and eight environment/optional skips; all 15 Python tests passed. Nine
+focused stat tests passed after the final empty-claim cleanup, including the
+game bridge with no running packages. Runtime tests cover trusted ownership for
+Lua and a real native plugin. The 3,840-case empty/disabled generator comparison
+matches pinned upstream exactly. PS2 source remains unchanged.
+
+An isolated PAL dungeon replay used the shared manager action to change all six
+fields, inspect their committed values, reset them and verify their originals;
+the manager displayed `PASS owned stats`. This does not validate every boss phase,
+reward script or platform. Other-platform execution remains unverified.
 
 ## Enemy-kill event validation (2026-10-19)
 

@@ -16,6 +16,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"entities.set_stats",      "game.write",    "Own selected live enemy stats with conditional restoration.",                  true },
+    {"entities.reset_stats",    "game.write",    "Release this package's live enemy stat changes.",                              true },
     {"combat.get",              "game.read",     "Read native floor enemy count and recorded kills.",                            false},
     {"combat.damage",           "game.write",    "Apply bounded scripted enemy damage and queue native hit/death processing.",   true },
     {"combat.heal",             "game.write",    "Restore bounded HP to an active live enemy without exceeding native maximum.", true },

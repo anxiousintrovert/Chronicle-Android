@@ -387,7 +387,7 @@ int ApiCall(lua_State *L) {
         if (m.commands.size() >= 64) {
             return Failure(L, "callback write budget exceeded");
         }
-        m.commands.push_back({name, m.arguments});
+        m.commands.push_back({name, m.arguments, m.package.id});
         lua_pushboolean(L, true); // Queued; the whole callback commits or fails together.
         return 1;
     }
@@ -460,7 +460,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             if (!m.commit_game || !*m.commit_game || m.commands.size() >= 64) {
                 throw std::runtime_error("write provider unavailable or callback write budget exceeded");
             }
-            m.commands.push_back({name, args});
+            m.commands.push_back({name, args, m.package.id});
             m.native_result = "{\"queued\":true}";
         } else {
             if (!m.query_game || !*m.query_game) {
@@ -1231,6 +1231,16 @@ bool Runtime::WantsEnemyDeaths() const {
         return !m->failed && (m->listeners.contains("on_enemy_killed") ||
                               (m->native && m->native->WantsEvent(CHRONICLE_EVENT_ENEMY_KILLED)));
     });
+}
+
+std::vector<std::string> Runtime::ActiveOwners() const {
+    std::vector<std::string> owners;
+    for (const auto &module : impl_->modules) {
+        if (!module->failed) {
+            owners.push_back(module->package.id);
+        }
+    }
+    return owners;
 }
 
 std::vector<ActionStatus> Runtime::Actions(std::string_view owner) const {

@@ -26,6 +26,8 @@ using ReadGame = std::function<nlohmann::json(std::string_view)>;
 struct GameCommand {
     std::string    operation;
     nlohmann::json arguments;
+    // Assigned by the runtime, never accepted from script/native JSON arguments.
+    std::string owner;
 };
 
 using QueryGame = std::function<nlohmann::json(std::string_view, const nlohmann::json &)>;
@@ -53,14 +55,15 @@ public:
     Runtime();
     ~Runtime();
     Runtime(const Runtime &) = delete;
-    Runtime &operator=(const Runtime &) = delete;
-    void     Start(const Manager &manager);
-    void     Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
-                  const QueryGame &query_game = {}, const CommitGame &commit_game = {},
-                  std::span<const EnemyDeath> deaths = {}, unsigned dropped_deaths = 0);
-    void     ResetState();
-    bool     HasGameplay() const;
-    bool     WantsEnemyDeaths() const;
+    Runtime                 &operator=(const Runtime &) = delete;
+    void                     Start(const Manager &manager);
+    void                     Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
+                                  const QueryGame &query_game = {}, const CommitGame &commit_game = {},
+                                  std::span<const EnemyDeath> deaths = {}, unsigned dropped_deaths = 0);
+    void                     ResetState();
+    bool                     HasGameplay() const;
+    bool                     WantsEnemyDeaths() const;
+    std::vector<std::string> ActiveOwners() const;
 
     std::uint64_t Epoch() const { return epoch_; }
 

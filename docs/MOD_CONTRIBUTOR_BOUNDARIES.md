@@ -21,6 +21,10 @@ silently replace with competing implementations.
   state. Save-field transactions currently stage copies. A future cutscene or
   resource-loading command must not perform irreversible/global side effects
   during validation or pretend those effects are rolled back by copying a save.
+  Queued `GameCommand.owner` is assigned by the runtime for both Lua and native
+  callers; future domains can use it for ownership without trusting a caller's
+  JSON identity. The current enemy-stat adapter owns only live retail fields;
+  its forced-drop selector does not allocate or reserve custom item identities.
 - `port/src/mods/manager.hpp`: package discovery, explicit local enable selection,
   dependency order, permissions, claims and diagnostics. Custom content should
   remain in separate packages, disabled by default. The existing parser rejects

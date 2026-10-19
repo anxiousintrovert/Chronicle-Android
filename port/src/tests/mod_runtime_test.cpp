@@ -85,6 +85,34 @@ TEST_F(ModRuntime, EpochChangesOnlyWhenRuntimeStateIsReplaced) {
     EXPECT_NE(loaded, runtime.Epoch());
 }
 
+TEST_F(ModRuntime, QueuedWritesCarryTrustedOwnerAndFailedModulesLoseOwnership) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"economy.write"};
+    Add(R"(local ticks=0
+        return {on_tick=function()
+            ticks=ticks+1
+            if ticks>1 then error('stop owner') end
+            assert(chronicle.call('economy.add',{amount=1}))
+        end})",
+        manifest);
+    Start();
+    ASSERT_EQ(runtime.ActiveOwners(), (std::vector<std::string>{"test.mod"}));
+    unsigned   writes = 0;
+    const auto commit = [&](const std::vector<mods::GameCommand> &commands, int, std::string &) {
+        for (const auto &command : commands) {
+            ++writes;
+            EXPECT_EQ(command.owner, "test.mod");
+            EXPECT_FALSE(command.arguments.contains("owner"));
+        }
+        return true;
+    };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_EQ(writes, 1);
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_TRUE(runtime.ActiveOwners().empty());
+    EXPECT_EQ(writes, 1);
+}
+
 TEST_F(ModRuntime, EnemyDeathListenersReceiveDetachedContextBeforeTickAndRejectStaleFloors) {
     Add(R"(assert(chronicle.subscribe('enemy_killed',function(w)
         assert(w.event.entity=='16' and w.event.source=='scripted')
@@ -1012,6 +1040,23 @@ TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {
                                   "test.native.v2: [native] v2 started", "test.native.v2: [native] game_enter", "test.native.v2: [native] map_enter",
                                   "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] v2 tick",
                                   "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] game_leave"}));
+}
+
+TEST_F(ModNativeV2, NativeHostWritesCarryRuntimePackageOwner) {
+    LoadPlugin();
+    unsigned writes = 0;
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const std::vector<mods::GameCommand> &commands, int, std::string &) {
+        for (const auto &command : commands) {
+            ++writes;
+            EXPECT_EQ(command.owner, "test.native.v2");
+        }
+        return true;
+    });
+    EXPECT_GT(writes, 0);
+    EXPECT_EQ(runtime.ActiveOwners(), (std::vector<std::string>{"test.native.v2"}));
+    mods::Manager empty;
+    runtime.Start(empty);
+    EXPECT_TRUE(runtime.ActiveOwners().empty());
 }
 
 TEST_F(ModNativeV2, EnemyDeathsDeliverNativePayloadAndRollbackFailedCallbacks) {

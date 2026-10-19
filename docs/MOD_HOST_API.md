@@ -544,6 +544,60 @@ other ailments. Native stepping controls animation, timer progression and expiry
 inactive simulation may delay those effects. This is not persistent per-mod stat
 ownership or a damage-formula API.
 
+### Owned live enemy stats
+
+`entities.set_stats` and `entities.reset_stats` require `game.write`, an active
+dungeon and a current handle for an active, revealed, living enemy. Both Lua and
+native plugins use these calls. Declare them in `requires_operations` when needed.
+
+```lua
+assert(chronicle.call('entities.set_stats', {
+  entity = enemy.entity, max_hp = 300, defense = 40, reward_exp = 80
+}))
+-- In a later callback, release only this package's changes to this enemy:
+assert(chronicle.call('entities.reset_stats', {entity = enemy.entity}))
+```
+
+Provide at least one stat; omitted fields remain unchanged. Unknown fields,
+nonintegers and out-of-range values reject the entire callback transaction.
+
+| Field | Allowed values |
+|---|---|
+| `hp`, `max_hp` | 1–1,000,000; HP must not exceed the resulting maximum |
+| `defense`, `reward_exp` | 0–32,767 |
+| `reward_money` | 0–2,147,483,647 |
+| `drop_item` | -1 clears the forced drop; existing retail IDs 81–376 except invalid attachment 131 |
+
+These are native enemy parameters, not guaranteed rewards: normal native drop,
+reward and death-script conditions still apply. Clearing a forced drop restores
+normal selection; it does not suppress all drops. There is no custom item registry.
+Changing maximum HP without an explicit HP scales current HP proportionally,
+rounding down with a minimum of one for a living enemy. Commands later in the same
+callback see the staged maximum for validation/healing. Public queries continue
+to read committed state until that callback finishes.
+
+The runtime supplies the package owner; scripts/plugins cannot impersonate another
+owner through arguments. Different packages may own different fields. A competing
+claim rejects the whole callback with the field and existing owner's ID in the
+manager diagnostic. Maximum-HP writes also claim HP to prevent split ownership.
+No partially applied fields or claims survive failed save, scene or entity writes.
+
+Reset releases the caller's fields only. Owned changes are also released when the
+module fails, the runtime/save state is replaced, dungeon gameplay ends, or native
+code clears/reuses the slot. Module cleanup happens at the game-bridge boundary;
+changing manager enable selections still requires restart. Claims are session-local
+and are not saved. Cleanup also covers units that are no longer being inspected.
+
+Unchanged owned values restore their pre-claim baseline. Later native changes are
+preserved; a new explicit write rebases its baseline if native code superseded the
+last requested value. If maximum HP is restored after damage/healing, health keeps
+its current fraction of maximum (rounded down); zero HP is never resurrected.
+This is conditional restoration, not a continuous stat lock: native phase scripts
+can replace values. Identical native writes cannot be distinguished from unchanged
+values. Live stats do not modify spawn templates, collision sizes or damage formulas.
+The port keeps at most eight units of ownership records, each with the unchanged
+16 retail enemy slots. No records are created without explicit stat commands.
+
 ### Live enemy inspection
 
 `entities.list` takes no arguments and requires `game.read` plus an active dungeon.

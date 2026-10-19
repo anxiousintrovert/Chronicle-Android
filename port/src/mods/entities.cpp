@@ -45,7 +45,8 @@ nlohmann::json Snapshot(const MONSTOR &actor, EntityHandles::Handle handle) {
 } // namespace
 
 bool IsEntityWrite(std::string_view operation) {
-    return operation == "combat.heal" || operation == "combat.damage" || operation == "combat.status_add";
+    return operation == "combat.heal" || operation == "combat.damage" || operation == "combat.status_add" ||
+           operation == "entities.set_stats" || operation == "entities.reset_stats";
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
@@ -74,6 +75,39 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
 }
 
 std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json &a) {
+    if (operation == "entities.set_stats" || operation == "entities.reset_stats") {
+        if (!a.is_object() || !a.contains("entity") || !a["entity"].is_string() ||
+            !Parse(a["entity"].get_ref<const std::string &>())) {
+            return "provide a current entity handle";
+        }
+        if (operation == "entities.reset_stats") {
+            return a.size() == 1 ? "" : "reset_stats takes only entity";
+        }
+        if (a.size() < 2) {
+            return "provide at least one enemy stat";
+        }
+        for (const auto &[key, value] : a.items()) {
+            if (key == "entity") {
+                continue;
+            }
+            const auto it = std::ranges::find(EnemyStatNames, key);
+            if (it == EnemyStatNames.end() || !value.is_number_integer()) {
+                return "unknown or noninteger enemy stat: " + key;
+            }
+            const auto   index = it - EnemyStatNames.begin();
+            const double minimum = index < 2 ? 1 : index == 5 ? -1
+                                                              : 0;
+            const double maximum = index < 2 ? 1000000 : index == 4 ? 2147483647
+                                                     : index == 5   ? 376
+                                                                    : 32767;
+            const double number = value.get<double>();
+            if (number < minimum || number > maximum ||
+                (index == 5 && number != -1 && (number < 81 || number == 131))) {
+                return "enemy stat out of range: " + key;
+            }
+        }
+        return {};
+    }
     const bool heal = operation == "combat.heal" || operation == "combat.damage";
     if (!IsEntityWrite(operation) || !a.is_object() || a.size() != (heal ? 2u : 3u) ||
         !a.contains("entity") || !a["entity"].is_string() || !Parse(a["entity"].get_ref<const std::string &>())) {
@@ -94,6 +128,7 @@ std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json
 bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand> &commands, std::string &error) {
     unit_ = nullptr;
     values_ = {};
+    owners_.reset();
     error.clear();
     if (commands.size() > 64) {
         error = "callback write budget exceeded";
@@ -119,11 +154,63 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
         const auto &actor = unit->monster[*slot];
         auto       &value = values_[*slot];
         if (!value.touched) {
-            value = {true, actor.hp, actor.slow_timer, actor.stop_timer};
+            value = {true, ReadEnemyStats(actor), actor.slow_timer, actor.stop_timer};
         }
-        if (value.hp <= 0 || actor.max_hp < value.hp) {
+        auto &hp = value.stats[0];
+        auto &max_hp = value.stats[1];
+        if (hp <= 0 || max_hp < hp) {
             error = "enemy is already dying or has invalid native health";
             return false;
+        }
+        if (command.operation == "entities.set_stats" || command.operation == "entities.reset_stats") {
+            if (command.owner.empty()) {
+                error = "stat writes require a runtime package owner";
+                return false;
+            }
+            if (!owners_) {
+                owners_ = OwnedEnemyStats();
+            }
+            if (command.operation == "entities.reset_stats") {
+                if (const auto it = owners_->find(unit); it != owners_->end()) {
+                    ReleaseEnemyStats(it->second[*slot], value.stats, command.owner);
+                    PruneOwnedEnemyStats(*owners_);
+                }
+                continue;
+            }
+            if (!owners_->contains(unit) && owners_->size() >= 8) {
+                error = "owned enemy stat unit capacity exhausted";
+                return false;
+            }
+            auto       &claims = (*owners_)[unit][*slot];
+            auto        requested = value.stats;
+            const auto &args = command.arguments;
+            for (unsigned i = 0; i < requested.size(); ++i) {
+                if (args.contains(EnemyStatNames[i])) {
+                    requested[i] = args.at(EnemyStatNames[i]).get<int>();
+                }
+            }
+            if (args.contains("max_hp") && !args.contains("hp")) {
+                requested[0] = ScaleEnemyHealth(hp, max_hp, requested[1]);
+            }
+            if (requested[0] > requested[1]) {
+                error = "requested enemy HP exceeds maximum";
+                return false;
+            }
+            const bool rebase_health = claims[1].owner == command.owner && max_hp == claims[1].applied &&
+                                       hp != claims[0].applied;
+            const int  original_health = rebase_health ? ScaleEnemyHealth(hp, max_hp, claims[1].original) : hp;
+            for (unsigned i = 0; i < requested.size(); ++i) {
+                if ((args.contains(EnemyStatNames[i]) || (i == 0 && args.contains("max_hp"))) &&
+                    !claims[i].Claim(command.owner, value.stats[i], requested[i], error)) {
+                    error = std::string(EnemyStatNames[i]) + ": " + error;
+                    return false;
+                }
+            }
+            if (rebase_health && (args.contains("hp") || args.contains("max_hp"))) {
+                claims[0].original = original_health;
+            }
+            value.stats = requested;
+            continue;
         }
         if (command.operation == "combat.damage") {
             if (actor.invincible_timer > 0) {
@@ -133,17 +220,17 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
                 error = "pending native damage reaction capacity is exhausted";
                 return false;
             }
-            value.damage = std::min(value.hp, command.arguments.at("amount").get<int>());
-            value.hp -= value.damage;
-            value.reaction = value.hp == 0 ? MONSTER_DMG_KILLED : MONSTER_DMG_HIT;
+            value.damage = std::min(hp, command.arguments.at("amount").get<int>());
+            hp -= value.damage;
+            value.reaction = hp == 0 ? MONSTER_DMG_KILLED : MONSTER_DMG_HIT;
             continue;
         }
         if (command.operation == "combat.heal") {
-            if (actor.max_hp < value.hp) {
+            if (max_hp < hp) {
                 error = "enemy health exceeds its native maximum";
                 return false;
             }
-            value.hp += std::min(command.arguments.at("amount").get<int>(), actor.max_hp - value.hp);
+            hp += std::min(command.arguments.at("amount").get<int>(), max_hp - hp);
         } else {
             auto &timer = command.arguments.at("status") == "slow" ? value.slow : value.stop;
             timer = std::max(timer, command.arguments.at("duration_frames").get<int>());
@@ -157,11 +244,18 @@ void EntityTransaction::Commit() noexcept {
     if (!unit_) {
         return;
     }
+    if (owners_) {
+        OwnedEnemyStats().swap(*owners_);
+    }
     for (unsigned i = 0; i < values_.size(); ++i) {
         if (!values_[i].touched) {
             continue;
         }
-        unit_->monster[i].hp = values_[i].hp;
+        if (owners_) {
+            WriteEnemyStats(unit_->monster[i], values_[i].stats);
+        } else {
+            unit_->monster[i].hp = values_[i].stats[0];
+        }
         unit_->monster[i].slow_timer = values_[i].slow;
         unit_->monster[i].stop_timer = values_[i].stop;
         if (values_[i].reaction != MONSTER_DMG_NONE) {

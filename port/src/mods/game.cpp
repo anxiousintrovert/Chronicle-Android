@@ -126,11 +126,13 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 void TickGame() {
     static std::uint64_t entity_epoch = 0;
     if (entity_epoch != Scripts().Epoch()) {
+        RetainOwnedEnemyStats({});
         EnemyDeaths().Enable(false);
         StopTrackingEntities();
         entity_epoch = Scripts().Epoch();
     }
     if (!Scripts().HasGameplay()) {
+        RetainOwnedEnemyStats({});
         EnemyDeaths().Enable(false);
         StopTrackingEntities();
         return;
@@ -138,6 +140,7 @@ void TickGame() {
     const bool playing = SaveData && (mode == GAME_MODE_EDIT || mode == GAME_MODE_DUNGEON);
     ExpireEntitiesOutsideUnit(playing && mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr);
     if (!playing || mode != GAME_MODE_DUNGEON) {
+        RetainOwnedEnemyStats({});
         StopTrackingEntities();
     }
     World world{mode, MapNo, playing ? SaveData->GetDngStatus()->money : 0, playing};
@@ -193,5 +196,8 @@ void TickGame() {
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
     EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());
+    if (!OwnedEnemyStats().empty()) {
+        RetainOwnedEnemyStats(Scripts().ActiveOwners());
+    }
 }
 } // namespace mods

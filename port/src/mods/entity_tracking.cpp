@@ -3,6 +3,7 @@
 #include "entity_events.hpp"
 #include "entity_reactions.hpp"
 #include "monstorunit.hpp"
+#include "owned_enemy_stats.hpp"
 
 namespace mods {
 namespace {
@@ -39,6 +40,7 @@ void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {
 }
 
 void EntityUnitCleared(CMonstorUnit *unit) {
+    ClearOwnedEnemyStats(unit);
     EnemyDeaths().CancelUnit(unit);
     ClearEntityReactions(unit);
     if (tracked == unit) {
@@ -47,6 +49,7 @@ void EntityUnitCleared(CMonstorUnit *unit) {
 }
 
 void EntitySlotConstructed(CMonstorUnit *unit, unsigned slot) {
+    ClearOwnedEnemyStats(unit, static_cast<int>(slot));
     ClearEntityReactions(unit, static_cast<int>(slot));
     if (tracked == unit) {
         handles.Construct(slot);
