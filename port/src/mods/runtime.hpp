@@ -32,6 +32,7 @@ using CommitGame = std::function<bool(const std::vector<GameCommand> &, int, std
 struct World {
     int  mode = -1, map = -1, money = 0;
     bool playing = false;
+    int  dungeon = -1, floor = -1;
 };
 
 struct QuestStatus {

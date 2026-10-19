@@ -468,4 +468,201 @@ TEST_F(ModRuntime, NativePluginRequiresSeparateTrustAndEnableAndRejectsChangedBy
     EXPECT_FALSE(enabled_session.SetTrusted("test.native", fingerprint, true));
 }
 
+TEST_F(ModRuntime, OwnedListenersFollowLifecycleWithoutRepeatingFloorsOnMenuReturn) {
+    Add(R"(
+        for _,event in ipairs({'tick','map_enter','floor_enter','game_enter','game_leave'}) do
+            assert(chronicle.subscribe(event,function(w)
+                chronicle.set(event,(chronicle.get(event) or 0)+1)
+                if event=='floor_enter' then chronicle.set('floor',w.floor) end
+                if event=='game_leave' then assert(not w.playing); assert(chronicle.add_money(1)==nil) end
+            end))
+        end
+        return {on_tick=function() chronicle.set('legacy',(chronicle.get('legacy') or 0)+1) end}
+    )");
+    Start();
+    runtime.Tick({1, 0, 0, true, 0, 1});
+    runtime.Tick({1, 0, 0, true, 0, 1});
+    runtime.Tick({2, 0, 0, false});
+    runtime.Tick({1, 0, 0, true, 0, 1});
+    runtime.Tick({1, 0, 0, true, 0, 2});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    const auto values = State()["values"];
+    EXPECT_EQ(values["tick"], 4);
+    EXPECT_EQ(values["legacy"], 4);
+    EXPECT_EQ(values["map_enter"], 1);
+    EXPECT_EQ(values["floor_enter"], 2);
+    EXPECT_EQ(values["game_enter"], 2);
+    EXPECT_EQ(values["game_leave"], 1);
+    EXPECT_EQ(values["floor"], 2);
+    mods::Manager empty;
+    empty.Scan({}, {});
+    runtime.Start(empty);
+    EXPECT_FALSE(runtime.HasGameplay());
+}
+
+TEST_F(ModRuntime, SaveLoadedEventWaitsForGameplayAndUsesRestoredOwnedState) {
+    Add(R"(
+        assert(chronicle.subscribe('save_loaded',function()
+            chronicle.set('loads',(chronicle.get('loads') or 0)+1)
+        end))
+        return {}
+    )");
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error)) << error;
+    runtime.Tick({0, 0, 0, false});
+    EXPECT_FALSE(State().contains("values"));
+    runtime.Tick({1, 0, 0, true});
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["loads"], 1);
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error)) << error;
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(State()["values"]["loads"], 2);
+}
+
+TEST_F(ModRuntime, OneEventRollsBackAllItsListenersAndQueuedWritesOnError) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"economy.write"};
+    Add(R"(
+        assert(chronicle.subscribe('tick',function() assert(chronicle.set('partial',1)); assert(chronicle.add_money(2)) end))
+        assert(chronicle.subscribe('tick',function() error('listener failed') end))
+        return {}
+    )",
+        manifest);
+    Start();
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true}, [&](int) {++commits;return true; });
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(State().contains("values"));
+}
+
+TEST_F(ModRuntime, QueryExportsRequireDependenciesAndReturnDetachedStructuredResults) {
+    auto provider = Manifest("test.provider");
+    Add(R"(
+        local result={answer=7,nested={id='author.blade'}}
+        assert(chronicle.export_query('read',function(a) assert(a.request=='value'); return result end))
+        assert(chronicle.export_query('fail',function() error('expected export failure') end))
+        return {}
+    )",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    Add(R"(return {on_tick=function()
+        local v,e=chronicle.invoke_query('test.provider','fail',{})
+        assert(v==nil and e)
+        local a=assert(chronicle.invoke_query('test.provider','read',{request='value'}))
+        assert(a.answer==7 and a.nested.id=='author.blade'); a.nested.id='changed'
+        assert(chronicle.invoke_query('test.provider','read',{request='value'}).nested.id=='author.blade')
+        assert(chronicle.subscribe('tick',function() end)==nil)
+        assert(chronicle.export_query('late',function() return {} end)==nil)
+        chronicle.set('passed',true)
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["passed"], true);
+    consumer["requires"] = Json::array();
+    Add(R"(return {on_tick=function() local v,e=chronicle.invoke_query('test.provider','read',{}) assert(v==nil and e:find('declared dependency')) end})", consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, QueryExportsCannotMutateProviderStateOrGameButCanReadWithProviderPermissions) {
+    auto provider = Manifest("test.provider");
+    provider["permissions"] = {"game.read", "game.write", "economy.write"};
+    Add(R"(
+        assert(chronicle.export_query('read',function()
+            assert(chronicle.set('bad',1)==nil)
+            assert(chronicle.quest_add('visit',1)==nil)
+            assert(chronicle.add_money(1)==nil)
+            assert(chronicle.call('player.heal',{amount=1})==nil)
+            return assert(chronicle.call('economy.get'))
+        end))
+        return {}
+    )",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    Add(R"(return {on_tick=function() assert(chronicle.invoke_query('test.provider','read',{}).money==123) end})", consumer);
+    Start();
+    int reads = 0, commits = 0;
+    runtime.Tick({1, 0, 123, true}, {}, {}, [&](auto op, const auto &) {++reads; EXPECT_EQ(op,"economy.get"); return Json{{"money",123}}; }, [&](const auto &, int, std::string &) {++commits;return true; });
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(reads, 1);
+    EXPECT_EQ(commits, 0);
+    EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.provider"].contains("values"));
+}
+
+TEST_F(ModRuntime, QueryInvocationBudgetAndBadResultsFailWithoutPoisoningOtherCallbacks) {
+    Add(R"(
+        assert(chronicle.export_query('ok',function() return {} end))
+        assert(chronicle.export_query('bad',function() return function() end end))
+        return {}
+    )",
+        Manifest("test.provider"));
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    Add(R"(return {on_tick=function()
+        local v,e=chronicle.invoke_query('test.provider','bad',{}) assert(v==nil and e)
+        for i=1,15 do assert(chronicle.invoke_query('test.provider','ok',{})) end
+        local v,e=chronicle.invoke_query('test.provider','ok',{}) assert(v==nil and e:find('limit'))
+        chronicle.set('ticks',(chronicle.get('ticks') or 0)+1)
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["ticks"], 2);
+}
+
+TEST_F(ModRuntime, NestedQueryExportsShareBudgetAndSurviveSaveRuntimeReplacement) {
+    Add(R"(assert(chronicle.export_query('read',function() return {value=21} end)); return {})", Manifest("test.base"));
+    auto middle = Manifest("test.middle");
+    middle["requires"] = {"test.base"};
+    Add(R"(assert(chronicle.export_query('read',function() return assert(chronicle.invoke_query('test.base','read',{})) end)); return {})", middle);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.middle"};
+    Add(R"(return {on_tick=function()
+        for i=1,8 do assert(chronicle.invoke_query('test.middle','read',{}).value==21) end
+        local v,e=chronicle.invoke_query('test.middle','read',{}); assert(v==nil and e:find('limit'))
+        chronicle.set('ticks',(chronicle.get('ticks') or 0)+1)
+    end})",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["ticks"], 1);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error)) << error;
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["ticks"], 2);
+}
+
+TEST_F(ModRuntime, ListenerAndExportRegistrationAreBoundedAndOwnedByRuntimeLifetime) {
+    Add(R"(
+        assert(chronicle.subscribe('not_an_event',function() end)==nil)
+        for i=1,32 do
+            assert(chronicle.subscribe('tick',function() end))
+            assert(chronicle.export_query('query'..i,function() return {} end))
+        end
+        assert(chronicle.subscribe('tick',function() end)==nil)
+        assert(chronicle.export_query('extra',function() return {} end)==nil)
+        assert(chronicle.export_query('query1',function() return {} end)==nil)
+        return {}
+    )");
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    runtime.ResetState();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
 } // namespace

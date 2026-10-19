@@ -79,6 +79,10 @@ void TickGame() {
     }
     const bool playing = SaveData && (mode == GAME_MODE_EDIT || mode == GAME_MODE_DUNGEON);
     World      world{mode, MapNo, playing ? SaveData->GetDngStatus()->money : 0, playing};
+    if (playing && mode == GAME_MODE_DUNGEON) {
+        world.dungeon = SaveData->GetDngStatus()->cur_georama;
+        world.floor = SaveData->GetDngStatus()->cur_floor;
+    }
     Scripts().Tick(world, [playing](int amount) {
         if (!playing || !SaveData) {
             return false;

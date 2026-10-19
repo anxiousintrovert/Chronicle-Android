@@ -233,3 +233,85 @@ local selection stay disabled; replacements retain existing selection. Updated
 native bytes still require renewed trust. Restart, then inspect the shared menu
 for dependency versions, conflicts, permissions and native approval. Updating an
 enabled Lua package changes its code on restart, so use explicit updates only.
+
+## Owned lifecycle listeners
+
+Require `events.lifecycle.v1` when these events are mandatory. During the script's
+initial execution, call `chronicle.subscribe(event, function(world) ... end)`.
+At most 32 subscriptions belong to one package; they disappear when its Lua runtime
+is replaced or stopped. Late registration and unknown event names return `nil, reason`.
+
+| Event | Trigger |
+|---|---|
+| `tick` | Every active gameplay simulation tick, after entry notifications |
+| `map_enter` | First observed gameplay map or change from the previous observed gameplay map |
+| `floor_enter` | First observed dungeon floor or changed dungeon/floor; town snapshots use -1/-1 |
+| `game_enter` | First gameplay tick or return after a non-gameplay mode |
+| `game_leave` | First non-gameplay tick after gameplay; game reads/writes are unavailable |
+| `save_loaded` | First gameplay tick after successful mod-state load or reset; restored owned state is available |
+
+Callbacks receive `mode`, `map`, `money`, `playing`, `dungeon`, and `floor`.
+Menus that keep the same gameplay mode do not manufacture entry/leave events.
+Floor entry reports observed status, not a promise that generation or scene assets
+are ready. Separate native-ready hooks remain future work.
+A non-gameplay interval does not itself repeat map/floor entry; returning to town
+and then entering a dungeon does. Failed save loads do not emit `save_loaded`.
+
+Existing returned callbacks such as `on_tick` remain supported. The corresponding
+`on_<event>` callback runs first, then subscribers in registration order, with fresh
+world tables. They share one instruction budget and transaction per event: failure
+rolls back that event's owned-state changes and queued native writes, stops the
+module and skips its later listeners. Previously committed events remain committed.
+The order within a package is save-loaded, game enter/leave, map entry, floor entry,
+tick, then native plugin tick. Packages retain dependency load order. World values
+are the snapshot supplied for that tick, not an implicit refresh after each write.
+
+```lua
+assert(chronicle.subscribe('floor_enter', function(world)
+    chronicle.log('info', 'Entered floor '..world.floor)
+end))
+return {}
+```
+
+These are runtime lifecycle notifications, not enemy death, dialogue, cutscene,
+render, or native script-interception hooks. No listener runs with no active module.
+
+## Dependency query exports
+
+Require `services.query.v1` for shared read/calculation services. A provider declares
+up to 32 uniquely named functions during initialization:
+
+```lua
+assert(chronicle.export_query('price', function(request)
+    return {amount = request.level * 10, currency = 'gilda'}
+end))
+return {}
+```
+
+A consumer lists the provider ID in `requires` (optionally constraining its version),
+then calls during gameplay:
+
+```lua
+local quote, reason = chronicle.invoke_query('author.provider', 'price', {level = 3})
+assert(quote, reason)
+assert(quote.amount == 30)
+```
+
+Requests and results are detached structured objects with the common argument
+limits. Export names use the owned-state key syntax: 1–64 lowercase letters,
+digits, underscore or dot. Returned arrays/scalars/functions are not a valid root
+result. A provider can call its own declared providers. The outer callback shares
+at most 16 invocations, including nested calls, and a maximum depth of eight;
+reentry into an executing provider is rejected. Each provider call has the normal
+Lua instruction/memory limits. Missing, failed or undeclared providers, invalid
+results and provider errors return `nil, reason` to the consumer. A handled query
+error does not terminate the provider or poison its next invocation.
+
+Query exports cannot call managed state setters, quest updates, currency writes,
+or native write operations. Host reads use the **provider's** permissions; an
+export is an intentional read/calculation service, not a transfer of native write
+authority. Lua-local variables and diagnostic logs are not transactional save data;
+authors should keep query calculations stateless and read persistent values through
+`chronicle.get`. Mutating cross-mod commands, arbitrary custom events, and native
+plugin exports are still separate remaining work. This API does not implement
+custom item/weapon registration or the contributor's cutscene framework.

@@ -111,6 +111,8 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `events.map.v1` | Map-entry callback and built-in visit tracking |
 | `events.tick.v1` | Gameplay simulation callback |
 | `player.read.v1`, `party.read.v1`, `inventory.read.v1` | Lazy, detached legacy snapshots; require `game.read` |
+| `events.lifecycle.v1` | Owned Lua listeners for tick, map/floor entry, gameplay enter/leave, and deferred save-loaded notification |
+| `services.query.v1` | Declared-dependency Lua query exports; bounded structured requests/results; no managed writes |
 | `resources.read.v1` | Owned startup-cached package resources; requires `resources.read` |
 | `logging.v1` | Bounded per-session diagnostics |
 | `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |

@@ -14,7 +14,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation | Author-provided menu/action contributions, richer journal/skills UI |
-| Lua and host calls | Isolated bounded Lua, simulation/map callbacks, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | Owned event subscriptions and more native lifecycle events; dependency exports/commands |
+| Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | More native events and custom events; mutating dependency commands; native plugin event/export access |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item grant/removal and weapon grants; ABS/synthesis points and WHP writes; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; attachment inventory give/remove and item use; weapon equip, build-up, attachment insertion/removal and status-break synthesis |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
@@ -136,3 +136,20 @@ publication/rollback and hostile archive paths. A packaged/installed two-mod PAL
 Norune fixture showed its incompatible consumer BLOCKED/INACTIVE in the manager.
 All 3,840 empty/disabled generator exports again matched pinned upstream. PS2
 source remains unchanged. These local workflows do not provide a remote mod store.
+
+### Lifecycle subscriptions and dependency query services
+
+Owned startup-registered listeners now cover simulation ticks, observed map/floor
+entry, gameplay enter/leave and deferred save-loaded notifications. Read-only Lua
+exports allow declared dependencies to exchange detached structured requests and
+results with shared invocation/depth limits. These are not native floor-ready,
+entity-kill or cutscene hooks, and they do not provide mutating cross-mod commands.
+
+Validation: Clang 23.1.2 Windows Release builds; 458 C++ tests passed, 6 environment/
+optional skips, no failures; 13 Python tests passed. New runtime cases cover listener
+transaction rollback, non-repeating floor observations, deferred restored-state
+notification, detached results, denied writes, shared nested-call budgets and
+service lifetime across save-runtime replacement. An isolated PAL Norune package
+verified gameplay/map listener ordering and a dependency query in-game; its PASS
+log was inspected in the shared mod manager. All 3,840 no-mod/disabled-mod generator
+cases still match pinned upstream, and the PS2 diff remains empty.

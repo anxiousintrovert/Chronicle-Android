@@ -25,27 +25,37 @@ namespace {
 constexpr std::size_t memory_limit = 8 * 1024 * 1024;
 
 struct Module {
-    Package                            package;
-    lua_State                         *lua = nullptr;
-    std::size_t                        memory = 0;
-    int                                remaining = 0, pending_money = 0;
-    int                                reference = LUA_NOREF;
-    bool                               failed = false, playing = false;
-    Json                              *state = nullptr;
-    const World                       *world = nullptr;
-    const char                        *callback = nullptr;
-    const ReadGame                    *read_game = nullptr;
-    const QueryGame                   *query_game = nullptr;
-    const CommitGame                  *commit_game = nullptr;
-    Json                               arguments;
-    std::string                        call_error;
-    std::vector<GameCommand>           commands;
-    std::unique_ptr<NativeLibrary>     native;
-    std::string                        native_result;
-    unsigned                           native_calls = 0;
-    Json                               snapshot;
-    std::map<std::string, std::string> resources;
-    std::vector<std::string>          *logs = nullptr;
+    Package                                                                                        package;
+    lua_State                                                                                     *lua = nullptr;
+    std::size_t                                                                                    memory = 0;
+    int                                                                                            remaining = 0, pending_money = 0;
+    int                                                                                            reference = LUA_NOREF;
+    bool                                                                                           failed = false, playing = false;
+    Json                                                                                          *state = nullptr;
+    const World                                                                                   *world = nullptr;
+    const char                                                                                    *callback = nullptr;
+    const ReadGame                                                                                *read_game = nullptr;
+    const QueryGame                                                                               *query_game = nullptr;
+    const CommitGame                                                                              *commit_game = nullptr;
+    bool                                                                                           initializing = true, read_only = false;
+    unsigned                                                                                       service_depth = 0;
+    int                                                                                            services_left = 16;
+    int                                                                                           *service_budget = &services_left;
+    int                                                                                            service_reference = LUA_NOREF;
+    Json                                                                                           service_arguments, service_result;
+    std::map<std::string, std::vector<int>>                                                        listeners;
+    unsigned                                                                                       listener_count = 0;
+    std::map<std::string, int>                                                                     exports;
+    std::function<bool(Module &, const char *, const char *, const Json &, Json &, std::string &)> invoke;
+    Json                                                                                           arguments;
+    std::string                                                                                    call_error;
+    std::vector<GameCommand>                                                                       commands;
+    std::unique_ptr<NativeLibrary>                                                                 native;
+    std::string                                                                                    native_result;
+    unsigned                                                                                       native_calls = 0;
+    Json                                                                                           snapshot;
+    std::map<std::string, std::string>                                                             resources;
+    std::vector<std::string>                                                                      *logs = nullptr;
 
     ~Module() {
         playing = false;
@@ -126,6 +136,9 @@ int Get(lua_State *L) {
 }
 
 int Set(lua_State *L) {
+    if (Self(L).read_only) {
+        return Failure(L, "query exports cannot write owned or game state");
+    }
     const char *key = luaL_checkstring(L, 1);
     if (!Key(key)) {
         return Failure(L, "invalid state key");
@@ -164,6 +177,9 @@ int Set(lua_State *L) {
 }
 
 int QuestAdd(lua_State *L) {
+    if (Self(L).read_only) {
+        return Failure(L, "query exports cannot write owned or game state");
+    }
     const char *id = luaL_checkstring(L, 1);
     const auto  amount = luaL_checkinteger(L, 2);
     if (!Self(L).playing || amount < 0 || amount > 1000000) {
@@ -197,6 +213,9 @@ int QuestGet(lua_State *L) {
 }
 
 int AddMoney(lua_State *L) {
+    if (Self(L).read_only) {
+        return Failure(L, "query exports cannot write owned or game state");
+    }
     const auto amount = luaL_checkinteger(L, 1);
     auto      &m = Self(L);
     if (!m.playing || std::ranges::find(m.package.permissions, "economy.write") == m.package.permissions.end()) {
@@ -345,6 +364,9 @@ int ApiCall(lua_State *L) {
         return Failure(L, m.call_error.c_str());
     }
     if (op->writes) {
+        if (m.read_only) {
+            return Failure(L, "query exports cannot write game state");
+        }
         if (!m.commit_game || !*m.commit_game) {
             return Failure(L, "game write provider unavailable");
         }
@@ -444,6 +466,89 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
     }
 }
 
+int Subscribe(lua_State *L) {
+    auto       &m = Self(L);
+    const char *event = luaL_checkstring(L, 1);
+    if (!m.initializing || lua_rawlen(L, 1) != std::strlen(event) || !lua_isfunction(L, 2)) {
+        return Failure(L, "subscribe requires a function during package initialization");
+    }
+    if (std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
+        return Failure(L, "unsupported lifecycle event");
+    }
+    if (m.listener_count >= 32) {
+        return Failure(L, "at most 32 owned event listeners");
+    }
+    lua_pushvalue(L, 2);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    m.listeners[std::string("on_") + event].push_back(ref);
+    ++m.listener_count;
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+int ExportQuery(lua_State *L) {
+    auto       &m = Self(L);
+    const char *name = luaL_checkstring(L, 1);
+    if (!m.initializing || !Key(name) || lua_rawlen(L, 1) != std::strlen(name) || !lua_isfunction(L, 2)) {
+        return Failure(L, "export_query requires a named function during initialization");
+    }
+    if (m.exports.size() >= 32 || m.exports.contains(name)) {
+        return Failure(L, "duplicate export or at most 32 query exports");
+    }
+    lua_pushvalue(L, 2);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    m.exports.emplace(name, ref);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+int InvokeQuery(lua_State *L) {
+    auto       &m = Self(L);
+    const char *provider = luaL_checkstring(L, 1), *name = luaL_checkstring(L, 2);
+    if (!m.playing || !m.invoke) {
+        return Failure(L, "query invocation requires gameplay");
+    }
+    if (lua_rawlen(L, 1) != std::strlen(provider) || lua_rawlen(L, 2) != std::strlen(name) || !Key(name)) {
+        return Failure(L, "invalid query identity");
+    }
+    if (std::ranges::find(m.package.dependencies, provider) == m.package.dependencies.end()) {
+        return Failure(L, "query provider must be a declared dependency");
+    }
+    if (m.service_depth >= 8 || --*m.service_budget < 0) {
+        return Failure(L, "query invocation depth or call limit exceeded");
+    }
+    if (!ReadArguments(L, 3, m.arguments, m.call_error)) {
+        return Failure(L, m.call_error.c_str());
+    }
+    m.call_error.clear();
+    try {
+        if (!m.invoke(m, provider, name, m.arguments, m.snapshot, m.call_error) && m.call_error.empty()) {
+            m.call_error = "query export failed";
+        }
+    } catch (const std::exception &e) {
+        m.call_error = e.what();
+    }
+    if (!m.call_error.empty()) {
+        return Failure(L, m.call_error.c_str());
+    }
+    PushJson(L, m.snapshot);
+    return 1;
+}
+
+int DispatchQuery(lua_State *L) {
+    auto &m = Self(L);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, m.service_reference);
+    PushJson(L, m.service_arguments);
+    lua_call(L, 1, 1);
+    if (!lua_istable(L, -1)) {
+        return luaL_error(L, "query export must return an object");
+    }
+    if (!ReadArguments(L, -1, m.service_result, m.call_error)) {
+        return luaL_error(L, "%s", m.call_error.c_str());
+    }
+    return 0;
+}
+
 // Every call is protected. No filesystem, process, native-module, debug, coroutine,
 // bytecode-loader, or protected-call functions are exposed to mod scripts.
 int Bootstrap(lua_State *L) {
@@ -463,6 +568,9 @@ int Bootstrap(lua_State *L) {
     }
     lua_newtable(L);
     const luaL_Reg api[] = {
+        {"subscribe",     Subscribe    },
+        {"export_query",  ExportQuery  },
+        {"invoke_query",  InvokeQuery  },
         {"get",           Get          },
         {"set",           Set          },
         {"quest_add",     QuestAdd     },
@@ -492,26 +600,42 @@ int Bootstrap(lua_State *L) {
     return 0;
 }
 
+void PushWorld(lua_State *L, const World &world) {
+    lua_newtable(L);
+    lua_pushinteger(L, world.mode);
+    lua_setfield(L, -2, "mode");
+    lua_pushinteger(L, world.map);
+    lua_setfield(L, -2, "map");
+    lua_pushinteger(L, world.money);
+    lua_setfield(L, -2, "money");
+    lua_pushboolean(L, world.playing);
+    lua_setfield(L, -2, "playing");
+    lua_pushinteger(L, world.dungeon);
+    lua_setfield(L, -2, "dungeon");
+    lua_pushinteger(L, world.floor);
+    lua_setfield(L, -2, "floor");
+}
+
 int Dispatch(lua_State *L) {
     auto &m = Self(L);
     lua_rawgeti(L, LUA_REGISTRYINDEX, m.reference);
     lua_getfield(L, -1, m.callback);
-    if (lua_isnil(L, -1)) {
-        return 0;
+    if (!lua_isnil(L, -1)) {
+        if (!lua_isfunction(L, -1)) {
+            return luaL_error(L, "callback must be a function");
+        }
+        PushWorld(L, *m.world);
+        lua_call(L, 1, 0);
+    } else {
+        lua_pop(L, 1);
     }
-    if (!lua_isfunction(L, -1)) {
-        return luaL_error(L, "callback must be a function");
+    if (const auto found = m.listeners.find(m.callback); found != m.listeners.end()) {
+        for (const int ref : found->second) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+            PushWorld(L, *m.world);
+            lua_call(L, 1, 0);
+        }
     }
-    lua_newtable(L);
-    lua_pushinteger(L, m.world->mode);
-    lua_setfield(L, -2, "mode");
-    lua_pushinteger(L, m.world->map);
-    lua_setfield(L, -2, "map");
-    lua_pushinteger(L, m.world->money);
-    lua_setfield(L, -2, "money");
-    lua_pushboolean(L, m.world->playing);
-    lua_setfield(L, -2, "playing");
-    lua_call(L, 1, 0);
     return 0;
 }
 
@@ -531,6 +655,7 @@ struct Runtime::Impl {
     std::vector<std::string>             logs;
     World                                previous;
     bool                                 observed = false;
+    bool                                 was_playing = false, loaded_pending = false;
     Manager                              plan;
 
     ~Impl() { modules.clear(); } // Lua states close before the storage their API references.
@@ -552,6 +677,65 @@ struct Runtime::Impl {
         lua_sethook(m.lua, Budget, LUA_MASKCOUNT, 1000);
     }
 
+    bool Invoke(Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error) {
+        for (auto &ptr : modules) {
+            auto &m = *ptr;
+            if (m.package.id != provider) {
+                continue;
+            }
+            auto found = m.exports.find(name);
+            if (m.failed || !m.lua || found == m.exports.end()) {
+                error = "query provider or export is unavailable";
+                return false;
+            }
+            // Provider callbacks have completed earlier in dependency order. No reentrant
+            // provider may be entered; requests only flow toward declared dependencies.
+            if (m.world) {
+                error = "query provider is already executing";
+                return false;
+            }
+
+            struct Restore {
+                Module &m;
+
+                ~Restore() {
+                    m.world = nullptr;
+                    m.read_game = nullptr;
+                    m.query_game = nullptr;
+                    m.commit_game = nullptr;
+                    m.read_only = false;
+                    m.playing = false;
+                    m.service_depth = 0;
+                    m.service_budget = &m.services_left;
+                    lua_settop(m.lua, 0);
+                }
+            } restore{m};
+
+            m.world = caller.world;
+            m.read_game = caller.read_game;
+            m.query_game = caller.query_game;
+            m.playing = caller.playing;
+            m.read_only = true;
+            m.service_depth = caller.service_depth + 1;
+            m.service_budget = caller.service_budget;
+            m.service_reference = found->second;
+            m.service_arguments = args;
+            m.call_error.clear();
+            lua_pushcfunction(m.lua, DispatchQuery);
+            ResetBudget(m);
+            const int status = lua_pcall(m.lua, 0, 0, 0);
+            if (status != LUA_OK) {
+                const char *text = lua_type(m.lua, -1) == LUA_TSTRING ? lua_tostring(m.lua, -1) : "non-text export error";
+                error = std::string(text ? text : "query export failed").substr(0, 1024);
+                return false;
+            }
+            result = m.service_result;
+            return true;
+        }
+        error = "query provider is unavailable";
+        return false;
+    }
+
     void Call(Module &m, const char *name, const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
               const QueryGame &query_game, const CommitGame &commit_game) {
         if (m.failed || !m.lua) {
@@ -561,6 +745,8 @@ struct Runtime::Impl {
         const Json before = *m.state;
         m.pending_money = 0;
         m.commands.clear();
+        m.services_left = 16;
+        m.service_budget = &m.services_left;
         m.playing = world.playing;
         m.world = &world;
         m.read_game = &read_game;
@@ -649,6 +835,8 @@ void Runtime::Start(const Manager &manager) {
     impl_->diagnostics.clear();
     impl_->logs.clear();
     impl_->observed = false;
+    impl_->was_playing = false;
+    impl_->loaded_pending = false;
     for (const auto &id : manager.LoadOrder()) {
         const auto found = std::ranges::find(manager.Packages(), id, &Package::id);
         if (found == manager.Packages().end()) {
@@ -660,6 +848,7 @@ void Runtime::Start(const Manager &manager) {
         auto  module = std::make_unique<Module>();
         auto &m = *module;
         m.package = *found;
+        m.invoke = [host = impl_.get()](Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error) { return host->Invoke(caller, provider, name, args, result, error); };
         m.logs = &impl_->logs;
         if (!impl_->state.contains(id)) {
             impl_->state[id] = Json::object();
@@ -723,6 +912,7 @@ void Runtime::Start(const Manager &manager) {
                 }
             }
         }
+        m.initializing = false;
         if (!m.failed && !m.package.native_library.empty()) {
             m.native = std::make_unique<NativeLibrary>();
             std::string        error;
@@ -739,6 +929,9 @@ void Runtime::Start(const Manager &manager) {
 
 void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
                    const QueryGame &query_game, const CommitGame &commit_game) {
+    const bool game_enter = world.playing && !impl_->was_playing;
+    const bool game_leave = !world.playing && impl_->was_playing;
+    const bool floor_enter = world.playing && world.dungeon >= 0 && world.floor >= 0 && (!impl_->observed || world.dungeon != impl_->previous.dungeon || world.floor != impl_->previous.floor);
     const bool entered = world.playing && (!impl_->observed || world.map != impl_->previous.map);
     for (auto &ptr : impl_->modules) {
         auto &m = *ptr;
@@ -756,6 +949,15 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         if (m.failed) {
             continue;
         }
+        if (world.playing && impl_->loaded_pending) {
+            impl_->Call(m, "on_save_loaded", world, money, read_game, query_game, commit_game);
+        }
+        if (game_enter) {
+            impl_->Call(m, "on_game_enter", world, money, read_game, query_game, commit_game);
+        }
+        if (game_leave) {
+            impl_->Call(m, "on_game_leave", world, money, read_game, query_game, commit_game);
+        }
         if (entered) {
             for (const auto &q : m.package.quests) {
                 if (q.map == world.map && m.state->value("last_map", -1) != world.map) {
@@ -769,12 +971,17 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             (*m.state)["last_map"] = world.map;
             impl_->Call(m, "on_map_enter", world, money, read_game, query_game, commit_game);
         }
+        if (floor_enter) {
+            impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
+        }
         if (world.playing) {
             impl_->Call(m, "on_tick", world, money, read_game, query_game, commit_game);
             impl_->NativeTick(m, query_game, commit_game);
         }
     }
+    impl_->was_playing = world.playing;
     if (world.playing) {
+        impl_->loaded_pending = false;
         impl_->previous = world;
         impl_->observed = true;
     }
@@ -790,6 +997,7 @@ void Runtime::ResetState() {
     impl_->modules.clear();
     impl_->state = Json::object();
     Start(impl_->plan);
+    impl_->loaded_pending = true;
 }
 
 std::string Runtime::SaveState() const {
@@ -874,6 +1082,7 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
             }
             m->state = &staged.impl_->state[m->package.id];
         }
+        staged.impl_->loaded_pending = true;
         impl_.swap(staged.impl_);
         return true;
     } catch (const std::exception &e) {
