@@ -58,6 +58,11 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `weapons.abs_get` | `slot`, optional `character` | `game.read` | Current ABS, native next-level threshold, level and synthesis points |
 | `weapons.abs_add` | `slot`, `amount`, optional `character`, `synthesis` | `game.write` | Add ABS up to native threshold and synthesis points; no implicit level-up |
 | `weapons.attachments_get` | `slot`, optional `character` | `game.read` | Fitted sockets, attachment stats and SynthSphere metadata |
+| `attachments.list` | none | `game.read` | All 43 native attachment bag records, including the three overflow slots; capacity remains 40 |
+| `attachments.give` | `item`, `quantity`, optional `level` | `game.write` | Grant existing retail attachments to free regular slots; stat boosters accept level 1-3 |
+| `attachments.remove` | `bag_slot` | `game.write` | Discard one owned bag attachment, including an existing overflow record |
+| `weapons.build_up_list` | `slot`, optional `character` | `game.read` | Native evolution targets, requirements, and current eligibility without consuming RNG |
+| `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
@@ -177,7 +182,7 @@ or content-loading hook. Contributor boundaries are in
 [MOD_CONTRIBUTOR_BOUNDARIES.md](MOD_CONTRIBUTOR_BOUNDARIES.md).
 
 Bag item IDs are 132–256; weapon IDs are 257–376; definition inspection also accepts
-attachment IDs 81–131. IDs still need an actual matching native definition. A numeric
+attachment IDs 81–130. IDs still need an actual matching native definition. A numeric
 ID is revision-specific retail data, not a persistent custom-content handle.
 Quantity is 1–100. `seed` is required for grants and is an integer 0–4294967295.
 
@@ -193,8 +198,8 @@ Grants reject over-capacity bags, weapon overflow slots, and weapons belonging t
 unjoined characters. No array sizes change and no overflow menu is forced open.
 World-map grants/removals operate its native flag and require quantity one.
 Removal orders bag slots before quick slots, updates `item_count`, and never
-silently discards more items than requested. Attachment inventory grants/removals,
-item use and weapon equip are not supplied by these operations.
+silently discards more items than requested. Attachment inventory uses the separate
+`attachments.*` operations below. Item use and weapon equip remain separate work.
 
 ABS `amount` and optional `synthesis` are integers 0–32767. Synthesis addition
 rejects signed-32-bit overflow; ABS clamps to the native threshold. This does not
@@ -315,6 +320,63 @@ authors should keep query calculations stateless and read persistent values thro
 `chronicle.get`. Mutating cross-mod commands, arbitrary custom events, and native
 plugin exports are still separate remaining work. This API does not implement
 custom item/weapon registration or the contributor's cutscene framework.
+
+## Retail attachment bag and status-break
+
+`attachments.list` returns `{capacity=40, slots=[...]}`. All 43 records include
+`bag_slot` (zero-based), `overflow`, `item`, `sphere_weapon`, `sphere_flags`,
+`sphere_level`, and numeric arrays `stats` (attack/endurance/speed/magic),
+`elements` (fire/ice/thunder/wind/holy), and `monster_stats` (native order).
+Empty records have `item < 81`; their other values are reported as zero.
+Byte-sized stat and socket arrays are numeric JSON/Lua arrays, never strings.
+Lua arrays are one-based even though native slot selectors are zero-based.
+
+`attachments.give` takes an existing attachment ID in 81-130 and quantity 1-40.
+There must be enough free regular slots and no occupied overflow slot. Copies use
+the native definition. The four stat boosters (91-94) add `level` to the matching
+stat; it defaults to 1 and accepts 1-3, matching native acquisition levels. Other
+attachment IDs reject a supplied level. SynthSpheres (90) cannot be fabricated by
+this call: use `weapons.synthesize` on an owned weapon. No custom registration or
+arbitrary attachment stat input is introduced.
+ID 131 is rejected: its native metadata points past the 50-entry definition table.
+
+`attachments.remove {bag_slot=0..42}` discards the complete record, including any
+SynthSphere data, and fails for an empty or invalid record. It does not remove
+fitted attachments or rearrange other bag slots. Slot numbers identify the current
+inventory position, not a persistent identity. These operations leave native
+capacity and the native overflow-notification lifecycle unchanged.
+
+`weapons.synthesize {slot=0..10, character=optional}` requires a joined owner,
+matching retail weapon, level 5-99, an unequipped slot, and free regular attachment
+space without unresolved overflow. It performs the native status-break value
+calculation without menu animations or resource loading: base and fitted bonuses
+are rounded separately at 60 percent, doubled sockets and native caps apply, and
+opposed weapon flags cancel through the native helper. Fitted attachments are
+consumed into the sphere. Non-default weapons are removed; default weapons reset
+to their retail starting record. It neither auto-equips a replacement nor changes
+the equipped slot. The operation, bag writes, and other queued commands share the
+same save transaction; a later failure discards all of them. No global RNG is used.
+
+`weapons.build_up_list` inspects an owned weapon without altering it. Each target
+has `item`, `meets_requirements`, `attachments_empty` and `can_build`. Ordinary
+targets also expose `requirements` with attack/magic and element/monster arrays;
+negative native requirements are upper bounds on the absolute value. Mardan
+targets instead report `fish_required` and `fish_caught` from this save's native
+counter (5 and 15 catches respectively). Attached values participate in the native
+requirement comparison, but building also requires removing fitted attachments.
+This query does not perform evolution or register a custom evolution path.
+
+```lua
+-- Requires game.read and game.write. Queries see the pre-callback inventory;
+-- inspect the new bag records on a later tick or action after the commit.
+assert(chronicle.call("attachments.give", {item=81, quantity=2}))
+assert(chronicle.call("attachments.give", {item=91, quantity=1, level=3}))
+local targets = assert(chronicle.call("weapons.build_up_list", {slot=0}))
+```
+
+Fitted attachment insertion/removal, active equipment refresh, actual build-up,
+and automatic level-up remain separate APIs to implement. The contributor still
+owns custom item/weapon registration and content formats.
 
 ## Mod manager actions
 

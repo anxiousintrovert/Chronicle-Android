@@ -2,16 +2,29 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <map>
 
 #include "battlemenu.hpp"
 #include "menu_inventory.hpp"
+#include "menu_misc.hpp"
 #include "userstatus.hpp"
+#include "weapon_buildup.hpp"
+#include "weaponlevelup.hpp"
 
 namespace mods::retail {
 namespace {
 using Json = nlohmann::json;
+
+template <class T, std::size_t N>
+Json Numbers(const T (&values)[N]) {
+    Json result = Json::array();
+    for (const auto value : values) {
+        result.push_back(static_cast<int>(value));
+    }
+    return result;
+}
 
 int Character(const CUserStatus &s, const Json &a) {
     int id = a.value("character", static_cast<int>(s.cur_chara));
@@ -33,8 +46,11 @@ const WEAPON_DATA &Definition(int item) {
 }
 
 const WEAPON_HAVE &Owned(const CUserStatus &s, const Json &a) {
-    const auto &weapon = s.chara_weapons[Character(s, a)][a.at("slot").get<int>()];
-    Definition(weapon.item_no);
+    const int   character = Character(s, a);
+    const auto &weapon = s.chara_weapons[character][a.at("slot").get<int>()];
+    if (Definition(weapon.item_no).owner != character) {
+        throw std::runtime_error("weapon belongs to a different character");
+    }
     if (weapon.level < 0 || weapon.level > 99) {
         throw std::runtime_error("invalid native weapon level");
     }
@@ -74,22 +90,168 @@ uint32_t Next(uint32_t &seed) {
 
 Json Attachment(const ATTACH_LIST &a, int socket) {
     return {
-        {"socket",        socket            },
-        {"item",          a.item_no         },
-        {"sphere_weapon", a.sphere_weapon_no},
-        {"sphere_flags",  a.sphere_flags    },
-        {"sphere_level",  a.sphere_level    },
-        {"stats",         a.status          },
-        {"elements",      a.elem            },
-        {"monster_stats", a.vs_monster      }
+        {"socket",        socket               },
+        {"item",          a.item_no            },
+        {"sphere_weapon", a.sphere_weapon_no   },
+        {"sphere_flags",  a.sphere_flags       },
+        {"sphere_level",  a.sphere_level       },
+        {"stats",         Numbers(a.status)    },
+        {"elements",      Numbers(a.elem)      },
+        {"monster_stats", Numbers(a.vs_monster)}
     };
+}
+
+ATTACH_LIST BagAttachment(const CUserStatus &s, int slot) {
+    ATTACH_LIST result{};
+    if (s.consumable_items[slot].id < ITEM_ATTACH_START) {
+        result.item_no = s.consumable_items[slot].id;
+        return result;
+    }
+    static_assert(sizeof(result) == sizeof(s.consumable_items[slot]));
+    // Native storage is exposed as DNG_CONSUMABLE; avoid aliasing it as another type.
+    std::memcpy(&result, &s.consumable_items[slot], sizeof(result));
+    return result;
+}
+
+void StoreAttachment(CUserStatus &s, int slot, const ATTACH_LIST &attachment) {
+    std::memcpy(&s.consumable_items[slot], &attachment, sizeof(attachment));
+}
+
+ATTACH_LIST AttachmentDefinition(int item) {
+    // The retail table has 50 entries (81-130); metadata for 131 points one past it.
+    if (item < ITEM_ATTACH_START || item > 130 || !GetAttachData(item)) {
+        throw std::runtime_error("unknown retail attachment");
+    }
+    ATTACH_LIST result{};
+    AttachDataListToHaveCopy(item, &result);
+    return result;
+}
+
+int AttachmentSpace(const CUserStatus &s) {
+    for (int i = 40; i < 43; ++i) {
+        if (s.consumable_items[i].id >= ITEM_ATTACH_START) {
+            throw std::runtime_error("attachment bag has unresolved overflow");
+        }
+    }
+    for (int i = 0; i < 40; ++i) {
+        if (s.consumable_items[i].id < ITEM_ATTACH_START) {
+            return i;
+        }
+    }
+    throw std::runtime_error("attachment bag is full");
+}
+
+Json BuildUps(const CUserStatus &s, const Json &a, std::optional<int> mardan_fish) {
+    auto        weapon = Owned(s, a);
+    const auto &source = Definition(weapon.item_no);
+    Json        result = Json::array();
+    const bool  no_attachments = GetNowWeaponAttachNum(&weapon) == 0;
+    if (weapon.item_no == ITEM_WEAPON_MARDAN_EINS || weapon.item_no == ITEM_WEAPON_MARDAN_TWEI) {
+        if (!mardan_fish) {
+            throw std::runtime_error("Mardan build-up requires saved fishing progress");
+        }
+        const int needed = weapon.item_no == ITEM_WEAPON_MARDAN_EINS ? 5 : 15;
+        result.push_back({
+            {"item",               weapon.item_no + 1                      },
+            {"fish_required",      needed                                  },
+            {"fish_caught",        *mardan_fish                            },
+            {"meets_requirements", *mardan_fish >= needed                  },
+            {"attachments_empty",  no_attachments                          },
+            {"can_build",          *mardan_fish >= needed && no_attachments}
+        });
+        return result;
+    }
+    const int base = GetDefaultWeaponNo(source.owner);
+    for (int position = 2; position <= MenuCharaWeaponMax[source.owner]; ++position) {
+        const int bit = position <= 20 ? position : position - 20;
+        if (bit >= 32 || !((position <= 20 ? source.buildup_mask0 : source.buildup_mask1) & (1u << bit))) {
+            continue;
+        }
+        const int   item = base + position;
+        const auto &d = Definition(item);
+        if (d.owner != source.owner) {
+            throw std::runtime_error("invalid retail build-up target owner");
+        }
+        // Native EnableBuildUpModel initializes destination weapons with global RNG.
+        // Only these deterministic fields are used by its requirement comparator.
+        WEAPON_HAVE destination{};
+        destination.attack = d.attack;
+        destination.magic = d.magic;
+        for (int i = 0; i < 5; ++i) {
+            destination.elem[i] = d.elem[i];
+        }
+        for (int i = 0; i < 10; ++i) {
+            destination.vs_monster[i] = d.vs_monster[i];
+        }
+        const bool meets = CompareBuildUpModelData2(&destination, &weapon) != 0;
+        result.push_back({
+            {"item",               item                                                                                                                                                       },
+            {"meets_requirements", meets                                                                                                                                                      },
+            {"attachments_empty",  no_attachments                                                                                                                                             },
+            {"can_build",          meets && no_attachments                                                                                                                                    },
+            {"requirements",       {{"attack", destination.attack}, {"magic", destination.magic}, {"elements", Numbers(destination.elem)}, {"monster_stats", Numbers(destination.vs_monster)}}}
+        });
+    }
+    return result;
+}
+
+void Synthesize(CUserStatus &s, const Json &a) {
+    auto &w = s.chara_weapons[Character(s, a)][a.at("slot").get<int>()];
+    Owned(s, a);
+    if (s.equipped_weapon_slot[Character(s, a)] == a.at("slot").get<int>()) {
+        throw std::runtime_error("cannot status-break an equipped weapon");
+    }
+    if (!WeaponStatusBreakEnable(&w)) {
+        throw std::runtime_error("status-break requires weapon level 5 or higher");
+    }
+    const int   slot = AttachmentSpace(s);
+    ATTACH_LIST sphere{}, total{};
+    sphere.item_no = ITEM_ATTACH_SYNTHESIS_SPHERE;
+    sphere.sphere_weapon_no = total.sphere_weapon_no = w.item_no;
+    sphere.sphere_level = w.level;
+    sphere.status[0] = 0.6f * w.attack;
+    sphere.status[1] = 0.6f * w.endurance;
+    sphere.status[2] = 0.6f * w.speed;
+    sphere.status[3] = 0.6f * w.magic;
+    for (int i = 0; i < 5; ++i) {
+        sphere.elem[i] = 0.6f * w.elem[i];
+    }
+    for (int i = 0; i < 10; ++i) {
+        sphere.vs_monster[i] = 0.6f * w.vs_monster[i];
+    }
+    int flags = w.flags;
+    // The native status-break calculator caps fitted values first, then applies
+    // 60 percent separately to base and fitted values. It consumes the sockets.
+    for (int i = 0; i < 6; ++i) {
+        auto &attachment = w.attach[i];
+        if (attachment.item_no < ITEM_ATTACH_START) {
+            continue;
+        }
+        AttachmentDefinition(attachment.item_no);
+        AttachMentValuePlus(&total, &attachment, w.attach_kind[i] == 3 ? 2.0f : 1.0f);
+        if (attachment.item_no == ITEM_ATTACH_SYNTHESIS_SPHERE && attachment.sphere_flags != 0 && attachment.sphere_flags != 1) {
+            flags |= attachment.sphere_flags;
+        }
+    }
+    AttachMentValuePlus(&sphere, &total, 0.6f);
+    sphere.sphere_flags = CheckWeaponOptionStatus(flags);
+    StoreAttachment(s, slot, sphere);
+    if (IsDefaultWeapon(w.item_no) >= 0) {
+        // Default weapons reset instead of disappearing; this native branch uses no RNG.
+        WepDataListToHaveCopy(w.item_no, &w);
+    } else {
+        w = {};
+        w.item_no = -1;
+    }
 }
 } // namespace
 
 bool Handles(std::string_view op) {
     return op == "inventory.count" || op == "inventory.give" || op == "inventory.remove" ||
            op == "weapons.give" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
-           op == "weapons.attachments_get" || op == "items.native_definition";
+           op == "weapons.attachments_get" || op == "items.native_definition" ||
+           op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
+           op == "weapons.build_up_list" || op == "weapons.synthesize";
 }
 
 std::string Validate(std::string_view op, const Json &a) {
@@ -98,7 +260,15 @@ std::string Validate(std::string_view op, const Json &a) {
     }
     std::map<std::string, std::pair<double, double>> fields;
     const bool                                       item = op.starts_with("inventory.") || op == "weapons.give" || op == "items.native_definition";
-    if (item) {
+    if (op == "attachments.give") {
+        fields["item"] = {81, 130};
+        fields["quantity"] = {1, 40};
+        fields["level"] = {1, 3};
+    } else if (op == "attachments.remove") {
+        fields["bag_slot"] = {0, 42};
+    } else if (op == "attachments.list") {
+        // Empty object only.
+    } else if (item) {
         fields["item"] = op == "weapons.give" ? std::pair<double, double>{257, 376} : op == "items.native_definition" ? std::pair<double, double>{81, 376}
                                                                                                                       : std::pair<double, double>{132, 256};
     } else {
@@ -125,14 +295,34 @@ std::string Validate(std::string_view op, const Json &a) {
         }
     }
     for (const auto &[key, range] : fields) {
-        if (key != "character" && key != "synthesis" && !a.contains(key)) {
+        if (key != "character" && key != "synthesis" && key != "level" && !a.contains(key)) {
             return "missing retail argument: " + key;
         }
+    }
+    if (op == "attachments.give" && a.contains("level") && (a.at("item").get<int>() < ITEM_ATTACH_ATTACK || a.at("item").get<int>() > ITEM_ATTACH_MAGICAL_POWER)) {
+        return "level is only valid for retail stat attachments 91-94";
     }
     return {};
 }
 
-Json Read(const CUserStatus &s, std::string_view op, const Json &a) {
+Json Read(const CUserStatus &s, std::string_view op, const Json &a, std::optional<int> mardan_fish) {
+    if (op == "weapons.build_up_list") {
+        return BuildUps(s, a, mardan_fish);
+    }
+    if (op == "attachments.list") {
+        Json result = Json::array();
+        for (int i = 0; i < 43; ++i) {
+            auto record = Attachment(BagAttachment(s, i), i);
+            record.erase("socket");
+            record["bag_slot"] = i;
+            record["overflow"] = i >= 40;
+            result.push_back(std::move(record));
+        }
+        return {
+            {"capacity", 40    },
+            {"slots",    result}
+        };
+    }
     if (op == "inventory.count") {
         const int item = a.at("item");
         return {
@@ -145,20 +335,20 @@ Json Read(const CUserStatus &s, std::string_view op, const Json &a) {
         if (item >= ITEM_WEAPON_START) {
             const auto &d = Definition(item);
             return {
-                {"item",          item        },
-                {"kind",          "weapon"    },
-                {"owner",         d.owner     },
-                {"attack",        d.attack    },
-                {"endurance",     d.endurance },
-                {"speed",         d.speed     },
-                {"magic",         d.magic     },
-                {"durability",    d.durability},
-                {"socket_kinds",  d.hole      },
-                {"socket_count",  d.hole_num  },
-                {"elements",      d.elem      },
-                {"monster_stats", d.vs_monster},
-                {"attack_max",    d.attack_max},
-                {"magic_max",     d.magic_max }
+                {"item",          item                 },
+                {"kind",          "weapon"             },
+                {"owner",         d.owner              },
+                {"attack",        d.attack             },
+                {"endurance",     d.endurance          },
+                {"speed",         d.speed              },
+                {"magic",         d.magic              },
+                {"durability",    d.durability         },
+                {"socket_kinds",  Numbers(d.hole)      },
+                {"socket_count",  d.hole_num           },
+                {"elements",      Numbers(d.elem)      },
+                {"monster_stats", Numbers(d.vs_monster)},
+                {"attack_max",    d.attack_max         },
+                {"magic_max",     d.magic_max          }
             };
         }
         if (item >= ITEM_DUNGEON_START) {
@@ -175,14 +365,10 @@ Json Read(const CUserStatus &s, std::string_view op, const Json &a) {
                 {"stack_kind", d->stack_kind}
             };
         }
-        const auto *d = GetAttachData(item);
-        if (!d) {
-            throw std::runtime_error("unknown retail attachment");
-        }
-        return {
-            {"item", item        },
-            {"kind", "attachment"}
-        };
+        auto result = Attachment(AttachmentDefinition(item), -1);
+        result.erase("socket");
+        result["kind"] = "attachment";
+        return result;
     }
     const auto &w = Owned(s, a);
     if (op == "weapons.abs_get") {
@@ -209,6 +395,35 @@ Json Read(const CUserStatus &s, std::string_view op, const Json &a) {
 }
 
 void Apply(CUserStatus &s, std::string_view op, const Json &a) {
+    if (op == "weapons.synthesize") {
+        Synthesize(s, a);
+        return;
+    }
+    if (op == "attachments.give") {
+        const int item = a.at("item");
+        if (item == ITEM_ATTACH_SYNTHESIS_SPHERE) {
+            throw std::runtime_error("SynthSpheres must come from owned weapons via weapons.synthesize");
+        }
+        auto attachment = AttachmentDefinition(item);
+        if (item >= ITEM_ATTACH_ATTACK && item <= ITEM_ATTACH_MAGICAL_POWER) {
+            attachment.status[item - ITEM_ATTACH_ATTACK] += a.value("level", 1);
+        }
+        for (int i = 0; i < a.at("quantity").get<int>(); ++i) {
+            StoreAttachment(s, AttachmentSpace(s), attachment);
+        }
+        return;
+    }
+    if (op == "attachments.remove") {
+        const int slot = a.at("bag_slot");
+        if (s.consumable_items[slot].id < ITEM_ATTACH_START) {
+            throw std::runtime_error("attachment bag slot is empty");
+        }
+        AttachmentDefinition(s.consumable_items[slot].id);
+        ATTACH_LIST empty{};
+        empty.item_no = -1;
+        StoreAttachment(s, slot, empty);
+        return;
+    }
     if (op == "weapons.abs_add") {
         const auto &checked = Owned(s, a);
         auto       &w = s.chara_weapons[Character(s, a)][a.at("slot").get<int>()];

@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 41 implemented operations, native plugins and author
+a real host-call boundary, 46 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua action lists with queued execution/results | Richer journal/skills UI, custom controls and native action registration |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | More native events and custom events; mutating dependency commands; native plugin event/export access |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item grant/removal and weapon grants; ABS/synthesis points and WHP writes; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; attachment inventory give/remove and item use; weapon equip, build-up, attachment insertion/removal and status-break synthesis |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
 | Shops / Georama | Saved plot/placement/request inspection | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
@@ -29,6 +29,33 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Retail attachment and progression validation (2026-10-19)
+
+Five additional host operations cover attachment bag list/give/remove, native
+build-up eligibility and status-break synthesis. Existing attachment/definition
+queries now serialize byte-sized stat and socket arrays as numeric arrays instead
+of strings. ID 131 is rejected before native lookup because its metadata indexes
+past the retail attachment table. No definition registry, capacity change, custom
+weapon format, active model reload or PS2 source change is included.
+
+Clang 23.1.2 Windows Release game/test builds passed. CTest discovered 477 tests:
+471 passed and six skipped (two high-address arena checks, two unavailable Vulkan
+validation checks, symlink privilege and the optional seed exporter). All 13 Python
+tool tests passed. The final boundary fix also passed all 22 retail/API tests.
+New tests cover atomic bag capacity/overflow handling, default-weapon reset,
+status-break rounding and doubled attachments, native flag cancellation, equipped
+and under-level rejection, transaction rollback and RNG preservation. Ordinary
+build-up targets and eligibility were compared with the native routine for every
+retail weapon definition at base/high stats; the two special Mardan weapons have
+separate saved fishing-progress boundary tests.
+
+An isolated Windows real-game Lua action granted and inspected Fire and level-3
+Attack attachments, removed one, and queried build-up targets through the host.
+The shared manager displayed its PASS result. Status-break has native-save fixture
+coverage, not an interactive animation/gameplay replay. Other platforms remain
+unverified. The 3,840-case empty/disabled-mod seed comparison remains byte-identical
+to pinned upstream; this does not establish full retail-gameplay equivalence.
 
 ## Menu action validation (2026-10-19)
 
