@@ -3,7 +3,7 @@
 # ps2/src holds only the game's code as the PS2 build compiles it. A definition
 # port/src tags PORT_OVERRIDE replaces the one ps2/src gives the same name: the
 # port compiles a copy of each unit without those definitions
-# (tools/kazarov/scripts/port_override.py) and links it with port/src. That is how the
+# (tools/kazarov/scripts/build/port_override.py) and links it with port/src. That is how the
 # PS2-only parts are replaced: the SDK, the Metrowerks runtime, the functions
 # that touch the hardware directly and those written in assembly.
 #
@@ -37,7 +37,7 @@ endif()
 
 include(${KZ_ROOT}/cmake/KazarovPort.cmake)
 
-# Python runs ${KZ_ROOT}/scripts/port_override.py.
+# Python runs ${KZ_ROOT}/scripts/build/port_override.py.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 # Flatpak builds have no network: their single-file libraries are staged in audio_decoders/ and stb_truetype/; others fetch them.
 set(KZ_PORT_VENDOR_DIRS ${CMAKE_SOURCE_DIR}/audio_decoders ${CMAKE_SOURCE_DIR}/stb_truetype)
@@ -60,7 +60,7 @@ list(TRANSFORM PORT_DEFINITIONS PREPEND --define= OUTPUT_VARIABLE port_override_
 # only when it changes, so other edits to port/src rebuild nothing of ps2/src.
 # PORT_OVERRIDE_SOURCES changes when a unit or a stub header comes or goes, which no
 # timestamp shows.
-set(PORT_OVERRIDE_SCRIPT ${KZ_ROOT}/scripts/port_override.py)
+set(PORT_OVERRIDE_SCRIPT ${KZ_ROOT}/scripts/build/port_override.py)
 set(PORT_OVERRIDES ${CMAKE_BINARY_DIR}/port_overrides.txt)
 set(PORT_OVERRIDE_SOURCES ${CMAKE_BINARY_DIR}/port_override_sources.txt)
 file(GLOB_RECURSE PORT_OVERRIDE_STUBS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/port/include/stubs/*.hpp)
@@ -186,10 +186,10 @@ add_library(dc_port OBJECT ${PORT_LIB_SOURCES} ${DC_SCE_SOURCES})
 target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json kz_port_headers)
 target_link_libraries(dc_port PRIVATE chronicle_mod_lua)
 target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
-# captionfont.cpp rasterizes with stb_truetype, which Kazarov stages (or fetches) for dc_host.
+# Font rasterization and legacy UI PNG normalization reuse Kazarov's staged headers.
 get_target_property(dc_host_includes dc_host INCLUDE_DIRECTORIES)
 foreach(include_dir IN LISTS dc_host_includes)
-    if(EXISTS ${include_dir}/stb_truetype.h)
+    if(EXISTS ${include_dir}/stb_truetype.h OR EXISTS ${include_dir}/stb_image.h)
         target_include_directories(dc_port PRIVATE ${include_dir})
     endif()
 endforeach()
