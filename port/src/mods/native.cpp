@@ -101,6 +101,7 @@ struct NativeLibrary::Impl {
 #endif
     const ChronicleModPluginV1 *plugin = nullptr;
     const ChronicleModPluginV2 *plugin2 = nullptr;
+    const ChronicleModMenuV1   *menu = nullptr;
     ChronicleModHostV1          host{};
     ChronicleModHostV2          host2{};
     void                       *state = nullptr;
@@ -142,9 +143,11 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleMo
         }
 #ifdef _WIN32
         auto entry2 = reinterpret_cast<ChronicleModEntryV2>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV2"));
+        auto menu_entry = reinterpret_cast<ChronicleModMenuEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetMenuV1"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV1"));
 #else
         auto entry2 = reinterpret_cast<ChronicleModEntryV2>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV2"));
+        auto menu_entry = reinterpret_cast<ChronicleModMenuEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetMenuV1"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV1"));
 #endif
         if (entry2) {
@@ -155,11 +158,30 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleMo
                 throw std::runtime_error("incompatible native ABI 2 descriptor");
             }
             impl_->host2 = host2;
+            if (menu_entry) {
+                const auto *menu = menu_entry();
+                if (!menu || menu->size < sizeof(ChronicleModMenuV1) || menu->abi != 1 || !menu->id || p.id != menu->id ||
+                    menu->count > 32 || (menu->count && !menu->actions)) {
+                    throw std::runtime_error("incompatible native menu descriptor");
+                }
+                for (uint32_t i = 0; i < menu->count; ++i) {
+                    const auto &action = menu->actions[i];
+                    // Arrays use this exact stride; a future entry layout needs
+                    // a new extension version rather than larger array elements.
+                    if (action.size != sizeof(ChronicleModMenuActionV1) || !action.id || !action.title || !action.description || !action.run) {
+                        throw std::runtime_error("invalid native menu action descriptor");
+                    }
+                }
+                impl_->menu = menu;
+            }
             impl_->started = true;
             if (!p2->start(&impl_->host2, &impl_->state)) {
                 throw std::runtime_error("native ABI 2 start callback failed");
             }
             return true;
+        }
+        if (menu_entry) {
+            throw std::runtime_error("native menu actions require plugin ABI 2");
         }
         if (!entry) {
             throw std::runtime_error("missing ChronicleMod_GetPluginV1 or ChronicleMod_GetPluginV2");
@@ -193,5 +215,21 @@ bool NativeLibrary::WantsEvent(uint32_t event) const {
 
 bool NativeLibrary::Event(uint32_t event, const char *world_json) {
     return !WantsEvent(event) || impl_->plugin2->event(&impl_->host2, impl_->state, event, world_json);
+}
+
+std::span<const ChronicleModMenuActionV1> NativeLibrary::Actions() const {
+    if (!impl_->started || !impl_->menu) {
+        return {};
+    }
+    return {impl_->menu->actions, impl_->menu->count};
+}
+
+bool NativeLibrary::RunAction(std::string_view id, const char *world_json) {
+    for (const auto &action : Actions()) {
+        if (id == action.id) {
+            return action.run(&impl_->host2, impl_->state, world_json);
+        }
+    }
+    return false;
 }
 } // namespace mods

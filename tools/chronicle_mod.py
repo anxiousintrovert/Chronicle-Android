@@ -14,7 +14,7 @@ import zipfile
 CAPABILITIES = {
     "assets.replace.v1", "scripts.lua.v1", "quests.progress.v1", "save.metadata.v1",
     "economy.write.v1", "events.map.v1", "events.tick.v1", "player.read.v1",
-    "party.read.v1", "inventory.read.v1", "resources.read.v1", "logging.v1", "host.calls.v1", "plugins.native.v1", "plugins.native.v2", "events.lifecycle.v1", "services.query.v1", "menu.actions.v1",
+    "party.read.v1", "inventory.read.v1", "resources.read.v1", "logging.v1", "host.calls.v1", "plugins.native.v1", "plugins.native.v2", "events.lifecycle.v1", "services.query.v1", "menu.actions.v1", "menu.native.v1",
 }
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}

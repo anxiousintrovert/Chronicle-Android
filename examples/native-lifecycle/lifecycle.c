@@ -51,3 +51,20 @@ static const ChronicleModPluginV2 plugin = {
     CHRONICLE_EVENT_GAME_ENTER | CHRONICLE_EVENT_SAVE_LOADED, event};
 
 CHRONICLE_PLUGIN_EXPORT const ChronicleModPluginV2 *ChronicleMod_GetPluginV2(void) { return &plugin; }
+
+static int reset_visits(const ChronicleModHostV2 *host, void *state, const char *world_json) {
+    const char *result = 0;
+    (void)state;
+    (void)world_json;
+    if (!host->state_set(host->context, "visits", "0", &result))
+        return 0;
+    host->log(host->context, "Visit counter reset to 0");
+    return 1;
+}
+
+static const ChronicleModMenuActionV1 actions[] = {
+    {sizeof(ChronicleModMenuActionV1), "reset", "Reset visit counter", "Reset this package's saved visit count to zero.", reset_visits}};
+static const ChronicleModMenuV1 menu = {
+    sizeof(ChronicleModMenuV1), 1, "example.native-lifecycle", 1, actions};
+
+CHRONICLE_PLUGIN_EXPORT const ChronicleModMenuV1 *ChronicleMod_GetMenuV1(void) { return &menu; }

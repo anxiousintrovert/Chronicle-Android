@@ -21,6 +21,13 @@ restored count before the next gameplay-enter event increments it. This is an
 event count, not a complete play-session counter: observed gameplay leave/reentry
 also increments it. Start/stop never access owned state.
 
+In the shared Mod Manager, open R1 Actions and run **Reset visit counter**. The
+native callback resets only this package's owned value at the next safe runtime
+callback boundary; the manager displays Completed and a reset log. No Lua wrapper
+or new UI is needed. This package requires `menu.native.v1` so older hosts fail
+preflight rather than silently omitting the action. Changed library bytes require
+fresh local trust.
+
 The count belongs to this package's scalar save namespace. Unload destroys plugin
 heap state; only explicitly stored values persist. See [the SDK](../../docs/MOD_NATIVE_SDK.md)
 for event ordering, callback transactions, trust and platform limits.

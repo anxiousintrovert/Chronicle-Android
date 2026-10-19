@@ -34,7 +34,7 @@ typedef const ChronicleModPluginV1 *(*ChronicleModEntryV1)(void);
 /* Export ChronicleMod_GetPluginV1 returning a descriptor with static lifetime. */
 
 /* ABI 2 is a separate entry point and table; ABI 1 layouts never change.
- * State access is allowed only inside tick/event callbacks. It addresses this
+ * State access is allowed only inside tick/event/menu callbacks. It addresses this
  * package's scalar save values (shared with Lua get/set), not plugin heap memory. */
 typedef struct ChronicleModHostV2 {
     uint32_t size, abi;
@@ -74,6 +74,26 @@ typedef struct ChronicleModPluginV2 {
 typedef const ChronicleModPluginV2 *(*ChronicleModEntryV2)(void);
 /* Export ChronicleMod_GetPluginV2. Hosts prefer V2 when both entries are present;
  * an invalid V2 descriptor fails explicitly instead of falling back to V1. */
+
+/* Optional menu extension for ABI 2 plugins. All descriptors and strings have
+ * static lifetime. Export ChronicleMod_GetMenuV1; no existing ABI layout changes.
+ * Actions execute later on the game thread, never in the menu input handler. */
+typedef struct ChronicleModMenuActionV1 {
+    uint32_t    size;
+    const char *id, *title, *description;
+    /* Same plugin state as start/tick. world_json has callback lifetime.
+     * Return 0 to roll back managed changes and stop the package. */
+    int (*run)(const ChronicleModHostV2 *, void *state, const char *world_json);
+} ChronicleModMenuActionV1;
+
+typedef struct ChronicleModMenuV1 {
+    uint32_t                        size, abi;
+    const char                     *id;    /* Exact package ID. */
+    uint32_t                        count; /* At most 32, shared with this package's Lua actions. */
+    const ChronicleModMenuActionV1 *actions;
+} ChronicleModMenuV1;
+
+typedef const ChronicleModMenuV1 *(*ChronicleModMenuEntryV1)(void);
 #ifdef __cplusplus
 }
 #endif

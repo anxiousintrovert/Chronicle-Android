@@ -137,3 +137,28 @@ CHRONICLE_PLUGIN_EXPORT const ChronicleModPluginV2 *ChronicleMod_GetPluginV2(voi
 
 /* A V2 host must prefer the valid V2 entry, and never fall back after rejecting it. */
 CHRONICLE_PLUGIN_EXPORT const ChronicleModPluginV1 *ChronicleMod_GetPluginV1(void) { return 0; }
+
+#ifdef FIXTURE_MENU
+static int run_action(const ChronicleModHostV2 *host, void *state, const char *world) {
+    const char *result = 0;
+    if (!state || !strstr(world, "\"playing\":true") || !strstr(world, "\"map\":"))
+        return 0;
+    if (!increment(host, "actions"))
+        return 0;
+    if (!host->call(host->context, "economy.add", "{\"amount\":5}", &result))
+        return 0;
+    host->log(host->context, "native menu action called");
+    return !mode(host, "\"fail_action\"");
+}
+#ifdef FIXTURE_MENU_BAD
+#define MENU_TITLE "invalid\xff"
+#else
+#define MENU_TITLE "Native {cross} action"
+#endif
+static const ChronicleModMenuActionV1 menu_actions[] = {
+    {sizeof(ChronicleModMenuActionV1), "run", MENU_TITLE, "Add five coins in a managed transaction.", run_action}};
+static const ChronicleModMenuV1 menu = {
+    sizeof(ChronicleModMenuV1), 1, "test.native.v2", 1, menu_actions};
+
+CHRONICLE_PLUGIN_EXPORT const ChronicleModMenuV1 *ChronicleMod_GetMenuV1(void) { return &menu; }
+#endif

@@ -28,6 +28,7 @@ constexpr std::size_t memory_limit = 8 * 1024 * 1024;
 struct Action {
     std::string title, description, result;
     int         reference = LUA_NOREF;
+    bool        native = false;
 };
 
 struct Module {
@@ -482,7 +483,7 @@ int NativeState(void *context, const char *key, const char *value, const char **
     }
     try {
         if (!m.native_active) {
-            throw std::runtime_error("owned state requires a native tick or event callback");
+            throw std::runtime_error("owned state requires a native tick, event or menu callback");
         }
         if (++m.native_calls > 128) {
             throw std::runtime_error("native callback host-call limit reached");
@@ -909,7 +910,7 @@ struct Runtime::Impl {
         }
     }
 
-    void NativeCallback(Module &m, const World &world, const QueryGame &query, const CommitGame &commit, uint32_t event = 0) {
+    void NativeCallback(Module &m, const World &world, const QueryGame &query, const CommitGame &commit, uint32_t event = 0, const char *action = nullptr) {
         if (m.failed || !m.native || (event && !m.native->WantsEvent(event))) {
             return;
         }
@@ -923,7 +924,7 @@ struct Runtime::Impl {
         std::string error;
         bool        accepted = false;
         try {
-            if (event) {
+            if (event || action) {
                 const auto payload = Json{
                     {"mode",    world.mode   },
                     {"map",     world.map    },
@@ -933,7 +934,7 @@ struct Runtime::Impl {
                     {"floor",   world.floor  }
                 }
                                          .dump();
-                accepted = m.native->Event(event, payload.c_str());
+                accepted = action ? m.native->RunAction(action, payload.c_str()) : m.native->Event(event, payload.c_str());
             } else {
                 accepted = m.native->Tick();
             }
@@ -1059,6 +1060,28 @@ void Runtime::Start(const Manager &manager) {
                 m.failed = true;
                 impl_->diagnostics.push_back(id + ": " + error);
                 m.native.reset();
+            } else {
+                try {
+                    auto actions = m.actions;
+                    for (const auto &action : m.native->Actions()) {
+                        if (!Key(action.id) || actions.contains(action.id) || actions.size() >= 32) {
+                            throw std::runtime_error("invalid/duplicate native action ID or more than 32 combined actions");
+                        }
+                        for (const char *label : {action.title, action.description}) {
+                            const auto size = std::strlen(label);
+                            if (!size || size > 256 || std::any_of(label, label + size, [](unsigned char c) { return c < 32 || c == 127; })) {
+                                throw std::runtime_error("native action labels require 1-256 UTF-8 bytes without controls");
+                            }
+                            (void) Json(std::string(label, size)).dump();
+                        }
+                        actions.emplace(action.id, Action{action.title, action.description, {}, LUA_NOREF, true});
+                    }
+                    m.actions = std::move(actions);
+                } catch (const std::exception &e) {
+                    m.failed = true;
+                    impl_->diagnostics.push_back(id + ": " + e.what());
+                    m.native.reset();
+                }
             }
         }
         impl_->modules.push_back(std::move(module));
@@ -1096,6 +1119,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             }
         }
         if (m.failed) {
+            m.native.reset();
             continue;
         }
         if (world.playing && impl_->loaded_pending) {
@@ -1132,7 +1156,11 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             for (const auto &[owner, id] : actions) {
                 if (owner == m.package.id && action_context && !m.failed) {
                     auto &action = m.actions.at(id);
-                    impl_->Call(m, "menu action", world, money, read_game, query_game, commit_game, action.reference);
+                    if (action.native) {
+                        impl_->NativeCallback(m, world, query_game, commit_game, 0, id.c_str());
+                    } else {
+                        impl_->Call(m, "menu action", world, money, read_game, query_game, commit_game, action.reference);
+                    }
                     action.result = m.failed ? "Failed. See module diagnostics." : "Completed.";
                 }
             }
@@ -1176,7 +1204,7 @@ bool Runtime::QueueAction(std::string_view owner, std::string_view id, std::stri
         error = "Action is already queued.";
     } else {
         for (auto &m : impl_->modules) {
-            if (m->package.id != owner || m->failed || !m->lua) {
+            if (m->package.id != owner || m->failed) {
                 continue;
             }
             const auto found = m->actions.find(std::string(id));

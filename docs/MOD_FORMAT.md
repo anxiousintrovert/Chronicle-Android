@@ -114,6 +114,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `events.lifecycle.v1` | Owned Lua listeners for tick, map/floor entry, gameplay enter/leave, and deferred save-loaded notification |
 | `services.query.v1` | Declared-dependency Lua query exports; bounded structured requests/results; no managed writes |
 | `menu.actions.v1` | Owned Lua actions in the shared mod manager; explicit user invocation queues a normal gameplay transaction |
+| `menu.native.v1` | Optional ABI 2 native menu descriptor; actions share the manager, limits and transaction rules with Lua actions |
 | `resources.read.v1` | Owned startup-cached package resources; requires `resources.read` |
 | `logging.v1` | Bounded per-session diagnostics |
 | `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |

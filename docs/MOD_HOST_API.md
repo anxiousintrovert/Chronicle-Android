@@ -443,7 +443,9 @@ No new manifest section, content format or custom-item ID space is reserved.
 Cross/Run queues the selected action; Circle/Back returns to package management.
 The runtime accepts at most 16 pending actions globally and rejects duplicate
 owner/ID requests until dispatched. It requires a live script and a previously
-observed gameplay tick. Requests run once on the next gameplay tick in package
+observed gameplay tick for Lua actions. Native actions require a live ABI 2 plugin
+instead; see [the optional native menu extension](MOD_NATIVE_SDK.md#native-menu-actions).
+Requests run once on the next gameplay tick in package
 dependency order, after lifecycle entry callbacks and before the package's tick
 callback; requests within one package retain queue order. The callback receives
 the normal world table and its own instruction/call budget. Queries, declared
@@ -463,4 +465,6 @@ runtime. Requests, registrations and UI results are not saved. Failed/unloaded
 packages cannot execute actions;
 disabled packages register none at startup. Changing enable selection still
 requires restart, so actions shown before restart belong to the current run.
-There are no arbitrary Lua UI controls or native-plugin action bindings yet.
+Native actions share this list, package namespace, 32-action limit and scheduling
+rules; their callback receives the C host/state and a JSON world snapshot instead
+of a Lua table. Arbitrary custom UI controls remain unimplemented.

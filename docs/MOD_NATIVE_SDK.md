@@ -71,8 +71,8 @@ partial start failure as well as ordinary unload, so it must tolerate partial
 initialization. Do not throw across this C ABI. Optional Lua and native code in
 one package share permission declarations, but have separate callback transactions.
 Native plugin-private memory is transient. ABI 1 does not expose save storage or
-event subscriptions. Neither ABI exposes Lua callback exports, native menu action
-registration or arbitrary engine pointers.
+event subscriptions. Neither ABI exposes Lua callback exports or arbitrary engine
+pointers. ABI 2 supports the optional menu extension described below.
 
 Host API permission checks govern host services only; trust grants native process
 execution. The no-mod invariant applies while plugins remain disabled/untrusted.
@@ -127,7 +127,7 @@ deletes a key. A successful set returns JSON `true`. A null C pointer is invalid
 input, not a deletion. Result strings last until the next result-producing host
 call on this package; copy needed strings before another call.
 
-- Access is limited to native tick/event callbacks, never start/stop or workers.
+- Access is limited to native tick/event/menu callbacks, never start/stop or workers.
 - Keys contain 1–64 lowercase ASCII letters, digits, underscores or periods.
 - At most 128 keys per package; replacing/deleting an existing key works at capacity.
 - Values are JSON null, boolean, finite number or UTF-8 string of at most 256 bytes
@@ -148,3 +148,60 @@ using owned save values without gameplay permissions. It builds with Clang, is
 disabled by default, and is never installed by the main game build. No content
 registry, custom ID range or cutscene API is introduced; see the
 [contributor boundaries](MOD_CONTRIBUTOR_BOUNDARIES.md).
+
+## Native menu actions
+
+ABI 2 plugins may export `ChronicleMod_GetMenuV1` returning a static
+`ChronicleModMenuV1` descriptor. This separate optional extension leaves both
+published plugin/host layouts unchanged. Declare `menu.native.v1` in
+`requires_capabilities`; otherwise an older host can ignore the optional symbol.
+No Lua script is needed. Trust, enable and restart requirements are unchanged.
+
+The descriptor specifies its size, `abi = 1`, exact package ID, action count and
+array. Each `ChronicleModMenuActionV1` has `size = sizeof(ChronicleModMenuActionV1)`,
+ID, title, description and a non-null `run(host, state, world_json)` callback.
+The array element size must match exactly; a future element layout requires a
+new extension version. Descriptors and their strings must remain immutable with
+static lifetime while loaded. A zero count permits a null array.
+
+```c
+static int reset(const ChronicleModHostV2 *host, void *state,
+                 const char *world_json) {
+    const char *result = 0;
+    (void)state;
+    (void)world_json;
+    return host->state_set(host->context, "visits", "0", &result);
+}
+static const ChronicleModMenuActionV1 actions[] = {
+    {sizeof(ChronicleModMenuActionV1), "reset", "Reset visits",
+     "Reset the owned visit counter.", reset}
+};
+static const ChronicleModMenuV1 menu = {
+    sizeof(ChronicleModMenuV1), 1, "example.native-lifecycle", 1, actions
+};
+CHRONICLE_PLUGIN_EXPORT const ChronicleModMenuV1 *ChronicleMod_GetMenuV1(void) {
+    return &menu;
+}
+```
+
+Actions share the package's namespace and 32-action limit with Lua actions.
+IDs use the owned-state key syntax; title/description require 1–256 valid UTF-8
+bytes without C0/DEL control characters. Duplicate IDs, invalid metadata or an
+incompatible descriptor stop the package with a manager diagnostic. Labels are
+copied by the runtime and rendered literally, including braces.
+
+The shared manager's R1 Actions pane queues invocation. The callback runs once
+at the normal runtime boundary, after entry events and before Lua/native ticks;
+multiple queued actions within one package keep request order. It receives the
+ABI 2 host, the state pointer from plugin start, and a callback-lifetime world
+JSON snapshot. Return 1 to commit or 0 to roll back owned values/queued game writes
+and stop the package. Host permissions, 128 host-call/64-write budgets and game
+availability checks apply exactly as for native ticks. Native CPU time and direct
+process side effects remain outside framework rollback.
+
+Actions cancel on changed gameplay context, failed dependencies, save load/reset
+or unload. A failed dependency also unloads its dependent plugin. UI input never
+calls the native action directly. Restart clears old descriptors, and unavailable
+actions cannot be queued. Runtime results and diagnostics appear in the existing
+manager; no parallel menu/input implementation is introduced. The lifecycle example
+above includes this extension and requests no gameplay-write permissions.

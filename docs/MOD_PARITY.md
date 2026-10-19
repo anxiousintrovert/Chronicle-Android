@@ -13,7 +13,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
-| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua action lists with queued execution/results | Richer journal/skills UI, custom controls and native action registration |
+| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | More native events and custom events; mutating dependency commands; native plugin exports |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
@@ -23,12 +23,38 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No renderer/timing modifications | Owned overlays/camera/lighting/audio controls, activated only by callers |
-| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle events and owned scalar save values | Custom/native-ready events, cross-package exports and native actions, broader host domains; Linux/macOS/Android verification |
+| Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle events, owned scalar save values and optional shared-manager actions | Custom/native-ready events, cross-package exports, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Native menu action validation (2026-10-19)
+
+`menu.native.v1` adds an optional C descriptor for ABI 2 plugins, preserving both
+published plugin/host layouts. Native and Lua actions share the existing manager,
+package namespace, count limit, queue, context cancellation and transaction boundary.
+No new menu implementation or engine hook is added. Failed dependencies now unload
+dependent native libraries immediately instead of leaving stopped libraries resident.
+The standalone lifecycle example includes a native reset-counter action and is
+still never installed/enabled by the game build.
+
+Clang 23.1.2 Windows Release game/test builds passed. CTest discovered 496 tests:
+488 passed, eight skipped (mouse-focus, high-address arena, unavailable Vulkan
+validation, symlink privilege and optional seed export). All 13 Python tooling
+tests passed. Six new real-DLL tests cover deferred dispatch without Lua, rollback
+and throwing commits, cancellation/reload/unload, shared Lua/native IDs and limits,
+invalid UTF-8 metadata, trust/enable gating and dependency-failure cleanup. The
+existing ABI 1 and ABI 2 fixtures remain green. The standalone example builds with
+Clang and passes offline package check/pack.
+
+An isolated PAL Norune replay trusted/enabled the example, restarted, and ran
+Reset visit counter from the shared R1 Actions pane; the manager displayed
+Completed. The 3,840-case empty/disabled-mod comparison remains byte-identical to
+pinned upstream, and `ps2/` remains unchanged. This is Windows/controller evidence;
+other native-loader platforms and mouse activation have not received live replay.
+Full parity remains incomplete in the matrix above.
 
 ## Player status validation (2026-10-19)
 
@@ -80,7 +106,7 @@ round trips are covered by runtime fixtures, not an interactive save/load replay
 
 The 3,840-case empty/disabled-mod comparison remains byte-identical to pinned
 upstream. No PS2 source changes. Windows tests do not establish other-platform
-loader behavior or full retail-gameplay equivalence. Native exports/actions and
+loader behavior or full retail-gameplay equivalence. Native exports and
 the other remaining domains in the matrix are still outstanding.
 
 ## Retail attachment and progression validation (2026-10-19)
