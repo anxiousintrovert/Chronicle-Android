@@ -5,6 +5,7 @@
 #include <optional>
 #include <set>
 
+#include "entities.hpp"
 #include "georama.hpp"
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
@@ -15,6 +16,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"entities.list",           "game.read",     "List live revealed dungeon enemies with session-local handles.",              false},
+    {"entities.get",            "game.read",     "Resolve a live enemy handle or report expiration.",                           false},
     {"player.get",              "game.read",     "Active or joined character stats.",                                           false},
     {"player.heal",             "game.write",    "Queue bounded HP restoration.",                                               true },
     {"player.damage",           "game.write",    "Queue bounded HP reduction (not a combat hit).",                              true },
@@ -182,6 +185,9 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (retail::Handles(name)) {
         return retail::Validate(name, a);
+    }
+    if (name.starts_with("entities.")) {
+        return ValidateEntityQuery(name, a);
     }
     if (!a.is_object()) {
         return "arguments must be an object";

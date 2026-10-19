@@ -472,6 +472,24 @@ Native actions share this list, package namespace, 32-action limit and schedulin
 rules; their callback receives the C host/state and a JSON world snapshot instead
 of a Lua table. Arbitrary custom UI controls remain unimplemented.
 
+### Live enemy inspection
+
+`entities.list` takes no arguments and requires `game.read` plus an active dungeon.
+It returns `{entities = [...]}` in native slot order, excluding dead, hidden and
+unused enemies. `entities.get({entity = handle})` returns the same detached record
+or `{entity = handle, status = "expired"}`. A record contains `entity`, `status`,
+`hp`, `max_hp`, `defense`, `reward_exp`, `reward_money`, `drop_item`, `active`,
+`slow_frames` and `stop_frames`. `active` distinguishes participating from dormant
+revealed enemies. Reward fields are native parameters, not guaranteed payouts.
+
+Handles are opaque decimal strings; preserve them exactly. They are session-local
+and must not be stored in saves or reused across game processes. Slot construction,
+floor cleanup, changing the observed dungeon unit, leaving dungeon gameplay and
+runtime/save-state replacement expire old handles. These APIs neither spawn nor
+damage enemies. Tracking begins only on an explicit query and uses the existing
+16 retail slots. Calls from unavailable gameplay callbacks remain subject to the
+runtime's normal gameplay gate.
+
 Georama element edits use existing retail definitions only. Slots whose native ID
 is outside 0–35 are unavailable. Enable prerequisites first; disable dependent
 elements first. Ordered commands in one callback see earlier staged changes, and

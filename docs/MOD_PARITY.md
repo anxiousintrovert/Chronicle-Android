@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 50 implemented operations, native plugins and author
+a real host-call boundary, 52 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
+| Entities / combat | Lazy generation-checked live enemy list/get; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -29,6 +29,29 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Live enemy inspection validation (2026-10-19)
+
+Entity list/get now expose detached live revealed enemy records with opaque
+session-local handles. Tracking is activated by queries; native slot construction
+and cleanup invalidate identities. Unit changes and runtime/save replacement also
+expire them. The two port lifecycle overrides preserve every native statement;
+a source-comparison test checks this against the untouched PS2 originals. They
+add only sidecar notifications, which do nothing when no unit is tracked. No
+monster capacity, damage formula or spawn behavior is changed.
+
+Clang Windows Release game/test builds passed. The full 507-case suite completed
+with 501 passed and six environment/optional skips. A later focused runtime epoch
+test checks successful versus rejected state replacement separately. Six entity
+tests cover dormant tracking, slot reuse, native cleanup, stale/hidden/dead actors,
+unit-state preservation, full-floor native spawn rejection and invalid handles.
+The final seven focused entity/epoch tests passed. All 14 Python tests passed, including
+the native-body identity guard. The 3,840-case empty/disabled generator comparison
+still matches upstream byte for byte. This remains narrower than full gameplay
+equivalence. An isolated PAL Divine Beast Cave replay invoked an inspection
+action through the shared manager, listed and resolved 15 live enemies, and
+displayed PASS. This verifies live reads, not mod spawning, combat writes, or all
+native reuse scenarios. Linux/macOS/Android execution remains unverified.
 
 ## Georama element validation (2026-10-19)
 

@@ -971,6 +971,7 @@ Runtime::Runtime() : impl_(std::make_unique<Impl>()) {}
 Runtime::~Runtime() = default;
 
 void Runtime::Start(const Manager &manager) {
+    ++epoch_;
     impl_->plan = manager;
     impl_->modules.clear();
     impl_->diagnostics.clear();
@@ -1316,6 +1317,7 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
         }
         staged.impl_->loaded_pending = true;
         impl_.swap(staged.impl_);
+        ++epoch_;
         return true;
     } catch (const std::exception &e) {
         error = e.what();

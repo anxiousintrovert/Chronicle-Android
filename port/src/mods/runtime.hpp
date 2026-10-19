@@ -50,12 +50,15 @@ public:
     Runtime();
     ~Runtime();
     Runtime(const Runtime &) = delete;
-    Runtime                  &operator=(const Runtime &) = delete;
-    void                      Start(const Manager &manager);
-    void                      Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
-                                   const QueryGame &query_game = {}, const CommitGame &commit_game = {});
-    void                      ResetState();
-    bool                      HasGameplay() const;
+    Runtime &operator=(const Runtime &) = delete;
+    void     Start(const Manager &manager);
+    void     Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
+                  const QueryGame &query_game = {}, const CommitGame &commit_game = {});
+    void     ResetState();
+    bool     HasGameplay() const;
+
+    std::uint64_t Epoch() const { return epoch_; }
+
     std::vector<std::string>  Logs() const;
     std::string               SaveState() const;
     bool                      LoadState(const std::string &json, std::string &error);
@@ -65,6 +68,7 @@ public:
     std::vector<std::string>  Diagnostics() const;
 
 private:
+    std::uint64_t epoch_ = 0;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

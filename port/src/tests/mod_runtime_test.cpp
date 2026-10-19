@@ -67,6 +67,24 @@ protected:
     Json State() { return Json::parse(runtime.SaveState())["mods"]["test.mod"]; }
 };
 
+TEST_F(ModRuntime, EpochChangesOnlyWhenRuntimeStateIsReplaced) {
+    Add("return {}");
+    const auto initial = runtime.Epoch();
+    Start();
+    const auto started = runtime.Epoch();
+    EXPECT_NE(initial, started);
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(started, runtime.Epoch());
+    std::string error;
+    EXPECT_FALSE(runtime.LoadState("invalid", error));
+    EXPECT_EQ(started, runtime.Epoch());
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error)) << error;
+    const auto loaded = runtime.Epoch();
+    EXPECT_NE(started, loaded);
+    runtime.ResetState();
+    EXPECT_NE(loaded, runtime.Epoch());
+}
+
 TEST_F(ModRuntime, LuaReceivesGameEventsAndIsolatedState) {
     Add("return {on_tick=function(w) chronicle.set('map', w.map); chronicle.set('ticks', (chronicle.get('ticks') or 0)+1) end}");
     Start();

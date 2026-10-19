@@ -8,6 +8,8 @@
 #include "dun/gameloop.hpp"
 #include "editloop.hpp"
 #include "editpartsinfo.hpp"
+#include "entities.hpp"
+#include "entity_tracking.hpp"
 #include "gamemode.hpp"
 #include "georama.hpp"
 #include "main.hpp"
@@ -122,11 +124,21 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    static std::uint64_t entity_epoch = 0;
+    if (entity_epoch != Scripts().Epoch()) {
+        StopTrackingEntities();
+        entity_epoch = Scripts().Epoch();
+    }
     if (!Scripts().HasGameplay()) {
+        StopTrackingEntities();
         return;
     }
     const bool playing = SaveData && (mode == GAME_MODE_EDIT || mode == GAME_MODE_DUNGEON);
-    World      world{mode, MapNo, playing ? SaveData->GetDngStatus()->money : 0, playing};
+    ExpireEntitiesOutsideUnit(playing && mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr);
+    if (!playing || mode != GAME_MODE_DUNGEON) {
+        StopTrackingEntities();
+    }
+    World world{mode, MapNo, playing ? SaveData->GetDngStatus()->money : 0, playing};
     if (playing && mode == GAME_MODE_DUNGEON) {
         world.dungeon = SaveData->GetDngStatus()->cur_georama;
         world.floor = SaveData->GetDngStatus()->cur_floor;
@@ -138,6 +150,9 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation.starts_with("entities.")) {
+            return ReadEntities(world.playing && world.mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr, operation, arguments);
+        }
         if (!SaveData || !world.playing){ throw std::runtime_error("game state unavailable");
 }
         if (operation == "georama.elements_get") {
