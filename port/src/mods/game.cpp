@@ -126,12 +126,14 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 void TickGame() {
     static std::uint64_t entity_epoch = 0;
     if (entity_epoch != Scripts().Epoch()) {
+        RetainOwnedEnemyScales({});
         RetainOwnedEnemyStats({});
         EnemyDeaths().Enable(false);
         StopTrackingEntities();
         entity_epoch = Scripts().Epoch();
     }
     if (!Scripts().HasGameplay()) {
+        RetainOwnedEnemyScales({});
         RetainOwnedEnemyStats({});
         EnemyDeaths().Enable(false);
         StopTrackingEntities();
@@ -140,6 +142,7 @@ void TickGame() {
     const bool playing = SaveData && (mode == GAME_MODE_EDIT || mode == GAME_MODE_DUNGEON);
     ExpireEntitiesOutsideUnit(playing && mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr);
     if (!playing || mode != GAME_MODE_DUNGEON) {
+        RetainOwnedEnemyScales({});
         RetainOwnedEnemyStats({});
         StopTrackingEntities();
     }
@@ -196,8 +199,10 @@ void TickGame() {
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
     EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());
-    if (!OwnedEnemyStats().empty()) {
-        RetainOwnedEnemyStats(Scripts().ActiveOwners());
+    if (!OwnedEnemyStats().empty() || !OwnedEnemyScales().empty()) {
+        const auto owners = Scripts().ActiveOwners();
+        RetainOwnedEnemyStats(owners);
+        RetainOwnedEnemyScales(owners);
     }
 }
 } // namespace mods

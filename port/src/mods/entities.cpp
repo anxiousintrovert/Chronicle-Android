@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <stdexcept>
 
 #include "api.hpp"
@@ -27,26 +28,28 @@ bool Live(const MONSTOR &actor) {
     return (actor.state == 1 || actor.state == 2) && actor.hp > 0 && actor.revealed != 0;
 }
 
-nlohmann::json Snapshot(const MONSTOR &actor, EntityHandles::Handle handle) {
+nlohmann::json Snapshot(const MONSTOR &actor, const CCharacter &character, EntityHandles::Handle handle) {
     return {
-        {"entity",       std::to_string(handle)},
-        {"status",       "live"                },
-        {"hp",           actor.hp              },
-        {"max_hp",       actor.max_hp          },
-        {"defense",      actor.defense         },
-        {"reward_exp",   actor.exp             },
-        {"reward_money", actor.money           },
-        {"drop_item",    actor.drop_item       },
-        {"active",       actor.state == 2      },
-        {"slow_frames",  actor.slow_timer      },
-        {"stop_frames",  actor.stop_timer      }
+        {"entity",       std::to_string(handle)   },
+        {"status",       "live"                   },
+        {"hp",           actor.hp                 },
+        {"max_hp",       actor.max_hp             },
+        {"defense",      actor.defense            },
+        {"reward_exp",   actor.exp                },
+        {"reward_money", actor.money              },
+        {"drop_item",    actor.drop_item          },
+        {"active",       actor.state == 2         },
+        {"slow_frames",  actor.slow_timer         },
+        {"stop_frames",  actor.stop_timer         },
+        {"visual_scale", ReadEnemyScale(character)}
     };
 }
 } // namespace
 
 bool IsEntityWrite(std::string_view operation) {
     return operation == "combat.heal" || operation == "combat.damage" || operation == "combat.status_add" ||
-           operation == "entities.set_stats" || operation == "entities.reset_stats";
+           operation == "entities.set_stats" || operation == "entities.reset_stats" ||
+           operation == "entities.scale_set" || operation == "entities.scale_reset";
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
@@ -75,6 +78,19 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
 }
 
 std::string ValidateEntityWrite(std::string_view operation, const nlohmann::json &a) {
+    if (operation == "entities.scale_set" || operation == "entities.scale_reset") {
+        const bool reset = operation == "entities.scale_reset";
+        if (!a.is_object() || a.size() != (reset ? 1u : 2u) || !a.contains("entity") ||
+            !a["entity"].is_string() || !Parse(a["entity"].get_ref<const std::string &>())) {
+            return "provide a current entity handle and required scale fields";
+        }
+        if (!reset && (!a.contains("scale") || !a["scale"].is_number() ||
+                       !std::isfinite(a["scale"].get<double>()) || a["scale"].get<double>() < 0.5 ||
+                       a["scale"].get<double>() > 3.0)) {
+            return "scale must be a finite multiplier from 0.5 to 3.0";
+        }
+        return {};
+    }
     if (operation == "entities.set_stats" || operation == "entities.reset_stats") {
         if (!a.is_object() || !a.contains("entity") || !a["entity"].is_string() ||
             !Parse(a["entity"].get_ref<const std::string &>())) {
@@ -129,6 +145,7 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
     unit_ = nullptr;
     values_ = {};
     owners_.reset();
+    scales_.reset();
     error.clear();
     if (commands.size() > 64) {
         error = "callback write budget exceeded";
@@ -161,6 +178,34 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
         if (hp <= 0 || max_hp < hp) {
             error = "enemy is already dying or has invalid native health";
             return false;
+        }
+        if (command.operation == "entities.scale_set" || command.operation == "entities.scale_reset") {
+            if (command.owner.empty()) {
+                error = "scale writes require a runtime package owner";
+                return false;
+            }
+            if (!scales_) {
+                scales_ = OwnedEnemyScales();
+            }
+            if (!value.scale_touched) {
+                value.scale = ReadEnemyScale(unit->chara[*slot][0]);
+            }
+            if (command.operation == "entities.scale_reset") {
+                if (const auto it = scales_->find(unit); it != scales_->end()) {
+                    value.scale_touched |= it->second[*slot].Release(command.owner, value.scale);
+                    PruneOwnedEnemyScales(*scales_);
+                }
+                continue;
+            }
+            if (!scales_->contains(unit) && scales_->size() >= 8) {
+                error = "owned enemy scale unit capacity exhausted";
+                return false;
+            }
+            if (!(*scales_)[unit][*slot].Claim(command.owner, value.scale, command.arguments.at("scale").get<float>(), error)) {
+                return false;
+            }
+            value.scale_touched = true;
+            continue;
         }
         if (command.operation == "entities.set_stats" || command.operation == "entities.reset_stats") {
             if (command.owner.empty()) {
@@ -247,6 +292,9 @@ void EntityTransaction::Commit() noexcept {
     if (owners_) {
         OwnedEnemyStats().swap(*owners_);
     }
+    if (scales_) {
+        OwnedEnemyScales().swap(*scales_);
+    }
     for (unsigned i = 0; i < values_.size(); ++i) {
         if (!values_[i].touched) {
             continue;
@@ -258,6 +306,9 @@ void EntityTransaction::Commit() noexcept {
         }
         unit_->monster[i].slow_timer = values_[i].slow;
         unit_->monster[i].stop_timer = values_[i].stop;
+        if (values_[i].scale_touched) {
+            WriteEnemyScale(unit_->chara[i][0], values_[i].scale);
+        }
         if (values_[i].reaction != MONSTER_DMG_NONE) {
             auto &actor = unit_->monster[i];
             actor.last_attacker = -1;
@@ -311,12 +362,12 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
                 {"status", "expired"     }
             };
         }
-        return Snapshot(unit->monster[*slot], handles.Get(*slot));
+        return Snapshot(unit->monster[*slot], unit->chara[*slot][0], handles.Get(*slot));
     }
     auto result = nlohmann::json::array();
     for (unsigned slot = 0; slot < EntityHandles::Capacity; ++slot) {
         if (Live(unit->monster[slot]) && handles.Get(slot)) {
-            result.push_back(Snapshot(unit->monster[slot], handles.Get(slot)));
+            result.push_back(Snapshot(unit->monster[slot], unit->chara[slot][0], handles.Get(slot)));
         }
     }
     return {

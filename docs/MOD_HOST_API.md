@@ -598,6 +598,39 @@ values. Live stats do not modify spawn templates, collision sizes or damage form
 The port keeps at most eight units of ownership records, each with the unchanged
 16 retail enemy slots. No records are created without explicit stat commands.
 
+### Owned enemy visual scale
+
+`entities.scale_set({entity = handle, scale = multiplier})` requires `game.write`
+and a current handle for an active, revealed, living enemy in a dungeon. The
+uniform multiplier must be finite and between 0.5 and 3.0. It multiplies the
+captured native X/Y/Z scale; repeated requests use that baseline rather than
+compounding the previous multiplier. The native `CCharacter::SetScale` path
+updates both the main model and shadow. No draw-loop override is installed.
+
+`entities.scale_reset({entity = handle})` releases only the calling package's
+scale ownership. `scale = 1` keeps ownership while requesting the captured native
+size; use reset to release it. A competing package's scale write rejects the
+entire callback with the existing owner's ID in the manager diagnostic. A reset
+by another owner has no effect. Both operations reject unknown fields and obey
+the same ordered, atomic save/entity transaction boundary as stat writes.
+
+Scale ownership is independent of stat ownership and is not saved. Failure or
+unload, runtime/save replacement, leaving dungeon gameplay, floor clearing and
+slot reuse release it. Each axis restores only if it still equals the mod's last
+applied value; later native changes are preserved. A subsequent explicit scale
+request rebases axes that native code changed, keeping the baseline of untouched
+axes. Native phase scripts can supersede scale; this is not a continuous lock.
+Invalid native scales and floating-point overflow reject the transaction before
+changing model, shadow or claims. Ownership is bounded to eight units of 16 retail
+slots and stays empty without explicit requests.
+
+This changes visual transforms, not monster HP, native body/collision radius,
+movement parameters or spawn templates. Attached visuals/effect positions that
+follow model frames can follow the scaled model. It does not provide a physical
+resizing or hitbox API. The existing enemy snapshots expose `visual_scale` as an
+array of the three currently committed native scale components, including native
+changes made after the request.
+
 ### Live enemy inspection
 
 `entities.list` takes no arguments and requires `game.read` plus an active dungeon.
@@ -605,7 +638,7 @@ It returns `{entities = [...]}` in native slot order, excluding dead, hidden and
 unused enemies. `entities.get({entity = handle})` returns the same detached record
 or `{entity = handle, status = "expired"}`. A record contains `entity`, `status`,
 `hp`, `max_hp`, `defense`, `reward_exp`, `reward_money`, `drop_item`, `active`,
-`slow_frames` and `stop_frames`. `active` distinguishes participating from dormant
+`slow_frames`, `stop_frames` and `visual_scale`. `active` distinguishes participating from dormant
 revealed enemies. Reward fields are native parameters, not guaranteed payouts.
 
 Handles are opaque decimal strings; preserve them exactly. They are session-local

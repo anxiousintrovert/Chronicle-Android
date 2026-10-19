@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 58 implemented operations, native plugins and author
+a real host-call boundary, 60 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,17 +18,52 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal with native interactions and deferred sounds | Recruitment, native active/town-character switching, temporary tuning ownership |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries and transactional status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, upgrade, actual build-up and fitted attachment insertion/removal with active effect refresh |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live HP/maximum/defense/reward/drop fields with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, owned visual scale, spawn-time tuning and deterministic damage modifiers |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | No renderer/timing modifications | Owned overlays/camera/lighting/audio controls, activated only by callers |
+| Rendering / audio | No framework renderer/timing hooks; native enemy model/shadow scale on explicit request | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle events, owned scalar save values and optional shared-manager actions | Custom/native-ready events, cross-package exports, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
+
+## Owned enemy scale validation (2026-10-19)
+
+`entities.scale_set` and `entities.scale_reset` stage owner-scoped uniform visual
+multipliers alongside save, stat and combat writes. The existing native scale
+method updates the main model and shadow; there is no added draw hook. Snapshots
+expose the committed native XYZ `visual_scale`. Failed callbacks leave transforms
+and ownership unchanged; lifecycle cleanup restores unchanged axes while preserving
+later native phase changes. No native layout, capacity or combat-radius changes
+are introduced, and no ownership records exist without explicit requests.
+
+Eight focused scale cases passed, covering actual native model/shadow frames,
+noncompounding requests, conflicts, mixed transaction rollback, invalid/overflowing
+scales, native axis changes, slot/floor cleanup and the no-package game bridge.
+They also passed in the full Clang suite described below. An isolated PAL dungeon
+shared-manager action verified 2x, then 0.5x, then restored original XYZ values
+while checking unchanged health/defense; the manager displayed `PASS owned scale`.
+This does not establish every attachment, boss phase or platform's rendering.
+
+## Kazarov dependency alignment (2026-10-19)
+
+The branch now matches Chronicle master's Kazarov pin `611182d6393e3717d0700a71f3fd637e63f44d2a`
+and its `anxiousintrovert/Kazarov-Android` compatibility source. This is newer than
+the prior `1a8f9ab7` pin; it is **not** Kazarov main `04bd301e`, whose removed binary
+audio loaders require a separate Chronicle data-format migration. The port uses
+the migrated build-script path. A small PNG adapter reuses the shared decoder to
+preserve Chronicle's RGB/palette/grayscale UI and localization image support; the
+dependency's strict RGBA8 loader rejected the renderer's own RGB PNG output.
+
+Clang Windows Release builds of game, tests and `dcdata` pass. The 623-case working
+tree suite (including the scale tests) completed with 616 passes, six skips and
+one disabled optional benchmark. The two area-card tests that exposed the PNG
+regression now pass without changing their assertions. All 15 Python checks pass;
+3,840 empty/disabled generator cases still match the original pinned upstream.
+Other-platform and PS2 builds were not run; no PS2 source was edited.
 
 ## Owned enemy stat validation (2026-10-19)
 

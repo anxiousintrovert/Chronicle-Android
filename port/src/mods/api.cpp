@@ -16,6 +16,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"entities.scale_set",      "game.write",    "Own a live enemy model and shadow scale multiplier from 0.5 to 3.0.",          true },
+    {"entities.scale_reset",    "game.write",    "Release this package's visual scale for a live enemy.",                        true },
     {"entities.set_stats",      "game.write",    "Own selected live enemy stats with conditional restoration.",                  true },
     {"entities.reset_stats",    "game.write",    "Release this package's live enemy stat changes.",                              true },
     {"combat.get",              "game.read",     "Read native floor enemy count and recorded kills.",                            false},

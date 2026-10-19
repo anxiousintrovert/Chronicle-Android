@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "owned_enemy_scale.hpp"
 #include "owned_enemy_stats.hpp"
 class CMonstorUnit;
 class CSaveData;
@@ -34,11 +35,14 @@ private:
         EnemyStatValues stats{};
         int             slow = 0, stop = 0;
         int             reaction = 0, damage = 0;
+        bool            scale_touched = false;
+        EnemyScale      scale{};
     };
 
-    CMonstorUnit                  *unit_ = nullptr;
-    std::array<Values, 16>         values_{};
-    std::optional<EnemyStatOwners> owners_;
+    CMonstorUnit                   *unit_ = nullptr;
+    std::array<Values, 16>          values_{};
+    std::optional<EnemyStatOwners>  owners_;
+    std::optional<EnemyScaleOwners> scales_;
 };
 
 std::string    ValidateEntityQuery(std::string_view operation, const nlohmann::json &arguments);
