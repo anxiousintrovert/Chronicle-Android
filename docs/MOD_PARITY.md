@@ -775,3 +775,37 @@ the dungeon seed matrix alone cannot prove unchanged town behavior.
 This work uses existing retail characters only. It must not establish custom
 character/item/weapon identifiers or consume the contributor's cutscene, custom
 item or custom weapon framework contracts.
+
+## Scoped town motion binding (2026-10-19; town API still pending)
+
+`mods::TownMotionBinding` now provides the internal lifetime token for mapping a
+loaded non-Toan retail character's town motions. It is non-copyable, rejects
+competing bindings, and releases the mapping on destruction. Only the bound
+character in edit mode is affected; outside edit mode, for other characters, for
+motions outside the town map, and without a binding, motion IDs pass through.
+Construction and resolution do not change native character or save fields.
+
+Both `CCharacter::GetMotionParam` and `CCharacter::ShadowStep` have port-only
+adapters. They retain the native function bodies with one scoped resolution call
+each. A source test checks both bodies against the read-only PS2 originals. The
+shadow needs its own adapter because it searches motion ranges independently.
+There are no PS2 patches, header edits, arena increases or production binding
+creation in this increment. The operation count remains 81. This is an internal
+prerequisite, not a claim that mods can switch town characters yet.
+
+Five focused Clang tests cover dormant identity (including invalid motion IDs),
+all five replacement member bindings, other-character and other-mode isolation,
+conflicting/invalid bindings, scope cleanup, native model and shadow set/index
+selection, and unchanged character bytes/RNG during lookup. The shadow test uses
+the native pre-render hold-flag path and a null frame; it does not prove rendered
+rig compatibility. The 16 Python author/source tests also pass. Windows Release
+game and test builds use llvm-mingw Clang 23.1.2 for C and C++. The final full
+suite has 721 registered tests: 710 passed, 10 skipped and one disabled, with no
+failures. Retail town switching has not yet been exercised.
+
+The 3,840-case seed comparison remains byte-identical for pinned upstream, empty
+framework and disabled-package configurations, SHA-256
+`8bdcc22d99722f06fb3bc9006836270a7f965a3ac09e895d51e41ad5c3b6a877`.
+This is dungeon generation evidence, not town rendering evidence. The queued
+resource loader, exclusive owner/scene lifetime, restoration and retail town
+replay from the audit above remain required before publishing town operations.
