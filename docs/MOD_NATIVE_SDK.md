@@ -50,7 +50,7 @@ from worker threads or after stop. The size-tagged host table contains:
 - `available(context, operation)`: whether the operation is implemented.
 - `call(context, operation, arguments_json, &result_json)`: same operation names,
   validation, permission checks and queued writes as Lua host calls. Arguments
-  are one JSON object, at most 4096 bytes. Returns 1 on success, 0 with a JSON
+  are one JSON object, at most 16384 bytes. Returns 1 on success, 0 with a JSON
   error. Returned strings belong to the host and last until the next host call.
 - `log(context, message)`: bounded session diagnostics visible in the manager.
 
@@ -70,3 +70,7 @@ Lua callback exports, native event subscriptions or arbitrary engine pointers.
 
 Host API permission checks govern host services only; trust grants native process
 execution. The no-mod invariant applies while plugins remain disabled/untrusted.
+
+Host JSON arguments share the structured depth/node/byte limits documented in
+[MOD_HOST_API.md](MOD_HOST_API.md). Existing operation field/type contracts remain
+unchanged; richer transport alone does not register custom content or cutscenes.

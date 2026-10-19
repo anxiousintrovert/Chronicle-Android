@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include "api.hpp"
+#include "arguments.hpp"
 #include "native.hpp"
 extern "C" {
 #include "lauxlib.h"
@@ -336,23 +337,8 @@ int ApiCall(lua_State *L) {
     if (lua_gettop(L) > 2 || (!lua_isnoneornil(L, 2) && !lua_istable(L, 2))) {
         return Failure(L, "arguments must be a table");
     }
-    m.arguments = Json::object();
-    if (lua_istable(L, 2)) {
-        lua_pushnil(L);
-        while (lua_next(L, 2)) {
-            if (lua_type(L, -2) != LUA_TSTRING || lua_rawlen(L, -2) > 32 || lua_type(L, -1) != LUA_TNUMBER || m.arguments.size() >= 8) {
-                return Failure(L, "arguments require at most eight named numbers");
-            }
-            if (!std::isfinite(lua_tonumber(L, -1))) {
-                return Failure(L, "arguments must be finite");
-            }
-            if (lua_isinteger(L, -1)) {
-                m.arguments[lua_tostring(L, -2)] = lua_tointeger(L, -1);
-            } else {
-                m.arguments[lua_tostring(L, -2)] = lua_tonumber(L, -1);
-            }
-            lua_pop(L, 1);
-        }
+    if (!ReadArguments(L, 2, m.arguments, m.call_error)) {
+        return Failure(L, m.call_error.c_str());
     }
     m.call_error = ValidateOperation(name, m.arguments);
     if (!m.call_error.empty()) {
@@ -409,7 +395,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         return 0;
     }
     try {
-        if (!name || !arguments || std::strlen(arguments) > 4096) {
+        if (!name || !arguments || std::strlen(arguments) > 16384) {
             throw std::runtime_error("invalid native API arguments");
         }
         if (++m.native_calls > 128) {
@@ -426,6 +412,10 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             throw std::runtime_error("host operation requires active gameplay");
         }
         const auto args = Json::parse(arguments);
+        const auto transport_error = ValidateArguments(args);
+        if (!transport_error.empty()) {
+            throw std::runtime_error(transport_error);
+        }
         const auto error = ValidateOperation(name, args);
         if (!error.empty()) {
             throw std::runtime_error(error);

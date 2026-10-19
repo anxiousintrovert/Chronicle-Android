@@ -16,11 +16,11 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation | Author-provided menu/action contributions, richer journal/skills UI |
 | Lua and host calls | Isolated bounded Lua, simulation/map callbacks, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | Owned event subscriptions and more native lifecycle events; dependency exports/commands |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
-| Inventory / weapons / economy | Bag, quick-slot and weapon reads; WHP gauge writes; wallet and fishing point transactions | Item definitions/registration, native give/remove/use; weapon equip, ABS/build-up/attachments/synthesis |
+| Inventory / weapons / economy | Bag, quick-slot and weapon reads; WHP gauge writes; wallet and fishing point transactions | Custom item/weapon registration belongs to contributor; native give/remove/use; weapon equip, ABS/build-up/attachments/synthesis |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | No new hooks or engine-capacity changes | Generation-checked handles, spawn/despawn, owned stats/scale, deterministic damage modifiers and kill events |
 | Shops / Georama | Saved plot/placement/request inspection | Owned shop stock/prices with restore, placement/Atla/satisfaction integration |
-| Content / assets | Same-size compatible existing asset replacements and package resource reads | Registered new items/characters/models/animations/maps, structural validation/conversion, native allocation contracts |
+| Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No renderer/timing modifications | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1, SHA-256 approval binding, separate trust+enable, Windows real DLL lifecycle test; shared host calls/logging/ticks | Native events, persistence/exports, broader host domains; Linux/macOS/Android verification |
@@ -96,3 +96,10 @@ The save-field APIs have bounds, transaction rollback, detached snapshot, byte
 preservation and RNG tests. This does not substitute for a retail progression
 playthrough of every enabled API. Native loading on Linux/macOS/Android remains
 unverified. Full capability parity remains outstanding as shown in the matrix.
+
+## Contributor-owned scope
+
+Cutscene, custom item and custom weapon frameworks are reserved for the contributor
+per the user instruction. Do not implement competing systems. Their integration
+boundaries are documented in [MOD_CONTRIBUTOR_BOUNDARIES.md](MOD_CONTRIBUTOR_BOUNDARIES.md).
+Coverage remains pending external integration, not falsely marked complete.

@@ -53,8 +53,12 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
 Weapon slots are 0–10. Amount and HP arguments are integers 0–32767. Water values
-may be fractional, finite and 0–32767. Lua argument tables contain only named
-numbers. Flag queries return `{value = number}`. Empty read arguments may be omitted. Native numeric IDs and slots do
+may be fractional, finite and 0–32767. Lua arguments use a root object with string keys. Values can be finite numbers,
+booleans, UTF-8 strings, nested objects, or consecutive 1-based arrays. Empty Lua
+tables represent objects. Limits: depth 8, 128 nodes (object keys count too),
+128-byte keys without NUL, and 16 KiB encoded JSON. Cycles, mixed/sparse arrays,
+functions and userdata are rejected without invoking metamethods. Each operation
+still validates its own documented argument types and fields. Flag queries return `{value = number}`. Empty read arguments may be omitted. Native numeric IDs and slots do
 not create persistent handles for mod-defined content.
 
 Writes are queued in call order, at most 64 per callback. Queries observe native
