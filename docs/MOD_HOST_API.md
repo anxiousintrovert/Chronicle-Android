@@ -134,6 +134,7 @@ python tools/chronicle_mod.py check ../my-mod
 python tools/chronicle_mod.py inspect ../my-mod
 python tools/chronicle_mod.py check-set ../mods --enable author.my-mod
 python tools/chronicle_mod.py pack ../my-mod --output ../my-mod.zip
+python tools/chronicle_mod.py install ../my-mod.zip --mods ../save/mods
 python tools/chronicle_mod.py capabilities
 python tools/chronicle_mod.py apis
 ```
@@ -149,7 +150,7 @@ exact-size checks against an extracted logical asset tree. Without it, only
 package structure is checked. This is not a live extraction-index validator.
 `pack` creates a new ZIP without overwriting an existing file; only declared
 assets/resources/scripts/library and standard README/license/changelog files are
-included. ZIPs must be unpacked for installation. The validator checks native
+included. ZIPs must be unpacked for installation, manually or with `install`. The validator checks native
 file shape/size, not machine architecture or executable safety.
 
 ## Same-seed regression tool
@@ -200,3 +201,35 @@ rejects signed-32-bit overflow; ABS clamps to the native threshold. This does no
 consume attachments, run level-up random rolls, build up, or status-break a weapon.
 Existing equipped weapons remain equipped. All writes participate in the same
 callback transaction as health, currency and story flags.
+
+## Offline installation and updates
+
+Close Chronicle before changing installed package files. Install archives produced
+by `pack` into a chosen mods directory:
+
+```text
+python tools/chronicle_mod.py install ../my-mod.zip --mods ../save/mods
+python tools/chronicle_mod.py install ../my-mod-v2.zip --mods ../save/mods --replace
+```
+
+The installer validates in a hidden staging directory before publishing a package.
+It rejects traversal, symlinks/special files, case-colliding paths, Windows device
+names, undeclared files, encrypted members and unsupported compression. Limits:
+8,192 entries, 64 MiB per member and 512 MiB total uncompressed data. The archive
+must contain exactly one folder matching its package ID. Optional `--data` adds
+native target size checks, as with `check`; no code is executed.
+
+An existing destination requires `--replace`. The previous valid package moves to
+`<mods>/.backups/<id>-<unique token>` before replacement. A failed publication
+restores that backup when the destination remains free. Hidden staging/backups
+are ignored by discovery. Backups are retained; no old package is silently deleted.
+To revert, close the game, move the replacement aside, and move the recorded backup
+back to its original package folder. Keep package updates and saved-game backups
+separate: this operation does not migrate or restore gameplay saves.
+
+The installer never writes `mods-profile.json`, enables a mod, approves native
+code, or resolves conflicts by deleting other packages. New IDs without a prior
+local selection stay disabled; replacements retain existing selection. Updated
+native bytes still require renewed trust. Restart, then inspect the shared menu
+for dependency versions, conflicts, permissions and native approval. Updating an
+enabled Lua package changes its code on restart, so use explicit updates only.

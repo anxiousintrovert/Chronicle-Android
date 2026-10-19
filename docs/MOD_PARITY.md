@@ -12,7 +12,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
-| Packages and conflicts | Folder discovery, dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; all packages initially disabled | Dependency version constraints, installation/update workflow |
+| Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation | Author-provided menu/action contributions, richer journal/skills UI |
 | Lua and host calls | Isolated bounded Lua, simulation/map callbacks, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes | Owned event subscriptions and more native lifecycle events; dependency exports/commands |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes | Recruitment, native active/town-character switching, status application/removal, temporary tuning ownership |
@@ -24,7 +24,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | No renderer/timing modifications | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1, SHA-256 approval binding, separate trust+enable, Windows real DLL lifecycle test; shared host calls/logging/ticks | Native events, persistence/exports, broader host domains; Linux/macOS/Android verification |
-| Author tooling | new/check/inspect/check-set/pack/capabilities/apis/compare-seeds CLI; standalone Clang native example | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
+| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang native example | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
@@ -121,3 +121,18 @@ then verified committed native values on the following tick. Its PASS log was
 visually checked in the shared in-game mod manager. The package and game assets
 remain local audit fixtures, not installed gameplay examples. Repeated 3,840-case
 empty/disabled-mod exports matched the pinned upstream hash above. No PS2 diff.
+
+### Dependency versions and offline installation
+
+Explicit exact-version pins and SemVer minimum/exclusive-upper bounds now block
+incompatible consumers and their dependents before code runs. Runtime and CLI
+share the documented comparison policy; the shared menu displays requirements
+and mismatch reasons. ZIP installation validates in hidden staging, supports
+explicit replacement with retained backups, and leaves enable/trust profiles alone.
+
+Validation: Clang 23.1.2 Windows game/test builds; 43 affected C++ tests passed,
+one symlink privilege skip; 13 Python tests passed, including injected failed
+publication/rollback and hostile archive paths. A packaged/installed two-mod PAL
+Norune fixture showed its incompatible consumer BLOCKED/INACTIVE in the manager.
+All 3,840 empty/disabled generator exports again matched pinned upstream. PS2
+source remains unchanged. These local workflows do not provide a remote mod store.

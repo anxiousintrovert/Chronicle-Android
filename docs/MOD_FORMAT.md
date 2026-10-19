@@ -15,11 +15,12 @@ schema 1; put release notes and attribution in a separate README.
 | `schema_version` | Yes | Integer | Exactly `1` |
 | `id` | Yes | String | 1–96 bytes; `[a-z][a-z0-9._-]*`; globally unique; keep stable across releases |
 | `name` | Yes | String | 1–256 bytes, no control characters; manager display name |
-| `version` | Yes | String | 1–256 bytes, no control characters; recommend `1.0.0`; exact string checked by gameplay saves, not a semantic-version resolver |
+| `version` | Yes | String | 1–256 bytes, no control characters; recommend `1.0.0`; exact string checked by gameplay saves; SemVer precedence only for explicit dependency ranges |
 | `game` | Yes | String | Exactly `chronicle` |
 | `files` | Yes | Object | Up to 4,096 game-target → package-source string mappings; `{}` is valid |
 | `enabled` | No | Legacy Boolean | Validated but ignored; every newly discovered package is disabled |
 | `requires` | No | String array, `[]` | Up to 128 unique package IDs; no self dependency; all must be enabled and valid |
+| `dependency_versions` | No | Object, `{}` | Up to 128 declared dependency IDs mapped to exact pins or SemVer bounds; see below |
 | `conflicts` | No | String array, `[]` | Up to 128 unique package IDs; no self reference; either side's declaration blocks both |
 | `exclusive` | No | String array, `[]` | Up to 128 unique feature IDs with the same syntax as package IDs; two owners conflict |
 | `requires_capabilities` | No | String array, `[]` | Up to 128 unique capability IDs; every capability must be implemented by the host |
@@ -129,3 +130,33 @@ The game and offline validator reject missing operations or missing permissions
 before executing package code. This does not guarantee that a runtime character,
 weapon, gameplay phase, or target flag is appropriate; calls still validate those.
 Use `chronicle.api_available` for optional features instead.
+
+## Dependency version requirements
+
+`requires` continues to list package IDs. Optional `dependency_versions` constrains
+only IDs already in `requires`; it cannot introduce a hidden dependency.
+
+```json
+{
+  "requires": ["author.shared-api", "author.legacy"],
+  "dependency_versions": {
+    "author.shared-api": {"minimum": "1.2.0", "before": "2.0.0"},
+    "author.legacy": {"exact": "legacy-v1"}
+  }
+}
+```
+
+`exact` compares the complete version string, including build metadata, and also
+supports legacy labels such as `1`. It cannot be combined with range bounds.
+`minimum` is inclusive; `before` is exclusive; either or both may be present.
+Bounds must use full SemVer (`major.minor.patch`, optional prerelease/build).
+Numeric identifiers cannot have leading zeroes. Range precedence ignores build
+metadata, compares numeric identifiers numerically without integer overflow, and
+orders prereleases before their release. Prereleases participate directly: for
+example `1.9.0-beta` satisfies `>=1.2.0 <2.0.0`; no npm-style prerelease exclusion
+is applied. An installed non-SemVer label cannot satisfy a range.
+
+Empty, reversed or unknown bounds fail discovery. A mismatch blocks the consumer
+and its dependents, not the provider. The menu shows the constraint and installed
+version. The CLI uses the same rules. This is local validation, not a downloader
+or solver that installs another version. Save-state version matching remains exact.

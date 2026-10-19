@@ -274,4 +274,48 @@ TEST_F(ModManager, RequiredHostOperationsBlockBeforeLoadingAnyCode) {
     EXPECT_NE(manager.Report().find("missing host operation"), std::string::npos);
 }
 
+TEST_F(ModManager, VersionMismatchBlocksConsumerAndDependentsWithoutBlockingProvider) {
+    auto provider = Manifest("test.provider"), consumer = Manifest("test.consumer"), dependent = Manifest("test.dependent");
+    provider["version"] = "2.0.0";
+    consumer["requires"] = {"test.provider"};
+    consumer["dependency_versions"] = {
+        {"test.provider", {{"minimum", "1.2.0"}, {"before", "2.0.0"}}}
+    };
+    dependent["requires"] = {"test.consumer"};
+    Add("provider", provider);
+    Add("consumer", consumer);
+    Add("dependent", dependent);
+    Scan();
+    EXPECT_TRUE(Find("test.provider").Active());
+    EXPECT_FALSE(Find("test.consumer").Active());
+    EXPECT_FALSE(Find("test.dependent").Active());
+    EXPECT_NE(manager.Report().find("Installed: 2.0.0"), std::string::npos);
+    provider["version"] = "1.2.0+build";
+    Add("provider", provider);
+    Scan();
+    EXPECT_TRUE(Find("test.consumer").Active());
+    EXPECT_TRUE(Find("test.dependent").Active());
+    ASSERT_EQ(manager.LoadOrder().size(), 3u);
+    EXPECT_EQ(manager.LoadOrder()[0], "test.provider");
+}
+
+TEST_F(ModManager, InvalidOrUndeclaredVersionConstraintFailsDiscovery) {
+    auto m = Manifest("test.consumer");
+    m["dependency_versions"] = {
+        {"test.provider", {{"exact", "1"}}}
+    };
+    Add("consumer", m);
+    Scan();
+    EXPECT_FALSE(Find("test.consumer").Active());
+    EXPECT_NE(manager.Report().find("requires declared dependency"), std::string::npos);
+    m["requires"] = {"test.provider"};
+    m["dependency_versions"]["test.provider"] = {
+        {"minimum", "2.0.0"},
+        {"before",  "1.0.0"}
+    };
+    Add("consumer", m);
+    Scan();
+    EXPECT_NE(manager.Report().find("version range is empty"), std::string::npos);
+}
+
 } // namespace

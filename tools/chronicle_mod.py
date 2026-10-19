@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 import re
 import sys
+import stat
+import tempfile
+import uuid
 import zipfile
 
 CAPABILITIES = {
@@ -16,7 +19,7 @@ CAPABILITIES = {
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}
 FIELDS = REQUIRED | {"api_version", "enabled", "requires", "conflicts", "exclusive",
-                     "requires_capabilities", "requires_operations", "permissions", "script", "quests", "resources", "native_library"}
+                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library"}
 
 
 def require(condition, message):
@@ -38,6 +41,47 @@ def identity(value):
 
 def text(value):
     return isinstance(value, str) and 1 <= len(value.encode("utf-8")) <= 256 and all(ord(c) >= 32 for c in value)
+
+
+def semver(value):
+    require(isinstance(value, str) and len(value) <= 256, "version bounds require valid SemVer")
+    match = re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", value)
+    require(match is not None, "version bounds require valid SemVer")
+    pre = []
+    if match[4] is not None:
+        for part in match[4].split('.'):
+            numeric = part.isascii() and part.isdigit()
+            require(not numeric or len(part) == 1 or part[0] != '0', "numeric prerelease identifiers cannot have leading zeros")
+            pre.append((0, int(part)) if numeric else (1, part))
+    return tuple(int(match[i]) for i in (1, 2, 3)), not bool(pre), tuple(pre)
+
+
+def validate_version_requirement(bounds):
+    require(isinstance(bounds, dict) and bounds and bounds.keys() <= {'exact', 'minimum', 'before'}, "invalid dependency version constraint")
+    require(all(text(v) for v in bounds.values()), "invalid dependency version value")
+    if 'exact' in bounds:
+        require(len(bounds) == 1, "exact version cannot be combined with range bounds")
+        return
+    for value in bounds.values():
+        semver(value)
+    if 'minimum' in bounds and 'before' in bounds:
+        require(semver(bounds['minimum']) < semver(bounds['before']), "version range is empty")
+
+
+def accepts_version(version, bounds):
+    if 'exact' in bounds:
+        return version == bounds['exact']
+    try:
+        value = semver(version)
+        return ('minimum' not in bounds or value >= semver(bounds['minimum'])) and ('before' not in bounds or value < semver(bounds['before']))
+    except ValueError:
+        return False
+
+
+def describe_version(bounds):
+    if 'exact' in bounds:
+        return 'exact ' + bounds['exact']
+    return ' '.join(prefix + bounds[key] for key, prefix in [('minimum', '>='), ('before', '<')] if key in bounds)
 
 
 def relative(value):
@@ -77,6 +121,11 @@ def validate(root, data=None):
         require(len(set(ids)) == len(ids), f"duplicate {key}")
         if key in ("requires", "conflicts"):
             require(mod["id"] not in ids, f"self reference in {key}")
+    constraints = mod.get('dependency_versions', {})
+    require(isinstance(constraints, dict) and len(constraints) <= 128, "dependency_versions must contain at most 128 constraints")
+    for dependency, bounds in constraints.items():
+        require(dependency in mod.get('requires', []), f"version constraint requires declared dependency: {dependency}")
+        validate_version_requirement(bounds)
     require(set(mod.get("permissions", [])) <= PERMISSIONS, "unsupported permission")
     require(set(mod.get("requires_capabilities", [])) <= CAPABILITIES, "unsupported required capability")
     operations = {op['name']: op for op in apis()} if mod.get('requires_operations') else {}
@@ -191,6 +240,11 @@ def check_set(root, enabled, data=None):
         for dependency in mod.get('requires', []):
             if dependency not in selected:
                 problems[key].append(f'dependency not enabled: {dependency}')
+            elif dependency in mod.get('dependency_versions', {}) and len(packages.get(dependency, [])) == 1:
+                bounds = mod['dependency_versions'][dependency]
+                installed = packages[dependency][0]['version']
+                if not accepts_version(installed, bounds):
+                    problems[key].append(f"dependency {dependency} requires {describe_version(bounds)}; installed {installed}")
         for other in sorted(selected - {key}):
             if len(packages.get(other, [])) != 1:
                 continue
@@ -234,6 +288,75 @@ def check_set(root, enabled, data=None):
             'scope': 'offline format/conflict check; actual assets, scripts and native trust require in-game validation'}
 
 
+def install(archive, mods_root, replace=False, data=None):
+    """Offline install of our pack format; never changes enablement or trust."""
+    root = Path(mods_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    require(root.is_dir(), "mods root must be a directory")
+    # TemporaryDirectory owns only the newly created hidden directory below root.
+    with tempfile.TemporaryDirectory(prefix='.install-', dir=root) as temp:
+        stage = Path(temp).resolve()
+        require(stage.parent == root, "staging directory escaped mods root")
+        seen, files, roots, total = set(), [], set(), 0
+        with zipfile.ZipFile(archive) as packed:
+            entries = packed.infolist()
+            require(0 < len(entries) <= 8192, "archive must contain 1-8192 entries")
+            for entry in entries:
+                name = relative(entry.filename[:-1] if entry.is_dir() else entry.filename)
+                for part in name.split('/'):
+                    device = part.split('.')[0].upper()
+                    require(device not in {'CON', 'PRN', 'AUX', 'NUL'} and re.fullmatch(r'(COM|LPT)[1-9]', device) is None, 'archive contains a reserved device name')
+                key = name.casefold()
+                require(key not in seen, f"duplicate archive path: {name}")
+                seen.add(key)
+                roots.add(name.split('/')[0])
+                kind = stat.S_IFMT(entry.external_attr >> 16)
+                require(kind in (0, stat.S_IFDIR if entry.is_dir() else stat.S_IFREG), 'archive links and special files are not allowed')
+                require(not entry.flag_bits & 1 and entry.compress_type in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED), 'unsupported encrypted/compression format')
+                require(0 <= entry.file_size <= 64 * 1024 * 1024, 'archive member exceeds 64 MiB')
+                total += entry.file_size
+                require(total <= 512 * 1024 * 1024, 'archive expands beyond 512 MiB')
+                target = stage / name
+                require(target.resolve().is_relative_to(stage), 'archive path escaped staging directory')
+                if entry.is_dir():
+                    target.mkdir(parents=True, exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open('xb') as output:
+                        output.write(packed.read(entry))
+                    files.append(name)
+        require(len(roots) == 1, 'archive must contain one package folder')
+        package_root = stage / next(iter(roots))
+        mod = validate(package_root, data)
+        require(package_root.name == mod['id'], 'archive folder must match package ID')
+        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values())
+        declared |= {mod[key] for key in ('script', 'native_library') if key in mod}
+        allowed = {mod['id'] + '/' + relative(name) for name in declared}
+        require(set(files) <= allowed, 'archive contains undeclared files; use the pack command')
+        target = root / mod['id']
+        require(not target.is_symlink() and target.resolve().parent == root, 'installed package path must stay directly under mods root')
+        backup = None
+        if target.exists():
+            require(replace, 'package already exists; use --replace for a backed-up update')
+            previous = validate(target)
+            require(previous['id'] == mod['id'], 'installed package identity does not match')
+            backups = root / '.backups'
+            require(not backups.is_symlink() and backups.resolve() == backups, 'backup directory must not be a symlink')
+            backups.mkdir(exist_ok=True)
+            backup = backups / (mod['id'] + '-' + uuid.uuid4().hex)
+            require(backup.resolve().parent == backups, 'backup path escaped mods root')
+            target.rename(backup)
+        try:
+            package_root.rename(target)
+        except OSError:
+            if backup is not None and not target.exists():
+                backup.rename(target)
+            raise
+        return {'installed': str(target), 'id': mod['id'], 'version': mod['version'],
+                'backup': str(backup) if backup else None, 'profile_unchanged': True,
+                'next_step': 'Restart Chronicle. No profile entries were created; existing enable/trust selections remain unchanged. Review conflicts and native trust in the mod manager.'}
+
+
 def compare_seeds(baseline, candidates):
     """Compare complete exports without filtering any native fields."""
     original = Path(baseline).read_bytes()
@@ -263,6 +386,9 @@ def main(argv=None):
         cmd.add_argument("package"); cmd.add_argument("--data", help="optional logical asset tree for exact-path size checks")
     archive = commands.add_parser("pack", help="validate and create an unpack-before-install ZIP")
     archive.add_argument("package"); archive.add_argument("--output", required=True)
+    installer = commands.add_parser("install", help="install a package ZIP offline; optional backed-up replacement")
+    installer.add_argument("archive"); installer.add_argument("--mods", required=True)
+    installer.add_argument("--replace", action="store_true"); installer.add_argument("--data")
     commands.add_parser("capabilities")
     commands.add_parser("apis", help="print implemented host operations and permissions")
     doctor = commands.add_parser("check-set", help="preview selected package conflicts without enabling anything")
@@ -278,6 +404,8 @@ def main(argv=None):
             return int(any(not item['matches'] for item in report['candidates']))
         if args.command == "new":
             create(args.id, args.output)
+        elif args.command == "install":
+            print(json.dumps(install(args.archive, args.mods, args.replace, args.data), indent=2))
         elif args.command == "pack":
             pack(args.package, args.output)
         elif args.command == "capabilities":
@@ -295,7 +423,7 @@ def main(argv=None):
             if mod["files"] and not args.data:
                 print("Asset target existence/size not checked: no --data logical tree supplied.")
         return 0
-    except (ValueError, OSError, UnicodeError) as error:
+    except (ValueError, OSError, UnicodeError, zipfile.BadZipFile) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 

@@ -33,7 +33,9 @@ A corrupt profile blocks activation and is preserved for repair.
 
 Put one unpacked package in either `<save directory>/mods/<package>/` or
 `mods/<package>/` beside `darkcloud`. `--save DIR` also selects `DIR/mods`.
-Create the `mods` directory if it does not exist. ZIP archives are not loaded.
+Create the `mods` directory if it does not exist. ZIP archives are not loaded by
+the runtime; the [offline install tool](MOD_HOST_API.md#offline-installation-and-updates)
+can validate and unpack them.
 Directories beginning with a dot are ignored. Restart the game after changes.
 
 ```text
@@ -192,7 +194,7 @@ are explicitly rejected rather than silently discarded.
 
 Conflict detection covers declared incompatibilities and exact file ownership.
 It cannot infer semantic conflicts between different game assets or undeclared
-script interactions. This version has no archive installer, hot reload,
+script interactions. The offline author CLI can install or replace packaged ZIPs with backups. The runtime has no hot reload,
 dependency version ranges, foreign native-plugin ABI compatibility, or importer for other
 frameworks' quest formats. Save compatibility is not certified by a successful
 package scan.

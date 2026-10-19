@@ -143,7 +143,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "resources", "native_library"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -168,6 +168,37 @@ void Read(Package &package, const FileIndex &base) {
         // Legacy field is validated, but only the user profile can enable a mod.
     }
     package.dependencies = Ids(json, "requires", package.id);
+    if (json.contains("dependency_versions")) {
+        const auto &versions = json["dependency_versions"];
+        if (!versions.is_object() || versions.size() > 128) {
+            throw std::runtime_error("dependency_versions must be an object of at most 128 constraints");
+        }
+        for (const auto &[id, bounds] : versions.items()) {
+            if (std::ranges::find(package.dependencies, id) == package.dependencies.end()) {
+                throw std::runtime_error("version constraint requires declared dependency: " + id);
+            }
+            if (!bounds.is_object()) {
+                throw std::runtime_error("dependency version constraint must be an object");
+            }
+            VersionRequirement requirement;
+            for (const auto &[key, value] : bounds.items()) {
+                if (key == "exact") {
+                    requirement.exact = String(bounds, key.c_str());
+                } else if (key == "minimum") {
+                    requirement.minimum = String(bounds, key.c_str());
+                } else if (key == "before") {
+                    requirement.before = String(bounds, key.c_str());
+                } else {
+                    throw std::runtime_error("unknown dependency version bound: " + key);
+                }
+            }
+            auto error = requirement.Validate();
+            if (!error.empty()) {
+                throw std::runtime_error(id + ": " + error);
+            }
+            package.dependency_versions.emplace(id, std::move(requirement));
+        }
+    }
     package.conflicts = Ids(json, "conflicts", package.id);
     package.exclusive = Ids(json, "exclusive", "");
     package.permissions = Ids(json, "permissions", "");
@@ -445,6 +476,9 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
                 if (found == by_id.end() || found->second.size() != 1 || !packages_[found->second.front()].Active()) {
                     Problem(package, "Required mod '" + id + "' is missing, disabled, or blocked");
                     changed = true;
+                } else if (const auto requirement = package.dependency_versions.find(id); requirement != package.dependency_versions.end() && !requirement->second.Accepts(packages_[found->second.front()].version)) {
+                    Problem(package, "Required mod '" + id + "' version " + requirement->second.Describe() + "\nInstalled: " + packages_[found->second.front()].version);
+                    changed = true;
                 }
             }
         }
@@ -474,20 +508,26 @@ std::string Manager::Report() const {
         {"mods",           Json::array()}
     };
     for (const auto &package : packages_) {
+        Json version_rules = Json::object();
+        for (const auto &[id, rule] : package.dependency_versions) {
+            version_rules[id] = rule.Describe();
+        }
         report["mods"].push_back({
-            {"id",                 package.id                                                                  },
-            {"name",               package.name                                                                },
-            {"version",            package.version                                                             },
-            {"directory",          Text(package.root)                                                          },
-            {"enabled",            package.enabled                                                             },
-            {"state",              !package.problems.empty() ? "blocked" : package.enabled ? "active"
+            {"id",                  package.id                                                                 },
+            {"name",                package.name                                                               },
+            {"version",             package.version                                                            },
+            {"directory",           Text(package.root)                                                         },
+            {"enabled",             package.enabled                                                            },
+            {"state",               !package.problems.empty() ? "blocked" : package.enabled ? "active"
                                                                               : "disabled"},
-            {"problems",           package.problems                                                            },
-            {"file_count",         package.files.size()                                                        },
-            {"permissions",        package.permissions                                                         },
-            {"native_library",     Text(package.native_library)                                                },
-            {"native_trusted",     package.native_trusted                                                      },
-            {"native_fingerprint", package.native_fingerprint                                                  }
+            {"problems",            package.problems                                                           },
+            {"file_count",          package.files.size()                                                       },
+            {"dependencies",        package.dependencies                                                       },
+            {"dependency_versions", version_rules                                                              },
+            {"permissions",         package.permissions                                                        },
+            {"native_library",      Text(package.native_library)                                               },
+            {"native_trusted",      package.native_trusted                                                     },
+            {"native_fingerprint",  package.native_fingerprint                                                 }
         });
     }
     return report.dump(2) + '\n';

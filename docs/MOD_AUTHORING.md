@@ -134,7 +134,7 @@ all host allocations or time spent inside C library calls. Install trusted mods.
 
 Ship one folder with `mod.json`, Lua/assets it references, a README, license, and
 changelog. You may distribute a ZIP containing that folder, but users must unpack
-it; the runtime does not read ZIPs. Include installation location, tested host
+it manually or use `chronicle_mod.py install`; the runtime does not read ZIPs. Include installation location, tested host
 revision/platform, required capabilities/mods, known conflicts, permissions,
 gameplay/save effects, and removal instructions. Distribute only assets you have
 permission to share; the examples contain no extracted game data.

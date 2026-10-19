@@ -287,6 +287,12 @@ void Draw() {
         for (const auto &permission : p.permissions) {
             body += "\nPermission: " + permission;
         }
+        for (const auto &dependency : p.dependencies) {
+            body += "\nRequires: " + dependency;
+            if (const auto rule = p.dependency_versions.find(dependency); rule != p.dependency_versions.end()) {
+                body += " " + rule->second.Describe();
+            }
+        }
         for (const auto &problem : p.problems) {
             body += "\n\n" + problem;
         }

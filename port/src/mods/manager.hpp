@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "versions.hpp"
+
 namespace mods {
 
 using FileIndex = std::unordered_map<std::string, std::filesystem::path>;
@@ -24,6 +26,7 @@ struct Package {
     std::string                                  version;
     bool                                         enabled = false;
     std::vector<std::string>                     dependencies;
+    std::map<std::string, VersionRequirement>    dependency_versions;
     std::vector<std::string>                     conflicts;
     std::vector<std::string>                     exclusive;
     std::vector<std::string>                     permissions;
