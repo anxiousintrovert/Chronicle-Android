@@ -29,6 +29,12 @@ silently replace with competing implementations.
 - `port/src/mods/menu.cpp`: existing Chronicle UI windows/lists/cursors. Future
   author menus should use the shared UI/input lifecycle, including cancellation,
   restart semantics and visible failure reasons.
+- `port/src/mods/native_plugin.h`: versioned C host boundary. ABI 2 adds observed
+  lifecycle notifications and package-owned scalar save values without engine
+  pointers, custom content registries or reserved content IDs. These generic
+  notifications do not define cutscene, item or weapon events. Resource ownership,
+  scene-ready hooks and structured content persistence remain decisions for the
+  contributor's integration; the scalar store does not mandate their save format.
 
 ## Native inventory versus custom content
 

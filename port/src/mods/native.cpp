@@ -100,12 +100,16 @@ struct NativeLibrary::Impl {
     SDL_SharedObject *library = nullptr;
 #endif
     const ChronicleModPluginV1 *plugin = nullptr;
+    const ChronicleModPluginV2 *plugin2 = nullptr;
     ChronicleModHostV1          host{};
+    ChronicleModHostV2          host2{};
     void                       *state = nullptr;
     bool                        started = false;
 
     ~Impl() {
-        if (started && plugin) {
+        if (started && plugin2) {
+            plugin2->stop(&host2, state);
+        } else if (started && plugin) {
             plugin->stop(&host, state);
         }
         if (library) {
@@ -122,7 +126,7 @@ NativeLibrary::NativeLibrary() : impl_(std::make_unique<Impl>()) {}
 
 NativeLibrary::~NativeLibrary() = default;
 
-bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, std::string &error) {
+bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, ChronicleModHostV2 host2, std::string &error) {
     try {
         if (!p.Active() || !p.native_trusted || p.native_fingerprint.empty() || NativeFingerprint(p) != p.native_fingerprint) {
             throw std::runtime_error("native library is disabled, untrusted, or changed");
@@ -137,12 +141,28 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, std::string
             throw std::runtime_error("native library could not be loaded for this platform");
         }
 #ifdef _WIN32
+        auto entry2 = reinterpret_cast<ChronicleModEntryV2>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV2"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(GetProcAddress(impl_->library, "ChronicleMod_GetPluginV1"));
 #else
+        auto entry2 = reinterpret_cast<ChronicleModEntryV2>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV2"));
         auto entry = reinterpret_cast<ChronicleModEntryV1>(SDL_LoadFunction(impl_->library, "ChronicleMod_GetPluginV1"));
 #endif
+        if (entry2) {
+            impl_->plugin2 = entry2();
+            const auto *p2 = impl_->plugin2;
+            if (!p2 || p2->size < sizeof(ChronicleModPluginV2) || p2->abi != 2 || !p2->id || p.id != p2->id ||
+                !p2->start || !p2->tick || !p2->stop || (p2->event_mask & ~CHRONICLE_EVENT_ALL) || (p2->event_mask && !p2->event)) {
+                throw std::runtime_error("incompatible native ABI 2 descriptor");
+            }
+            impl_->host2 = host2;
+            impl_->started = true;
+            if (!p2->start(&impl_->host2, &impl_->state)) {
+                throw std::runtime_error("native ABI 2 start callback failed");
+            }
+            return true;
+        }
         if (!entry) {
-            throw std::runtime_error("missing ChronicleMod_GetPluginV1");
+            throw std::runtime_error("missing ChronicleMod_GetPluginV1 or ChronicleMod_GetPluginV2");
         }
         impl_->plugin = entry();
         const auto *plugin = impl_->plugin;
@@ -163,5 +183,15 @@ bool NativeLibrary::Start(const Package &p, ChronicleModHostV1 host, std::string
     }
 }
 
-bool NativeLibrary::Tick() { return impl_->started && impl_->plugin->tick(&impl_->host, impl_->state); }
+bool NativeLibrary::Tick() {
+    return impl_->started && (impl_->plugin2 ? impl_->plugin2->tick(&impl_->host2, impl_->state) : impl_->plugin->tick(&impl_->host, impl_->state));
+}
+
+bool NativeLibrary::WantsEvent(uint32_t event) const {
+    return impl_->started && impl_->plugin2 && (impl_->plugin2->event_mask & event) != 0;
+}
+
+bool NativeLibrary::Event(uint32_t event, const char *world_json) {
+    return !WantsEvent(event) || impl_->plugin2->event(&impl_->host2, impl_->state, event, world_json);
+}
 } // namespace mods

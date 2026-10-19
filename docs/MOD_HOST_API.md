@@ -268,7 +268,9 @@ world tables. They share one instruction budget and transaction per event: failu
 rolls back that event's owned-state changes and queued native writes, stops the
 module and skips its later listeners. Previously committed events remain committed.
 The order within a package is save-loaded, game enter/leave, map entry, floor entry,
-tick, then native plugin tick. Packages retain dependency load order. World values
+queued menu actions, Lua tick, then native plugin tick. Subscribed ABI 2 native
+callbacks follow the corresponding Lua lifecycle callback/listeners, in separate
+transactions; see [the native SDK](MOD_NATIVE_SDK.md). Packages retain dependency load order. World values
 are the snapshot supplied for that tick, not an implicit refresh after each write.
 
 ```lua

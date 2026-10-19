@@ -2,6 +2,7 @@
 /build/
 /build-mods/
 /build-native-probe/
+/build-native-lifecycle/
 /mods/
 /ps2/build/*
 /port/build/*

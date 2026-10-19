@@ -118,6 +118,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `logging.v1` | Bounded per-session diagnostics |
 | `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |
 | `plugins.native.v1` | Opt-in Chronicle C ABI 1 plugins; not a MoonMod ABI compatibility claim |
+| `plugins.native.v2` | Separate C ABI 2 with owned lifecycle subscriptions and scalar save values; ABI 1 remains supported |
 
 List the capabilities your package actually needs. `chronicle.supports(name)`
 allows optional behavior; it does not grant permissions. Unsupported required

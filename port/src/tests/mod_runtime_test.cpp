@@ -839,4 +839,205 @@ TEST_F(ModRuntime, MenuActionsCancelOnWorldChangeAndKeepNormalCallbackBudgets) {
     EXPECT_FALSE(runtime.QueueAction("test.mod", "run", error));
 }
 
+class ModNativeV2 : public ModRuntime {
+protected:
+    void LoadPlugin(const std::string &mode = {}, const fs::path &source = CHRONICLE_NATIVE_V2_FIXTURE, bool trust = true, bool enable = true) {
+        mods::Manager empty;
+        runtime.Start(empty);
+        runtime.ResetState();
+        auto manifest = Manifest("test.native.v2");
+        manifest.erase("quests");
+        manifest["permissions"] = {"native.extension", "game.read", "economy.write"};
+        manifest["requires_capabilities"] = {"plugins.native.v2"};
+        manifest["native_library"] = "plugin" + source.extension().string();
+        const auto package = root / "mods/test.native.v2";
+        if (mode.empty()) {
+            manifest.erase("script");
+        } else {
+            Write(package / "main.lua", "assert(chronicle.set('mode','" + mode + "')); return {}");
+        }
+        Write(package / "mod.json", manifest.dump());
+        fs::copy_file(source, package / manifest["native_library"].get<std::string>(), fs::copy_options::overwrite_existing);
+        mods::Session preview;
+        preview.Start({root / "mods"}, {}, root / "save");
+        ASSERT_EQ(preview.Preview().Packages().size(), 1u);
+        if (trust) {
+            ASSERT_TRUE(preview.SetTrusted("test.native.v2", preview.Preview().Packages()[0].native_fingerprint, true));
+        }
+        if (enable) {
+            ASSERT_TRUE(preview.SetEnabled("test.native.v2", true));
+        }
+        mods::Session active;
+        active.Start({root / "mods"}, {}, root / "save");
+        runtime.Start(active.Active());
+    }
+
+    Json Values() { return Json::parse(runtime.SaveState())["mods"]["test.native.v2"]["values"]; }
+
+    void TearDown() override {
+        mods::Manager empty;
+        runtime.Start(empty);
+        ModRuntime::TearDown();
+    }
+};
+
+TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {
+    LoadPlugin();
+    ASSERT_TRUE(runtime.HasGameplay());
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.native.v2"].contains("values"));
+    int        money = 0;
+    const auto commit = [&](const std::vector<mods::GameCommand> &commands, int, std::string &) {
+        for (const auto &command : commands) {
+            money += command.arguments.at("amount").get<int>();
+        }
+        return true;
+    };
+    runtime.Tick({1, 0, 0, true, 0, 1}, {}, {}, {}, commit);
+    runtime.Tick({1, 0, 7, true, 0, 1}, {}, {}, {}, commit);
+    runtime.Tick({1, 0, 14, true, 0, 2}, {}, {}, {}, commit);
+    runtime.Tick({0, 0, 21, false}, {}, {}, {}, commit);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    const auto state = Values();
+    EXPECT_EQ(state["game_enter"], 1);
+    EXPECT_EQ(state["game_leave"], 1);
+    EXPECT_EQ(state["map_enter"], 1);
+    EXPECT_EQ(state["floor_enter"], 2);
+    EXPECT_EQ(state["ticks"], 3);
+    EXPECT_EQ(money, 21);
+    EXPECT_EQ(runtime.Logs(), (std::vector<std::string>{
+                                  "test.native.v2: [native] v2 started", "test.native.v2: [native] game_enter", "test.native.v2: [native] map_enter",
+                                  "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] v2 tick",
+                                  "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] game_leave"}));
+}
+
+TEST_F(ModNativeV2, SaveLoadRebindsOwnedValuesBeforeDeferredEventAndResetClearsThem) {
+    LoadPlugin();
+    const auto commit = [](const auto &, int, std::string &) { return true; };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    const auto  saved = runtime.SaveState();
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(saved, error)) << error;
+    runtime.Tick({0, 0, 0, false}, {}, {}, {}, commit);
+    EXPECT_EQ(Values()["ticks"], 2);
+    EXPECT_FALSE(Values().contains("save_loaded"));
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values()["ticks"], 3);
+    EXPECT_EQ(Values()["save_loaded"], 1);
+    EXPECT_EQ(Values()["game_enter"], 2);
+    ASSERT_EQ(runtime.Logs()[1], "test.native.v2: [native] save_loaded");
+    runtime.ResetState();
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values()["ticks"], 1);
+    EXPECT_EQ(Values()["save_loaded"], 1);
+}
+
+TEST_F(ModNativeV2, EventFailureRollsBackItsStateAndWritesAndStopsLaterEvents) {
+    LoadPlugin("fail_event");
+    int commits = 0;
+    runtime.Tick({1, 0, 0, true, 0, 1}, {}, {}, {}, [&](const auto &, int, std::string &) { ++commits; return true; });
+    EXPECT_EQ(commits, 0);
+    EXPECT_EQ(Values(), (Json{
+                            {"mode", "fail_event"}
+    }));
+    EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.native.v2"].contains("last_map"));
+    EXPECT_FALSE(runtime.HasGameplay());
+    ASSERT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_EQ(runtime.Logs().back(), "test.native.v2: [native] v2 stopped outside transaction");
+}
+
+TEST_F(ModNativeV2, TickFailureOrRejectedCommitRollsBackTickButKeepsEarlierEvents) {
+    for (const bool fail_tick : {true, false}) {
+        {
+            mods::Manager empty;
+            runtime.Start(empty);
+        }
+        LoadPlugin(fail_tick ? "fail_tick" : "");
+        int commits = 0;
+        runtime.Tick({1, 0, 0, true}, {}, {}, {}, [&](const auto &, int, std::string &) { ++commits; return false; });
+        EXPECT_EQ(commits, fail_tick ? 0 : 1);
+        EXPECT_EQ(Values()["game_enter"], 1);
+        EXPECT_EQ(Values()["map_enter"], 1);
+        EXPECT_FALSE(Values().contains("ticks"));
+        EXPECT_FALSE(Values().contains("stopped"));
+        EXPECT_FALSE(runtime.HasGameplay());
+        ASSERT_FALSE(runtime.Diagnostics().empty());
+    }
+}
+
+TEST_F(ModNativeV2, ThrowingCommitRollsBackOwnedStateAndStopsPlugin) {
+    LoadPlugin();
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, [](const auto &, int, std::string &) -> bool {
+        throw std::runtime_error("commit provider failed");
+    });
+    EXPECT_EQ(Values()["game_enter"], 1);
+    EXPECT_FALSE(Values().contains("ticks"));
+    EXPECT_FALSE(runtime.HasGameplay());
+    ASSERT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_NE(runtime.Diagnostics().back().find("commit provider failed"), std::string::npos);
+    EXPECT_EQ(runtime.Logs().back(), "test.native.v2: [native] v2 stopped outside transaction");
+}
+
+TEST_F(ModNativeV2, ScalarValidationAndSharedHostCallBudgetAreEnforced) {
+    LoadPlugin("invalid_values");
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values()["valid"], "snowman \xe2\x98\x83");
+    EXPECT_FALSE(Values().contains("bad"));
+    {
+        mods::Manager empty;
+        runtime.Start(empty);
+    }
+    LoadPlugin("host_limit");
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(runtime.Logs().back(), "test.native.v2: [native] v2 shared host budget passed");
+}
+
+TEST_F(ModNativeV2, FullStateAllowsReplacementAndDeletionButNotNewKeys) {
+    LoadPlugin("key_limit");
+    auto  saved = Json::parse(runtime.SaveState());
+    auto &values = saved["mods"]["test.native.v2"]["values"];
+    values["seed"] = 1;
+    for (int i = 0; i < 126; ++i) {
+        values["key" + std::to_string(i)] = i;
+    }
+    ASSERT_EQ(values.size(), 128u);
+    std::string error;
+    ASSERT_TRUE(runtime.LoadState(saved.dump(), error)) << error;
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values().size(), 128u);
+    EXPECT_FALSE(Values().contains("seed"));
+    EXPECT_EQ(Values()["new_key"], true);
+}
+
+TEST_F(ModNativeV2, NoEventMaskReceivesOnlyTicksAndInvalidV2NeverFallsBack) {
+    LoadPlugin({}, CHRONICLE_NATIVE_V2_NO_EVENTS_FIXTURE);
+    runtime.Tick({1, 0, 0, true, 0, 1}, {}, {}, {}, [](const auto &, int, std::string &) { return true; });
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Values(), (Json{
+                            {"ticks", 1}
+    }));
+    {
+        mods::Manager empty;
+        runtime.Start(empty);
+    }
+    LoadPlugin({}, CHRONICLE_NATIVE_V2_BAD_FIXTURE);
+    EXPECT_FALSE(runtime.HasGameplay());
+    ASSERT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_NE(runtime.Diagnostics()[0].find("incompatible native ABI 2 descriptor"), std::string::npos);
+}
+
+TEST_F(ModNativeV2, MissingTrustPreventsAllCallbacksAndStateAccess) {
+    LoadPlugin({}, CHRONICLE_NATIVE_V2_FIXTURE, false, true);
+    EXPECT_FALSE(runtime.HasGameplay());
+    EXPECT_TRUE(runtime.Logs().empty());
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.SaveState().empty());
+}
+
 } // namespace

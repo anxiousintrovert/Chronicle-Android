@@ -16,8 +16,10 @@ public:
     ~NativeLibrary();
     NativeLibrary(const NativeLibrary &) = delete;
     NativeLibrary &operator=(const NativeLibrary &) = delete;
-    bool           Start(const Package &package, ChronicleModHostV1 host, std::string &error);
+    bool           Start(const Package &package, ChronicleModHostV1 host, ChronicleModHostV2 host2, std::string &error);
     bool           Tick();
+    bool           WantsEvent(uint32_t event) const;
+    bool           Event(uint32_t event, const char *world_json);
 
 private:
     struct Impl;

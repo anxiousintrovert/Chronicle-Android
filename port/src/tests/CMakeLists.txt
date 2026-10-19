@@ -26,6 +26,19 @@ set_target_properties(chronicle_native_fixture PROPERTIES C_STANDARD 99)
 add_dependencies(darkcloud_tests chronicle_native_fixture)
 target_compile_definitions(darkcloud_tests PRIVATE CHRONICLE_NATIVE_FIXTURE="$<TARGET_FILE:chronicle_native_fixture>")
 
+foreach(variant v2 v2_bad v2_no_events)
+    add_library(chronicle_native_${variant}_fixture SHARED mod_native_v2_fixture.c)
+    target_include_directories(chronicle_native_${variant}_fixture PRIVATE ${PORT_DIR})
+    set_target_properties(chronicle_native_${variant}_fixture PROPERTIES C_STANDARD 99)
+    add_dependencies(darkcloud_tests chronicle_native_${variant}_fixture)
+endforeach()
+target_compile_definitions(chronicle_native_v2_bad_fixture PRIVATE FIXTURE_ABI=99)
+target_compile_definitions(chronicle_native_v2_no_events_fixture PRIVATE FIXTURE_EVENTS=0)
+target_compile_definitions(darkcloud_tests PRIVATE
+    CHRONICLE_NATIVE_V2_FIXTURE="$<TARGET_FILE:chronicle_native_v2_fixture>"
+    CHRONICLE_NATIVE_V2_BAD_FIXTURE="$<TARGET_FILE:chronicle_native_v2_bad_fixture>"
+    CHRONICLE_NATIVE_V2_NO_EVENTS_FIXTURE="$<TARGET_FILE:chronicle_native_v2_no_events_fixture>")
+
 # A case is a unit test: it finishes in milliseconds, and one that does not is cut off. The clock
 # cases measure short sleeps, which the parallel gfx cases skew, so they run on their own.
 set(DC_TEST_TIMEOUT 5 CACHE STRING "Seconds a test case may run before it is cut off")

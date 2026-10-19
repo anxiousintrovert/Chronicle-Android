@@ -61,6 +61,7 @@ struct Module {
     std::unique_ptr<NativeLibrary>                                                                 native;
     std::string                                                                                    native_result;
     unsigned                                                                                       native_calls = 0;
+    bool                                                                                           native_active = false;
     Json                                                                                           snapshot;
     std::map<std::string, std::string>                                                             resources;
     std::vector<std::string>                                                                      *logs = nullptr;
@@ -438,7 +439,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         if (!Permitted(m, op->permission)) {
             throw std::runtime_error("host operation permission denied");
         }
-        if (!m.playing) {
+        if (!m.native_active || !m.playing) {
             throw std::runtime_error("host operation requires active gameplay");
         }
         const auto args = Json::parse(arguments);
@@ -472,6 +473,72 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         *result = m.native_result.c_str();
         return 0;
     }
+}
+
+int NativeState(void *context, const char *key, const char *value, const char **result) {
+    auto &m = *static_cast<Module *>(context);
+    if (!result) {
+        return 0;
+    }
+    try {
+        if (!m.native_active) {
+            throw std::runtime_error("owned state requires a native tick or event callback");
+        }
+        if (++m.native_calls > 128) {
+            throw std::runtime_error("native callback host-call limit reached");
+        }
+        if (!Key(key)) {
+            throw std::runtime_error("invalid state key");
+        }
+        if (!value) {
+            const auto &state = *m.state;
+            m.native_result = state.contains("values") && state["values"].contains(key) ? state["values"][key].dump() : "null";
+        } else {
+            if (std::strlen(value) > 16384) {
+                throw std::runtime_error("state JSON exceeds 16384 bytes");
+            }
+            const auto parsed = Json::parse(value);
+            if (!(parsed.is_null() || parsed.is_boolean() || parsed.is_number() || parsed.is_string())) {
+                throw std::runtime_error("state values must be scalar");
+            }
+            if (parsed.is_number() && !std::isfinite(parsed.get<double>())) {
+                throw std::runtime_error("state numbers must be finite");
+            }
+            if (parsed.is_string()) {
+                const auto &text = parsed.get_ref<const std::string &>();
+                if (text.size() > 256 || text.find('\0') != std::string::npos) {
+                    throw std::runtime_error("state strings require at most 256 UTF-8 bytes without NUL");
+                }
+            }
+            if (parsed.is_null()) {
+                if (m.state->contains("values")) {
+                    (*m.state)["values"].erase(key);
+                }
+            } else {
+                if (m.state->contains("values") && !(*m.state)["values"].contains(key) && (*m.state)["values"].size() >= 128) {
+                    throw std::runtime_error("state key limit reached");
+                }
+                (*m.state)["values"][key] = parsed;
+            }
+            m.native_result = "true";
+        }
+        *result = m.native_result.c_str();
+        return 1;
+    } catch (const std::exception &e) {
+        m.native_result = Json{
+            {"error", e.what()}
+        }
+                              .dump();
+        *result = m.native_result.c_str();
+        return 0;
+    }
+}
+
+int NativeStateGet(void *context, const char *key, const char **result) { return NativeState(context, key, nullptr, result); }
+
+int NativeStateSet(void *context, const char *key, const char *value, const char **result) {
+    // A null C pointer is invalid input, not the JSON null deletion request.
+    return NativeState(context, key, value ? value : "", result);
 }
 
 int RegisterAction(lua_State *L) {
@@ -842,11 +909,13 @@ struct Runtime::Impl {
         }
     }
 
-    void NativeTick(Module &m, const QueryGame &query, const CommitGame &commit) {
-        if (m.failed || !m.native) {
+    void NativeCallback(Module &m, const World &world, const QueryGame &query, const CommitGame &commit, uint32_t event = 0) {
+        if (m.failed || !m.native || (event && !m.native->WantsEvent(event))) {
             return;
         }
-        m.playing = true;
+        const Json before = *m.state;
+        m.native_active = true;
+        m.playing = world.playing;
         m.query_game = &query;
         m.commit_game = &commit;
         m.commands.clear();
@@ -854,18 +923,37 @@ struct Runtime::Impl {
         std::string error;
         bool        accepted = false;
         try {
-            accepted = m.native->Tick();
+            if (event) {
+                const auto payload = Json{
+                    {"mode",    world.mode   },
+                    {"map",     world.map    },
+                    {"money",   world.money  },
+                    {"playing", world.playing},
+                    {"dungeon", world.dungeon},
+                    {"floor",   world.floor  }
+                }
+                                         .dump();
+                accepted = m.native->Event(event, payload.c_str());
+            } else {
+                accepted = m.native->Tick();
+            }
+            if (!accepted) {
+                error = "callback returned failure";
+            }
             if (accepted && !m.commands.empty()) {
                 accepted = commit && commit(m.commands, 0, error);
             }
         } catch (const std::exception &e) {
+            accepted = false;
             error = e.what();
         }
         m.playing = false;
+        m.native_active = false;
         m.query_game = nullptr;
         m.commit_game = nullptr;
         m.commands.clear();
         if (!accepted) {
+            *m.state = before;
             m.failed = true;
             diagnostics.push_back(m.package.id + ": native callback stopped: " + error);
             m.native.reset();
@@ -966,7 +1054,8 @@ void Runtime::Start(const Manager &manager) {
             m.native = std::make_unique<NativeLibrary>();
             std::string        error;
             ChronicleModHostV1 host{sizeof(ChronicleModHostV1), 1, &m, NativeAvailable, NativeCall, NativeLog};
-            if (!m.native->Start(m.package, host, error)) {
+            ChronicleModHostV2 host2{sizeof(ChronicleModHostV2), 2, &m, NativeAvailable, NativeCall, NativeLog, NativeStateGet, NativeStateSet};
+            if (!m.native->Start(m.package, host, host2, error)) {
                 m.failed = true;
                 impl_->diagnostics.push_back(id + ": " + error);
                 m.native.reset();
@@ -1011,14 +1100,17 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         }
         if (world.playing && impl_->loaded_pending) {
             impl_->Call(m, "on_save_loaded", world, money, read_game, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_SAVE_LOADED);
         }
         if (game_enter) {
             impl_->Call(m, "on_game_enter", world, money, read_game, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_ENTER);
         }
         if (game_leave) {
             impl_->Call(m, "on_game_leave", world, money, read_game, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_GAME_LEAVE);
         }
-        if (entered) {
+        if (entered && !m.failed) {
             for (const auto &q : m.package.quests) {
                 if (q.map == world.map && m.state->value("last_map", -1) != world.map) {
                     auto &values = (*m.state)["quests"];
@@ -1030,9 +1122,11 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             }
             (*m.state)["last_map"] = world.map;
             impl_->Call(m, "on_map_enter", world, money, read_game, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_MAP_ENTER);
         }
         if (floor_enter) {
             impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER);
         }
         if (world.playing) {
             for (const auto &[owner, id] : actions) {
@@ -1043,7 +1137,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                 }
             }
             impl_->Call(m, "on_tick", world, money, read_game, query_game, commit_game);
-            impl_->NativeTick(m, query_game, commit_game);
+            impl_->NativeCallback(m, world, query_game, commit_game);
         }
     }
     impl_->was_playing = world.playing;
