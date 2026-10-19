@@ -13,8 +13,8 @@
 
    On Linux/macOS, use `./darkcloud` and your own paths. This command requires an
    already built executable and extracted game data; it is not an ISO importer.
-3. Open **Options → Mods → Mod Manager**. Confirm the package is active and has
-   no reported conflict. Enter Norune: the quest reaches 1/1 and awards 50 Gilda.
+3. Open **Options → Mods → Mod Manager**. Enable the package, confirm there are
+   no reported conflicts, then restart. Enter Norune: the quest reaches 1/1 and awards 50 Gilda.
 4. Save, quit, and reload using the same package version. The quest and reward
    guard should persist; the reward should not be granted a second time.
 5. To make your own mod, change `id`, `name`, and quest text, then restart. Keep
@@ -25,6 +25,11 @@
 
 The host runs `main.lua` at runtime initialization; it must return a table.
 Both callbacks are optional. Each mod owns a separate Lua environment.
+
+For package creation, validation, conflict previews and ZIP packaging, see
+[author tools and native host calls](MOD_HOST_API.md). For compiled extensions,
+see [the native SDK](MOD_NATIVE_SDK.md). Examples are separate packages, never
+installed or enabled by the framework build.
 
 ```lua
 return {

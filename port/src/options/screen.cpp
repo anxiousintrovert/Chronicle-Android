@@ -674,7 +674,7 @@ int Run() {
         default:
             if (mods::menu::IsOpen()) {
                 const auto held = HeldButtons();
-                mods::menu::Run(Pressed(held, PAD_DPAD, true) | Pressed(held, PAD_CROSS | PAD_CIRCLE | PAD_SQUARE, false));
+                mods::menu::Run(Pressed(held, PAD_DPAD, true) | Pressed(held, PAD_CROSS | PAD_CIRCLE | PAD_SQUARE | PAD_TRIANGLE, false));
                 break;
             }
             if (g_screen.bar_frames > 0) {

@@ -13,9 +13,10 @@ using Json = nlohmann::json;
 
 class ModManager : public testing::Test {
 protected:
-    fs::path        root = fs::temp_directory_path() / ("chronicle-mods-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    mods::FileIndex base;
-    mods::Manager   manager;
+    fs::path                    root = fs::temp_directory_path() / ("chronicle-mods-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    mods::FileIndex             base;
+    mods::Manager               manager;
+    std::map<std::string, bool> enabled;
 
     void SetUp() override {
         Write(root / "data" / "asset.bin", "base");
@@ -51,11 +52,12 @@ protected:
                 {"asset.bin", "replacement.bin"}
             };
         }
+        enabled[manifest["id"].get<std::string>()] = manifest.value("enabled", true);
         Write(root / "mods" / folder / "mod.json", manifest.dump());
         Write(root / "mods" / folder / "replacement.bin", "mods");
     }
 
-    void Scan() { manager.Scan({root / "mods"}, base); }
+    void Scan() { manager.Scan({root / "mods"}, base, enabled); }
 
     const mods::Package &Find(const std::string &id) {
         for (const auto &package : manager.Packages()) {
@@ -121,7 +123,7 @@ TEST_F(ModManager, DisabledModDoesNotConflict) {
 TEST_F(ModManager, DuplicateIdsHaveNoWinnerAcrossRoots) {
     Add("a", Manifest("test.a"), true);
     Write(root / "other" / "copy" / "mod.json", Manifest("test.a").dump());
-    manager.Scan({root / "other", root / "mods"}, base);
+    manager.Scan({root / "other", root / "mods"}, base, enabled);
     EXPECT_TRUE(manager.Overrides().empty());
     ASSERT_EQ(manager.Packages().size(), 2u);
     for (const auto &p : manager.Packages()) {
@@ -131,7 +133,7 @@ TEST_F(ModManager, DuplicateIdsHaveNoWinnerAcrossRoots) {
 
 TEST_F(ModManager, RepeatedRootDoesNotDuplicatePackages) {
     Add("a", Manifest("test.a"), true);
-    manager.Scan({root / "mods", root / "mods"}, base);
+    manager.Scan({root / "mods", root / "mods"}, base, enabled);
     ASSERT_EQ(manager.Packages().size(), 1u);
     EXPECT_TRUE(manager.Packages()[0].Active());
 }
@@ -238,7 +240,7 @@ TEST_F(ModManager, RejectsSymlinkEscapingPackage) {
 TEST_F(ModManager, FailedDiscoveryDoesNotPublishPartialPlan) {
     Add("a", Manifest("test.a"), true);
     Write(root / "not-directory", "x");
-    manager.Scan({root / "mods", root / "not-directory"}, base);
+    manager.Scan({root / "mods", root / "not-directory"}, base, enabled);
     EXPECT_FALSE(manager.Errors().empty());
     EXPECT_TRUE(manager.Overrides().empty());
 }
@@ -253,4 +255,23 @@ TEST_F(ModManager, RescanClearsPriorOverrides) {
     Scan();
     EXPECT_TRUE(manager.Overrides().empty());
 }
+
+TEST_F(ModManager, RequiredHostOperationsBlockBeforeLoadingAnyCode) {
+    auto m = Manifest("test.one");
+    m["requires_operations"] = {"story.flag_set"};
+    Add("one", m);
+    Scan();
+    EXPECT_FALSE(Find("test.one").Active());
+    EXPECT_NE(manager.Report().find("needs permission"), std::string::npos);
+    m["permissions"] = {"game.write"};
+    Add("one", m);
+    Scan();
+    EXPECT_TRUE(Find("test.one").Active());
+    m["requires_operations"] = {"entities.spawn"};
+    Add("one", m);
+    Scan();
+    EXPECT_FALSE(Find("test.one").Active());
+    EXPECT_NE(manager.Report().find("missing host operation"), std::string::npos);
+}
+
 } // namespace

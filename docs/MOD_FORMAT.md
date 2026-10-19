@@ -18,15 +18,17 @@ schema 1; put release notes and attribution in a separate README.
 | `version` | Yes | String | 1–256 bytes, no control characters; recommend `1.0.0`; exact string checked by gameplay saves, not a semantic-version resolver |
 | `game` | Yes | String | Exactly `chronicle` |
 | `files` | Yes | Object | Up to 4,096 game-target → package-source string mappings; `{}` is valid |
-| `enabled` | No | Boolean, `true` | Initial preference; saved profile wins |
+| `enabled` | No | Legacy Boolean | Validated but ignored; every newly discovered package is disabled |
 | `requires` | No | String array, `[]` | Up to 128 unique package IDs; no self dependency; all must be enabled and valid |
 | `conflicts` | No | String array, `[]` | Up to 128 unique package IDs; no self reference; either side's declaration blocks both |
 | `exclusive` | No | String array, `[]` | Up to 128 unique feature IDs with the same syntax as package IDs; two owners conflict |
 | `requires_capabilities` | No | String array, `[]` | Up to 128 unique capability IDs; every capability must be implemented by the host |
-| `api_version` | For scripts | Number | Use integer `1`; required when `script` is present |
+| `api_version` | For code | Integer | Exactly `1`; required for `script` or `native_library` |
 | `script` | No | String | Relative path to a contained, regular `.lua` file, at most 1 MiB; text source only |
-| `permissions` | No | String array, `[]` | Only `economy.write` is currently recognized; no duplicates |
+| `permissions` | No | String array, `[]` | `economy.write`, `game.read`, `game.write`, `resources.read`, `native.extension`; no duplicates |
 | `quests` | No | Array, `[]` | Up to 64 quest definitions, described below |
+| `resources` | No | Object, `{}` | Up to 16 resource ID → contained relative file mappings; each file at most 64 KiB |
+| `native_library` | No | Relative path | Contained `.dll`, `.so`, or `.dylib`, 1 byte–64 MiB; requires `native.extension` and separate local trust |
 
 Do not invent fields such as `load_order`, `priority`, `entrypoint`, `rewards`,
 `dependencies`, or `min_version`. They are not aliases. Dependency ordering is
@@ -74,7 +76,6 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
   "name": "Norune Welcome Quest",
   "version": "1.0.0",
   "game": "chronicle",
-  "enabled": true,
   "requires": [],
   "conflicts": [],
   "exclusive": [],
@@ -108,8 +109,23 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `economy.write.v1` | Bounded currency changes; additionally needs permission |
 | `events.map.v1` | Map-entry callback and built-in visit tracking |
 | `events.tick.v1` | Gameplay simulation callback |
+| `player.read.v1`, `party.read.v1`, `inventory.read.v1` | Lazy, detached legacy snapshots; require `game.read` |
+| `resources.read.v1` | Owned startup-cached package resources; requires `resources.read` |
+| `logging.v1` | Bounded per-session diagnostics |
+| `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |
+| `plugins.native.v1` | Opt-in Chronicle C ABI 1 plugins; not a MoonMod ABI compatibility claim |
 
 List the capabilities your package actually needs. `chronicle.supports(name)`
 allows optional behavior; it does not grant permissions. Unsupported required
 capabilities block the entire package. See [planned services](MOD_FRAMEWORK_SCOPE.md)
 for operations that are not available yet.
+
+## Required host operations
+
+Optional `requires_operations` lists exact implemented operation names (at most
+128 unique IDs), for example `"requires_operations": ["story.flag_get", "player.heal"]`.
+Declare their permissions too: `"permissions": ["game.read", "game.write"]`.
+The game and offline validator reject missing operations or missing permissions
+before executing package code. This does not guarantee that a runtime character,
+weapon, gameplay phase, or target flag is appropriate; calls still validate those.
+Use `chronicle.api_available` for optional features instead.

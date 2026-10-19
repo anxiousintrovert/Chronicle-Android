@@ -16,6 +16,10 @@ See [installation and controls](MODS.md), [manifest fields](MOD_FORMAT.md), and
 | Unknown manifest field / unsupported capability | Match schema 1 exactly; do not rename another framework's manifest and expect compatibility |
 | Unknown game file / wrong size | Use a target in your extracted game index and an exactly same-size, structurally valid replacement |
 | Script error | Inspect the manager's detail pages for the mod ID and Lua error; fix the source/permission/budget issue and restart |
+| New package remains OFF | All newly discovered packages are disabled; enable in the manager and restart. Manifest `enabled` cannot opt in |
+| Native trust required | Use Triangle/Trust to review the library; trust and enable separately, then restart |
+| Native library changed | Rescan and review the changed library/permissions; old approval will not load changed code |
+| Game operation rejected | Host writes are transactional per callback; resolve the reported permission, argument, gameplay state or funds error and restart |
 | Cannot read profile | Quit; preserve a copy of `mods-profile.json`, repair its JSON, then restart; an invalid profile is not overwritten automatically |
 | Could not save profile | Check save-directory write access/free space; the rejected selection was not applied |
 | Save load failure | Read stderr; restore the exact enabled gameplay mod IDs and versions used by the save; malformed/foreign save extensions are rejected |

@@ -1,6 +1,7 @@
 # Build files
 /build/
 /build-mods/
+/build-native-probe/
 /mods/
 /ps2/build/*
 /port/build/*

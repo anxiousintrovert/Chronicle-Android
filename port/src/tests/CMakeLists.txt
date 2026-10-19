@@ -20,6 +20,11 @@ target_include_directories(darkcloud_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 dc_link_game(darkcloud_tests)
 kz_port_tests(darkcloud_tests)
 target_link_libraries(darkcloud_tests PRIVATE GTest::gtest nlohmann_json::nlohmann_json)
+add_library(chronicle_native_fixture SHARED mod_native_fixture.c)
+target_include_directories(chronicle_native_fixture PRIVATE ${PORT_DIR})
+set_target_properties(chronicle_native_fixture PROPERTIES C_STANDARD 99)
+add_dependencies(darkcloud_tests chronicle_native_fixture)
+target_compile_definitions(darkcloud_tests PRIVATE CHRONICLE_NATIVE_FIXTURE="$<TARGET_FILE:chronicle_native_fixture>")
 
 # A case is a unit test: it finishes in milliseconds, and one that does not is cut off. The clock
 # cases measure short sleeps, which the parallel gfx cases skew, so they run on their own.

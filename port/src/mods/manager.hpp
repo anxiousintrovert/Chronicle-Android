@@ -22,13 +22,17 @@ struct Package {
     std::string                                  id;
     std::string                                  name;
     std::string                                  version;
-    bool                                         enabled = true;
+    bool                                         enabled = false;
     std::vector<std::string>                     dependencies;
     std::vector<std::string>                     conflicts;
     std::vector<std::string>                     exclusive;
     std::vector<std::string>                     permissions;
     std::vector<Quest>                           quests;
     std::filesystem::path                        script;
+    std::filesystem::path                        native_library;
+    std::string                                  native_fingerprint;
+    bool                                         native_trusted = false;
+    std::map<std::string, std::filesystem::path> resources;
     std::map<std::string, std::filesystem::path> files;
     std::vector<std::string>                     problems;
 
@@ -40,7 +44,7 @@ struct Package {
 class Manager {
 public:
     void Scan(const std::vector<std::filesystem::path> &roots, const FileIndex &base,
-              const std::map<std::string, bool> &enabled = {});
+              const std::map<std::string, bool> &enabled = {}, const std::map<std::string, std::string> &trusted = {});
 
     const std::vector<Package> &Packages() const { return packages_; }
 

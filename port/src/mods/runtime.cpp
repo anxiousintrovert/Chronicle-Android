@@ -1,6 +1,9 @@
 #include "runtime.hpp"
 
 #include <nlohmann/json.hpp>
+
+#include "api.hpp"
+#include "native.hpp"
 extern "C" {
 #include "lauxlib.h"
 #include "lua.h"
@@ -21,17 +24,31 @@ namespace {
 constexpr std::size_t memory_limit = 8 * 1024 * 1024;
 
 struct Module {
-    Package      package;
-    lua_State   *lua = nullptr;
-    std::size_t  memory = 0;
-    int          remaining = 0, pending_money = 0;
-    int          reference = LUA_NOREF;
-    bool         failed = false, playing = false;
-    Json        *state = nullptr;
-    const World *world = nullptr;
-    const char  *callback = nullptr;
+    Package                            package;
+    lua_State                         *lua = nullptr;
+    std::size_t                        memory = 0;
+    int                                remaining = 0, pending_money = 0;
+    int                                reference = LUA_NOREF;
+    bool                               failed = false, playing = false;
+    Json                              *state = nullptr;
+    const World                       *world = nullptr;
+    const char                        *callback = nullptr;
+    const ReadGame                    *read_game = nullptr;
+    const QueryGame                   *query_game = nullptr;
+    const CommitGame                  *commit_game = nullptr;
+    Json                               arguments;
+    std::string                        call_error;
+    std::vector<GameCommand>           commands;
+    std::unique_ptr<NativeLibrary>     native;
+    std::string                        native_result;
+    unsigned                           native_calls = 0;
+    Json                               snapshot;
+    std::map<std::string, std::string> resources;
+    std::vector<std::string>          *logs = nullptr;
 
     ~Module() {
+        playing = false;
+        native.reset();
         if (lua) {
             lua_close(lua);
         }
@@ -192,9 +209,249 @@ int AddMoney(lua_State *L) {
     return 1;
 }
 
+bool Permitted(const Module &m, std::string_view permission) {
+    return std::ranges::find(m.package.permissions, permission) != m.package.permissions.end();
+}
+
+void PushJson(lua_State *L, const Json &value) {
+    if (value.is_object()) {
+        lua_newtable(L);
+        for (const auto &[key, child] : value.items()) {
+            PushJson(L, child);
+            lua_setfield(L, -2, key.c_str());
+        }
+    } else if (value.is_array()) {
+        lua_newtable(L);
+        for (std::size_t i = 0; i < value.size(); ++i) {
+            PushJson(L, value[i]);
+            lua_rawseti(L, -2, static_cast<lua_Integer>(i + 1));
+        }
+    } else if (value.is_boolean()) {
+        lua_pushboolean(L, value.get<bool>());
+    } else if (value.is_number()) {
+        lua_pushnumber(L, value.get<double>());
+    } else if (value.is_string()) {
+        const auto &text = value.get_ref<const std::string &>();
+        lua_pushlstring(L, text.data(), text.size());
+    } else {
+        lua_pushnil(L);
+    }
+}
+
+int ReadSnapshot(lua_State *L, const char *service) {
+    auto &m = Self(L);
+    if (!m.playing || !Permitted(m, "game.read") || !m.read_game || !*m.read_game) {
+        return Failure(L, "game.read permission and an active gameplay provider are required");
+    }
+    m.snapshot = (*m.read_game)(service);
+    if (m.snapshot.is_null()) {
+        return Failure(L, "game snapshot is unavailable");
+    }
+    PushJson(L, m.snapshot);
+    return 1;
+}
+
+int Player(lua_State *L) { return ReadSnapshot(L, "player"); }
+
+int Party(lua_State *L) { return ReadSnapshot(L, "party"); }
+
+int Inventory(lua_State *L) { return ReadSnapshot(L, "inventory"); }
+
+int Log(lua_State *L) {
+    const char *level = luaL_checkstring(L, 1);
+    size_t      length = 0;
+    const char *message = luaL_checklstring(L, 2, &length);
+    if ((std::strcmp(level, "info") && std::strcmp(level, "warning") && std::strcmp(level, "error")) || length > 512) {
+        return Failure(L, "log requires info/warning/error and at most 512 bytes");
+    }
+    std::string text(message, length);
+    for (char &c : text) {
+        if (static_cast<unsigned char>(c) < 32) {
+            c = ' ';
+        }
+    }
+    auto &m = Self(L);
+    if (m.logs->size() == 128) {
+        m.logs->erase(m.logs->begin());
+    }
+    m.logs->push_back(m.package.id + ": [" + level + "] " + text);
+    lua_pushboolean(L, true);
+    return 1;
+}
+
+int Resource(lua_State *L) {
+    const char *id = luaL_checkstring(L, 1);
+    auto       &m = Self(L);
+    if (!Permitted(m, "resources.read")) {
+        return Failure(L, "resources.read permission required");
+    }
+    // Cached at startup: no live filesystem access from callbacks.
+    lua_getfield(L, LUA_REGISTRYINDEX, "chronicle.resources");
+    lua_getfield(L, -1, id);
+    if (lua_isnil(L, -1)) {
+        return Failure(L, "unknown package resource");
+    }
+    return 1;
+}
+
 int HasCapability(lua_State *L) {
     lua_pushboolean(L, Supports(luaL_checkstring(L, 1)));
     return 1;
+}
+
+int ApiAvailable(lua_State *L) {
+    lua_pushboolean(L, FindOperation(luaL_checkstring(L, 1)) != nullptr);
+    return 1;
+}
+
+int ApiList(lua_State *L) {
+    auto &m = Self(L);
+    m.snapshot = Json::array();
+    for (const auto &op : Operations()) {
+        m.snapshot.push_back({
+            {"name",        op.name       },
+            {"permission",  op.permission },
+            {"writes",      op.writes     },
+            {"phase",       "simulation"  },
+            {"description", op.description}
+        });
+    }
+    PushJson(L, m.snapshot);
+    return 1;
+}
+
+int ApiCall(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    const auto *op = FindOperation(name);
+    if (!op) {
+        return Failure(L, "unsupported host operation");
+    }
+    auto &m = Self(L);
+    if (!Permitted(m, op->permission)) {
+        return Failure(L, "host operation permission denied");
+    }
+    if (!m.playing) {
+        return Failure(L, "host operation requires active gameplay");
+    }
+    if (lua_gettop(L) > 2 || (!lua_isnoneornil(L, 2) && !lua_istable(L, 2))) {
+        return Failure(L, "arguments must be a table");
+    }
+    m.arguments = Json::object();
+    if (lua_istable(L, 2)) {
+        lua_pushnil(L);
+        while (lua_next(L, 2)) {
+            if (lua_type(L, -2) != LUA_TSTRING || lua_rawlen(L, -2) > 32 || lua_type(L, -1) != LUA_TNUMBER || m.arguments.size() >= 8) {
+                return Failure(L, "arguments require at most eight named numbers");
+            }
+            if (!std::isfinite(lua_tonumber(L, -1))) {
+                return Failure(L, "arguments must be finite");
+            }
+            if (lua_isinteger(L, -1)) {
+                m.arguments[lua_tostring(L, -2)] = lua_tointeger(L, -1);
+            } else {
+                m.arguments[lua_tostring(L, -2)] = lua_tonumber(L, -1);
+            }
+            lua_pop(L, 1);
+        }
+    }
+    m.call_error = ValidateOperation(name, m.arguments);
+    if (!m.call_error.empty()) {
+        return Failure(L, m.call_error.c_str());
+    }
+    if (op->writes) {
+        if (!m.commit_game || !*m.commit_game) {
+            return Failure(L, "game write provider unavailable");
+        }
+        if (m.commands.size() >= 64) {
+            return Failure(L, "callback write budget exceeded");
+        }
+        m.commands.push_back({name, m.arguments});
+        lua_pushboolean(L, true); // Queued; the whole callback commits or fails together.
+        return 1;
+    }
+    if (!m.query_game || !*m.query_game) {
+        return Failure(L, "game query provider unavailable");
+    }
+    try {
+        m.snapshot = (*m.query_game)(name, m.arguments);
+    } catch (const std::exception &e) {
+        m.call_error = e.what();
+    }
+    if (!m.call_error.empty()) {
+        return Failure(L, m.call_error.c_str());
+    }
+    PushJson(L, m.snapshot);
+    return 1;
+}
+
+int NativeAvailable(void *, const char *name) { return name && FindOperation(name); }
+
+void NativeLog(void *context, const char *message) {
+    if (!message) {
+        return;
+    }
+    auto       &m = *static_cast<Module *>(context);
+    std::string text(message, std::min<std::size_t>(std::strlen(message), 512));
+    for (char &c : text) {
+        if (static_cast<unsigned char>(c) < 32) {
+            c = ' ';
+        }
+    }
+    if (m.logs->size() == 128) {
+        m.logs->erase(m.logs->begin());
+    }
+    m.logs->push_back(m.package.id + ": [native] " + text);
+}
+
+int NativeCall(void *context, const char *name, const char *arguments, const char **result) {
+    auto &m = *static_cast<Module *>(context);
+    if (!result) {
+        return 0;
+    }
+    try {
+        if (!name || !arguments || std::strlen(arguments) > 4096) {
+            throw std::runtime_error("invalid native API arguments");
+        }
+        if (++m.native_calls > 128) {
+            throw std::runtime_error("native callback host-call limit reached");
+        }
+        const auto *op = FindOperation(name);
+        if (!op) {
+            throw std::runtime_error("unsupported host operation");
+        }
+        if (!Permitted(m, op->permission)) {
+            throw std::runtime_error("host operation permission denied");
+        }
+        if (!m.playing) {
+            throw std::runtime_error("host operation requires active gameplay");
+        }
+        const auto args = Json::parse(arguments);
+        const auto error = ValidateOperation(name, args);
+        if (!error.empty()) {
+            throw std::runtime_error(error);
+        }
+        if (op->writes) {
+            if (!m.commit_game || !*m.commit_game || m.commands.size() >= 64) {
+                throw std::runtime_error("write provider unavailable or callback write budget exceeded");
+            }
+            m.commands.push_back({name, args});
+            m.native_result = "{\"queued\":true}";
+        } else {
+            if (!m.query_game || !*m.query_game) {
+                throw std::runtime_error("query provider unavailable");
+            }
+            m.native_result = (*m.query_game)(name, args).dump();
+        }
+        *result = m.native_result.c_str();
+        return 1;
+    } catch (const std::exception &e) {
+        m.native_result = Json{
+            {"error", e.what()}
+        }
+                              .dump();
+        *result = m.native_result.c_str();
+        return 0;
+    }
 }
 
 // Every call is protected. No filesystem, process, native-module, debug, coroutine,
@@ -216,18 +473,32 @@ int Bootstrap(lua_State *L) {
     }
     lua_newtable(L);
     const luaL_Reg api[] = {
-        {"get",       Get          },
-        {"set",       Set          },
-        {"quest_add", QuestAdd     },
-        {"quest_get", QuestGet     },
-        {"add_money", AddMoney     },
-        {"supports",  HasCapability},
-        {nullptr,     nullptr      }
+        {"get",           Get          },
+        {"set",           Set          },
+        {"quest_add",     QuestAdd     },
+        {"quest_get",     QuestGet     },
+        {"add_money",     AddMoney     },
+        {"supports",      HasCapability},
+        {"player",        Player       },
+        {"party",         Party        },
+        {"inventory",     Inventory    },
+        {"log",           Log          },
+        {"resource",      Resource     },
+        {"call",          ApiCall      },
+        {"api_available", ApiAvailable },
+        {"api_list",      ApiList      },
+        {nullptr,         nullptr      }
     };
     luaL_setfuncs(L, api, 0);
     lua_pushinteger(L, 1);
     lua_setfield(L, -2, "api_version");
     lua_setglobal(L, "chronicle");
+    lua_newtable(L);
+    for (const auto &[id, data] : Self(L).resources) {
+        lua_pushlstring(L, data.data(), data.size());
+        lua_setfield(L, -2, id.c_str());
+    }
+    lua_setfield(L, LUA_REGISTRYINDEX, "chronicle.resources");
     return 0;
 }
 
@@ -267,6 +538,7 @@ struct Runtime::Impl {
     std::vector<std::unique_ptr<Module>> modules;
     Json                                 state = Json::object();
     std::vector<std::string>             diagnostics;
+    std::vector<std::string>             logs;
     World                                previous;
     bool                                 observed = false;
     Manager                              plan;
@@ -290,28 +562,90 @@ struct Runtime::Impl {
         lua_sethook(m.lua, Budget, LUA_MASKCOUNT, 1000);
     }
 
-    void Call(Module &m, const char *name, const World &world, const std::function<bool(int)> &money) {
+    void Call(Module &m, const char *name, const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
+              const QueryGame &query_game, const CommitGame &commit_game) {
         if (m.failed || !m.lua) {
             return;
         }
         auto      *L = m.lua;
         const Json before = *m.state;
         m.pending_money = 0;
+        m.commands.clear();
         m.playing = world.playing;
         m.world = &world;
+        m.read_game = &read_game;
+        m.query_game = &query_game;
+        m.commit_game = &commit_game;
         m.callback = name;
         lua_pushcfunction(L, Dispatch);
         ResetBudget(m);
         if (!Check(m, lua_pcall(L, 0, 0, 0))) {
             *m.state = before;
+            m.commands.clear();
+            m.playing = false;
+            m.world = nullptr;
+            m.read_game = nullptr;
+            m.query_game = nullptr;
+            m.commit_game = nullptr;
+            m.native.reset();
             return;
         }
-        if (m.pending_money && (!money || !money(m.pending_money))) {
+        std::string error;
+        const bool  writes = m.pending_money || !m.commands.empty();
+        bool        accepted = !writes;
+        try {
+            if (writes) {
+                accepted = commit_game ? commit_game(m.commands, m.pending_money, error)
+                                       : m.commands.empty() && money && money(m.pending_money);
+            }
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+        if (!accepted) {
             *m.state = before;
             m.failed = true;
-            diagnostics.push_back(m.package.id + ": currency operation was rejected; script stopped");
+            diagnostics.push_back(m.package.id + ": game operation was rejected; script stopped: " + error);
         }
         m.pending_money = 0;
+        m.commands.clear();
+        m.playing = false;
+        m.world = nullptr;
+        m.read_game = nullptr;
+        m.query_game = nullptr;
+        m.commit_game = nullptr;
+        if (m.failed) {
+            m.native.reset();
+        }
+    }
+
+    void NativeTick(Module &m, const QueryGame &query, const CommitGame &commit) {
+        if (m.failed || !m.native) {
+            return;
+        }
+        m.playing = true;
+        m.query_game = &query;
+        m.commit_game = &commit;
+        m.commands.clear();
+        m.native_calls = 0;
+        std::string error;
+        bool        accepted = false;
+        try {
+            accepted = m.native->Tick();
+            if (accepted && !m.commands.empty()) {
+                accepted = commit && commit(m.commands, 0, error);
+            }
+        } catch (const std::exception &e) {
+            error = e.what();
+        }
+        m.playing = false;
+        m.query_game = nullptr;
+        m.commit_game = nullptr;
+        m.commands.clear();
+        if (!accepted) {
+            m.failed = true;
+            diagnostics.push_back(m.package.id + ": native callback stopped: " + error);
+            m.native.reset();
+        }
     }
 };
 
@@ -323,18 +657,20 @@ void Runtime::Start(const Manager &manager) {
     impl_->plan = manager;
     impl_->modules.clear();
     impl_->diagnostics.clear();
+    impl_->logs.clear();
     impl_->observed = false;
     for (const auto &id : manager.LoadOrder()) {
         const auto found = std::ranges::find(manager.Packages(), id, &Package::id);
         if (found == manager.Packages().end()) {
             continue;
         }
-        if (found->script.empty() && found->quests.empty()) {
+        if (found->script.empty() && found->quests.empty() && found->native_library.empty()) {
             continue;
         }
         auto  module = std::make_unique<Module>();
         auto &m = *module;
         m.package = *found;
+        m.logs = &impl_->logs;
         if (!impl_->state.contains(id)) {
             impl_->state[id] = Json::object();
         }
@@ -345,6 +681,28 @@ void Runtime::Start(const Manager &manager) {
                     m.failed = true;
                     impl_->diagnostics.push_back(id + ": dependency script failed: " + dependency);
                 }
+            }
+        }
+        if (!m.failed && Permitted(m, "resources.read") && !m.package.script.empty()) {
+            try {
+                for (const auto &[id, declared] : m.package.resources) {
+                    const auto path = std::filesystem::canonical(declared);
+                    const auto relative = path.lexically_relative(m.package.root);
+                    if (relative.empty() || relative.is_absolute() || *relative.begin() == ".." || !std::filesystem::is_regular_file(path)) {
+                        throw std::runtime_error("resource no longer contained in package");
+                    }
+                    std::ifstream input(path, std::ios::binary);
+                    std::string   data(65537, '\0');
+                    input.read(data.data(), data.size());
+                    if (!input.eof() || input.gcount() > 65536) {
+                        throw std::runtime_error("resource unreadable or exceeds 64 KiB");
+                    }
+                    data.resize(static_cast<std::size_t>(input.gcount()));
+                    m.resources.emplace(id, std::move(data));
+                }
+            } catch (const std::exception &error) {
+                m.failed = true;
+                impl_->diagnostics.push_back(id + ": " + error.what());
             }
         }
         if (!m.failed && !m.package.script.empty()) {
@@ -375,11 +733,22 @@ void Runtime::Start(const Manager &manager) {
                 }
             }
         }
+        if (!m.failed && !m.package.native_library.empty()) {
+            m.native = std::make_unique<NativeLibrary>();
+            std::string        error;
+            ChronicleModHostV1 host{sizeof(ChronicleModHostV1), 1, &m, NativeAvailable, NativeCall, NativeLog};
+            if (!m.native->Start(m.package, host, error)) {
+                m.failed = true;
+                impl_->diagnostics.push_back(id + ": " + error);
+                m.native.reset();
+            }
+        }
         impl_->modules.push_back(std::move(module));
     }
 }
 
-void Runtime::Tick(const World &world, const std::function<bool(int)> &money) {
+void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
+                   const QueryGame &query_game, const CommitGame &commit_game) {
     const bool entered = world.playing && (!impl_->observed || world.map != impl_->previous.map);
     for (auto &ptr : impl_->modules) {
         auto &m = *ptr;
@@ -408,10 +777,11 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money) {
                 }
             }
             (*m.state)["last_map"] = world.map;
-            impl_->Call(m, "on_map_enter", world, money);
+            impl_->Call(m, "on_map_enter", world, money, read_game, query_game, commit_game);
         }
         if (world.playing) {
-            impl_->Call(m, "on_tick", world, money);
+            impl_->Call(m, "on_tick", world, money, read_game, query_game, commit_game);
+            impl_->NativeTick(m, query_game, commit_game);
         }
     }
     if (world.playing) {
@@ -419,6 +789,12 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money) {
         impl_->observed = true;
     }
 }
+
+bool Runtime::HasGameplay() const {
+    return std::ranges::any_of(impl_->modules, [](const auto &m) { return !m->failed; });
+}
+
+std::vector<std::string> Runtime::Logs() const { return impl_->logs; }
 
 void Runtime::ResetState() {
     impl_->modules.clear();

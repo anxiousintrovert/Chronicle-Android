@@ -10,6 +10,9 @@
 #include <string_view>
 #include <tuple>
 
+#include "api.hpp"
+#include "native.hpp"
+
 namespace mods {
 namespace {
 namespace fs = std::filesystem;
@@ -140,7 +143,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "resources", "native_library"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -162,7 +165,7 @@ void Read(Package &package, const FileIndex &base) {
         if (!json["enabled"].is_boolean()) {
             throw std::runtime_error("enabled must be a boolean");
         }
-        package.enabled = json["enabled"].get<bool>();
+        // Legacy field is validated, but only the user profile can enable a mod.
     }
     package.dependencies = Ids(json, "requires", package.id);
     package.conflicts = Ids(json, "conflicts", package.id);
@@ -173,13 +176,34 @@ void Read(Package &package, const FileIndex &base) {
             throw std::runtime_error("missing host capability: " + capability);
         }
     }
-    if (json.contains("api_version") && json["api_version"] != 1) {
+    if (json.contains("api_version") && (!json["api_version"].is_number_integer() || json["api_version"] != 1)) {
         throw std::runtime_error("unsupported api_version");
     }
     for (const auto &permission : package.permissions) {
-        if (permission != "economy.write") {
+        if (permission != "economy.write" && permission != "game.read" && permission != "game.write" && permission != "resources.read" && permission != "native.extension") {
             throw std::runtime_error("unsupported permission: " + permission);
         }
+    }
+    for (const auto &name : Ids(json, "requires_operations", "")) {
+        const auto *operation = FindOperation(name);
+        if (!operation) {
+            throw std::runtime_error("missing host operation: " + name);
+        }
+        if (std::ranges::find(package.permissions, operation->permission) == package.permissions.end()) {
+            throw std::runtime_error("required operation " + name + " needs permission: " + std::string(operation->permission));
+        }
+    }
+    if (json.contains("native_library")) {
+        if (!json.contains("api_version") || json["api_version"] != 1 ||
+            std::ranges::find(package.permissions, "native.extension") == package.permissions.end()) {
+            throw std::runtime_error("native_library requires api_version 1 and native.extension permission");
+        }
+        package.native_library = Contained(package.root, package.root / Path(Relative(String(json, "native_library"))));
+        const auto extension = package.native_library.extension().string();
+        if (extension != ".dll" && extension != ".so" && extension != ".dylib") {
+            throw std::runtime_error("native_library must be .dll, .so or .dylib");
+        }
+        package.native_fingerprint = NativeFingerprint(package);
     }
     if (json.contains("script")) {
         if (!json.contains("api_version") || json["api_version"] != 1) {
@@ -219,6 +243,22 @@ void Read(Package &package, const FileIndex &base) {
                 }
             }
             package.quests.push_back(std::move(quest));
+        }
+    }
+    if (json.contains("resources")) {
+        const auto &resources = json["resources"];
+        if (!resources.is_object() || resources.size() > 16) {
+            throw std::runtime_error("resources must contain at most 16 named files");
+        }
+        for (const auto &[id, source] : resources.items()) {
+            if (!ValidId(id) || !source.is_string()) {
+                throw std::runtime_error("resources require valid IDs and relative paths");
+            }
+            auto path = Contained(package.root, package.root / Path(Relative(source.get<std::string>())));
+            if (fs::file_size(path) > 65536) {
+                throw std::runtime_error("resource exceeds 64 KiB: " + id);
+            }
+            package.resources.emplace(id, std::move(path));
         }
     }
     const auto &files = json.at("files");
@@ -261,10 +301,13 @@ void Problem(Package &package, const std::string &message) {
 bool Supports(std::string_view capability) {
     return capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
-           capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1";
+           capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
+           capability == "party.read.v1" || capability == "inventory.read.v1" ||
+           capability == "resources.read.v1" || capability == "logging.v1" || capability == "host.calls.v1" || capability == "plugins.native.v1";
 }
 
-void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, const std::map<std::string, bool> &enabled) {
+void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, const std::map<std::string, bool> &enabled,
+                   const std::map<std::string, std::string> &trusted) {
     packages_.clear();
     errors_.clear();
     order_.clear();
@@ -292,6 +335,13 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
                     Read(package, base);
                     if (const auto found = enabled.find(package.id); found != enabled.end()) {
                         package.enabled = found->second;
+                    }
+                    if (!package.native_library.empty()) {
+                        const auto trust = trusted.find(package.id);
+                        package.native_trusted = trust != trusted.end() && trust->second == package.native_fingerprint;
+                        if (!package.native_trusted) {
+                            Problem(package, "Native library requires separate local trust confirmation");
+                        }
                     }
                 } catch (const std::exception &error) {
                     Problem(package, error.what());
@@ -425,15 +475,19 @@ std::string Manager::Report() const {
     };
     for (const auto &package : packages_) {
         report["mods"].push_back({
-            {"id",         package.id                                                                          },
-            {"name",       package.name                                                                        },
-            {"version",    package.version                                                                     },
-            {"directory",  Text(package.root)                                                                  },
-            {"enabled",    package.enabled                                                                     },
-            {"state",      !package.problems.empty() ? "blocked" : package.enabled ? "active"
+            {"id",                 package.id                                                                  },
+            {"name",               package.name                                                                },
+            {"version",            package.version                                                             },
+            {"directory",          Text(package.root)                                                          },
+            {"enabled",            package.enabled                                                             },
+            {"state",              !package.problems.empty() ? "blocked" : package.enabled ? "active"
                                                                               : "disabled"},
-            {"problems",   package.problems                                                                    },
-            {"file_count", package.files.size()                                                                }
+            {"problems",           package.problems                                                            },
+            {"file_count",         package.files.size()                                                        },
+            {"permissions",        package.permissions                                                         },
+            {"native_library",     Text(package.native_library)                                                },
+            {"native_trusted",     package.native_trusted                                                      },
+            {"native_fingerprint", package.native_fingerprint                                                  }
         });
     }
     return report.dump(2) + '\n';

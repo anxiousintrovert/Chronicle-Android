@@ -3,12 +3,14 @@
 This Chronicle-only framework loads asset replacements, bounded Lua gameplay
 scripts, and custom quest definitions. It is separate from MoonFactory and uses
 no MoonFactory runtime code. The vendored Lua 5.5.1 interpreter is MIT licensed;
-see `port/third_party/lua/LUA-LICENSE.txt`. DLL plugins are not loaded.
+see `port/third_party/lua/LUA-LICENSE.txt`. Optional native plugins require separate
+local trust approval; see [the native SDK](MOD_NATIVE_SDK.md).
 Implementation changes remain under `port/`; `ps2/` is unchanged. C and C++ builds
 require the existing Clang toolchain.
 
 Documentation: [manifest reference](MOD_FORMAT.md), [author walkthrough and Lua API](MOD_AUTHORING.md),
-[troubleshooting](MOD_TROUBLESHOOTING.md), and [planned host capabilities](MOD_FRAMEWORK_SCOPE.md).
+[troubleshooting](MOD_TROUBLESHOOTING.md), [host calls and author tools](MOD_HOST_API.md),
+and [coverage and remaining work](MOD_PARITY.md).
 
 The native manager uses Chronicle's shared `UI` menu framework for its window,
 labels, list, selection brackets, and pointer. API 1 does not expose Lua menus.
@@ -18,7 +20,9 @@ toggle it, Left/Right to page through its details, Square to rescan, and Circle
 to return. Keyboard bindings work through normal game controls. Mouse users can
 select rows, click Toggle/Rescan/Back, and scroll the list or details pane.
 The manager displays current-session activation separately from next-launch
-status, plus conflicts, script errors, and quest progress.
+status, plus conflicts, script errors, permissions, logs, and quest progress.
+For native packages, Triangle or Trust opens a separate confirmation. Trust and
+enabling are independent; both are needed to load native code after restart.
 
 Enable selections are written atomically to `<save>/mods-profile.json`; they do
 not edit the distributed manifests. Conflicts are recomputed immediately.
@@ -47,7 +51,6 @@ mods/
   "name": "My title artwork",
   "version": "1.0.0",
   "game": "chronicle",
-  "enabled": true,
   "requires": [],
   "conflicts": ["another.title"],
   "files": {
@@ -74,10 +77,10 @@ currently a display string; dependency version ranges are not supported.
 `requires` and `conflicts` contain exact package IDs. Unknown manifest fields,
 self references, repeated references, and duplicate JSON keys are rejected. At most
 1024 packages are scanned. All fields shown above
-are required except `enabled`, `requires`, and `conflicts`. `enabled` defaults to
-true so dropping in a valid package activates it on the next launch. Set it to
-false to set the package's default to disabled. The saved manager profile takes
-precedence. An empty `files` object is permitted for script, quest, and dependency
+are required except `requires` and `conflicts`. **Every new package is disabled.**
+Only an explicit manager selection in the local profile enables it. The legacy
+manifest `enabled` field is accepted but ignored, even when it is `true`.
+An empty `files` object is permitted for script, quest, and dependency
 grouping packages.
 
 ## Conflict rules
@@ -190,7 +193,7 @@ are explicitly rejected rather than silently discarded.
 Conflict detection covers declared incompatibilities and exact file ownership.
 It cannot infer semantic conflicts between different game assets or undeclared
 script interactions. This version has no archive installer, hot reload,
-dependency version ranges, arbitrary native plugins, or importer for other
+dependency version ranges, foreign native-plugin ABI compatibility, or importer for other
 frameworks' quest formats. Save compatibility is not certified by a successful
 package scan.
 

@@ -17,6 +17,16 @@ addresses, or copied PS2 internals.
 - Owned custom quests, progress display, and permission-checked currency rewards.
 - Namespaced per-save scalar state; single-file atomic native/mod serialization,
   checksummed extension, corruption rejection, and missing-mod/version checks.
+- Lazy player/party/inventory/weapon/world snapshots and transactional player
+  health/water/currency calls; see [the exact host operation inventory](MOD_HOST_API.md).
+- Bounded logs and package-owned resource reads; offline create/check/inspect/
+  check-set/pack tools, operation and capability discovery.
+- Explicitly enabled and separately trusted native C ABI plugins with the same
+  host calls, logging and simulation callbacks. Windows loader tested; other
+  native platforms require validation. See [the native SDK](MOD_NATIVE_SDK.md).
+
+This is **not full MoonMod capability parity**. [The coverage ledger](MOD_PARITY.md)
+separates implemented services from the remaining native integration work.
 
 ## Native services still required for NG+ and larger mods
 

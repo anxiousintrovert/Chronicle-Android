@@ -28,6 +28,8 @@ UI::ListView             list({
     .draw_cursor = false
 });
 UI::Cursor               cursor;
+std::string              trust_id, trust_fingerprint, trust_permissions;
+bool                     trust_value = false;
 
 // Manifest strings are literal text, never game message control codes.
 std::string Literal(std::string value) {
@@ -106,6 +108,24 @@ void Toggle() {
     detail = 0;
 }
 
+void ReviewTrust() {
+    const auto &packages = Shared().Preview().Packages();
+    if (selected >= static_cast<int>(packages.size())) {
+        return;
+    }
+    const auto &p = packages[selected];
+    if (p.native_library.empty()) {
+        return;
+    }
+    trust_id = p.id;
+    trust_fingerprint = p.native_fingerprint;
+    trust_value = !p.native_trusted;
+    trust_permissions.clear();
+    for (const auto &permission : p.permissions) {
+        trust_permissions += permission + " ";
+    }
+}
+
 bool Inside(int x, int y, int w, int h) { return px >= x && px < x + w && py >= y && py < y + h; }
 } // namespace
 
@@ -116,6 +136,7 @@ void Open() {
     selected = first = detail = 0;
     list.Reset();
     buttons = InputTakeMenuMouse().buttons;
+    trust_id.clear();
 }
 
 void Close() { open = false; }
@@ -123,6 +144,26 @@ void Close() { open = false; }
 bool IsOpen() { return open; }
 
 void Run(std::uint16_t pressed) {
+    if (!trust_id.empty()) {
+        const auto mouse = InputTakeMenuMouse();
+        int        w = 640, h = 480;
+        WindowSize(w, h);
+        const float scale = 1.0f / std::max(0.1f, std::min(w / 640.0f, h / 480.0f));
+        px = std::clamp(px + mouse.dx * scale, 0.0f, 639.0f);
+        py = std::clamp(py + mouse.dy * scale, 0.0f, 479.0f);
+        const auto clicked = mouse.buttons & ~buttons;
+        buttons = mouse.buttons;
+        if (mouse.dx || mouse.dy || clicked) {
+            pointer = true;
+        }
+        if ((pressed & PAD_CIRCLE) || (clicked & 2) || ((clicked & 1) && Inside(410, 393, 180, 28))) {
+            trust_id.clear();
+        } else if ((pressed & PAD_CROSS) || ((clicked & 1) && Inside(42, 393, 240, 28))) {
+            Shared().SetTrusted(trust_id, trust_fingerprint, trust_value);
+            trust_id.clear();
+        }
+        return;
+    }
     if (pressed) {
         pointer = false;
     }
@@ -152,6 +193,9 @@ void Run(std::uint16_t pressed) {
     if (pressed & PAD_CROSS) {
         Toggle();
     }
+    if (pressed & PAD_TRIANGLE) {
+        ReviewTrust();
+    }
     const auto mouse = InputTakeMenuMouse();
     if (mouse.dx != 0 || mouse.dy != 0 || mouse.buttons != buttons) {
         pointer = true;
@@ -176,11 +220,13 @@ void Run(std::uint16_t pressed) {
         if (hit >= 0) {
             selected = hit;
             detail = 0;
-        } else if (Inside(40, 393, 150, 28)) {
+        } else if (Inside(40, 393, 135, 28)) {
             Toggle();
-        } else if (Inside(220, 393, 160, 28)) {
+        } else if (Inside(180, 393, 135, 28)) {
             Shared().Refresh();
             detail = 0;
+        } else if (Inside(320, 393, 150, 28)) {
+            ReviewTrust();
         } else if (Inside(490, 393, 100, 28)) {
             Close();
         } else if (Inside(300, 365, 100, 25)) {
@@ -197,6 +243,20 @@ void Run(std::uint16_t pressed) {
 
 void Draw() {
     UI::Window::Draw(25, 85, 590, 351, 0x80, UI::WindowPreset::BlueStone);
+    if (!trust_id.empty()) {
+        Text(0, trust_value ? "Trust native plugin?" : "Revoke native trust?", 42, 94, 550, true);
+        const auto lines = Lines("Package: " + trust_id + "\nNative code runs with the game's access to your computer. It is not sandboxed. Trust only code you have reviewed or obtained from a trusted author.\nPermissions: " + trust_permissions + "\nChanges require restart; enabling remains separate.", 540);
+        for (int i = 0; i < std::min(11, static_cast<int>(lines.size())); ++i) {
+            Text(40 + i, Literal(lines[i]), 42, 130 + i * 22, 540);
+        }
+        Text(61, "{cross} Confirm", 42, 395, 230);
+        Text(63, "{circle} Cancel", 410, 395, 180);
+        if (pointer) {
+            cursor.SetPointer(px, py);
+            cursor.Draw();
+        }
+        return;
+    }
     UI::Divider::DrawVertical(282, 148, 348);
     Text(0, "Chronicle Mod Manager", 42, 94, 540, true);
     Text(1, Shared().Pending() ? "Changes saved. Restart to apply." : "Select a mod. Changes apply after restart.", 42, 120, 550);
@@ -221,6 +281,12 @@ void Draw() {
             }
         }
         body += std::string("\nThis run: ") + (active ? "ACTIVE" : "INACTIVE");
+        if (!p.native_library.empty()) {
+            body += std::string("\nNative plugin: ") + (p.native_trusted ? "TRUSTED" : "NOT TRUSTED") + "\nTriangle: review or revoke trust.";
+        }
+        for (const auto &permission : p.permissions) {
+            body += "\nPermission: " + permission;
+        }
         for (const auto &problem : p.problems) {
             body += "\n\n" + problem;
         }
@@ -235,6 +301,11 @@ void Draw() {
         for (const auto &message : Scripts().Diagnostics()) {
             if (message.starts_with(p.id + ":")) {
                 body += "\n\nScript error: " + message;
+            }
+        }
+        for (const auto &message : Scripts().Logs()) {
+            if (message.starts_with(p.id + ":")) {
+                body += "\n\nLog: " + message;
             }
         }
         body += "\n\nFolder: " + p.root.generic_string();
@@ -253,8 +324,9 @@ void Draw() {
         Text(40 + i, Literal(lines[detail * page_lines + i]), 295, 150 + i * 21, 300);
     }
     Text(60, "<  Details " + std::to_string(detail + 1) + "/" + std::to_string(pages) + "  >", 300, 365, 285);
-    Text(61, "{cross} Toggle", 42, 395, 170);
-    Text(62, "{square} Rescan", 220, 395, 190);
+    Text(61, "{cross} Toggle", 42, 395, 135);
+    Text(62, "{square} Rescan", 180, 395, 135);
+    Text(64, "{triangle} Trust", 320, 395, 150);
     Text(63, "{circle} Back", 490, 395, 110);
     if (pointer) {
         cursor.SetPointer(px, py);

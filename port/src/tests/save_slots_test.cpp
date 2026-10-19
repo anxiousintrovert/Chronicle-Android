@@ -279,7 +279,7 @@ TEST(SaveSlots, GameplayModStateFollowsManualSaveAutosaveAndVanillaLoad) {
         std::ofstream manifest(root / "mods/quest/mod.json");
         manifest << R"({"schema_version":1,"id":"test.quest","name":"Quest","version":"1","game":"chronicle","files":{},"quests":[{"id":"visit","title":"Visit","description":"Visit town","goal":2,"map":0}]})";
     }
-    mods::Manager manager; manager.Scan({root / "mods"}, {});
+    mods::Manager manager; manager.Scan({root / "mods"}, {}, {{"test.quest", true}});
     mods::Scripts().Start(manager);
     mods::Scripts().Tick({1,0,0,true});
     ASSERT_EQ(mods::Scripts().Quests()[0].progress, 1);

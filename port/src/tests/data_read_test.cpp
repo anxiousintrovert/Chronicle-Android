@@ -103,6 +103,8 @@ TEST(DataRead, ModReplacementAndSizeChangeFallback) {
     const std::string manifest = R"({"schema_version":1,"id":"test.asset","name":"Asset test","version":"1","game":"chronicle","files":{"img/title.img":"title.img"}})";
     WriteBytes(dir / "save/mods/test/mod.json", Bytes(manifest.begin(), manifest.end()));
     WriteBytes(dir / "save/mods/test/title.img", Bytes(2048, 0x42));
+    const std::string profile = R"({"schema_version":1,"enabled":{"test.asset":true,"test.a":true,"test.b":true}})";
+    WriteBytes(dir / "save/mods-profile.json", Bytes(profile.begin(), profile.end()));
     mods::Shared() = mods::Session{}; // Simulate restarting after installing the fixture.
     InitCDFile();
     int size = 0;
@@ -130,6 +132,8 @@ TEST(DataRead, ConflictingModsLeaveOriginalDataUntouched) {
         WriteBytes(dir / "save/mods" / id / "mod.json", Bytes(manifest.begin(), manifest.end()));
         WriteBytes(dir / "save/mods" / id / "title.img", Bytes(2048, 0x42));
     }
+    const std::string profile = R"({"schema_version":1,"enabled":{"test.asset":true,"test.a":true,"test.b":true}})";
+    WriteBytes(dir / "save/mods-profile.json", Bytes(profile.begin(), profile.end()));
     mods::Shared() = mods::Session{};
     InitCDFile();
     int size = 0;

@@ -5,7 +5,6 @@
   "name": "Norune Welcome Quest",
   "version": "1.0.0",
   "game": "chronicle",
-  "enabled": true,
   "requires_capabilities": [
     "scripts.lua.v1",
     "quests.progress.v1",
