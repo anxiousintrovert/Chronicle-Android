@@ -30,6 +30,16 @@ UI::ListView             list({
 UI::Cursor               cursor;
 std::string              trust_id, trust_fingerprint, trust_permissions;
 bool                     trust_value = false;
+std::string              action_owner, action_error;
+int                      action_selected = 0, action_detail = 0;
+UI::ListView             action_list({
+    .bounds = {42, 150, 226, 189},
+    .row_height = 24,
+    .row_stride = 27,
+    .visible_rows = 7,
+    .wrap_navigation = false,
+    .draw_cursor = false
+});
 
 // Manifest strings are literal text, never game message control codes.
 std::string Literal(std::string value) {
@@ -127,6 +137,129 @@ void ReviewTrust() {
 }
 
 bool Inside(int x, int y, int w, int h) { return px >= x && px < x + w && py >= y && py < y + h; }
+
+std::string SelectedActionOwner() {
+    const auto &packages = Shared().Preview().Packages();
+    if (selected < 0 || selected >= static_cast<int>(packages.size())) {
+        return {};
+    }
+    const auto &p = packages[selected];
+    for (const auto &active : Shared().Active().Packages()) {
+        if (active.root == p.root && active.id == p.id && active.Active() && !Scripts().Actions(p.id).empty()) {
+            return p.id;
+        }
+    }
+    return {};
+}
+
+void OpenActions() {
+    action_owner = SelectedActionOwner();
+    action_selected = action_detail = 0;
+    action_error.clear();
+    action_list.Reset();
+}
+
+void RunActions(std::uint16_t pressed) {
+    const auto actions = Scripts().Actions(action_owner);
+    const int  count = static_cast<int>(actions.size());
+    if (pressed) {
+        pointer = false;
+    }
+    const auto mouse = InputTakeMenuMouse();
+    int        w = 640, h = 480;
+    WindowSize(w, h);
+    const float scale = 1.0f / std::max(0.1f, std::min(w / 640.0f, h / 480.0f));
+    px = std::clamp(px + mouse.dx * scale, 0.0f, 639.0f);
+    py = std::clamp(py + mouse.dy * scale, 0.0f, 479.0f);
+    const auto clicked = mouse.buttons & ~buttons;
+    buttons = mouse.buttons;
+    if (mouse.dx || mouse.dy || clicked || mouse.wheel) {
+        pointer = true;
+    }
+    if ((pressed & PAD_CIRCLE) || (clicked & 2) || ((clicked & 1) && Inside(490, 393, 100, 28))) {
+        action_owner.clear();
+        return;
+    }
+    const int previous = action_selected;
+    if (pressed & PAD_UP) {
+        --action_selected;
+    }
+    if (pressed & PAD_DOWN) {
+        ++action_selected;
+    }
+    if (pressed & PAD_LEFT) {
+        --action_detail;
+    }
+    if (pressed & PAD_RIGHT) {
+        ++action_detail;
+    }
+    if (mouse.wheel) {
+        if (Inside(290, 95, 305, 275)) {
+            action_detail += mouse.wheel < 0 ? 1 : -1;
+        } else {
+            action_selected += mouse.wheel < 0 ? 1 : -1;
+        }
+    }
+    if (clicked & 1) {
+        const int hit = action_list.HitTest(px, py, count);
+        if (hit >= 0) {
+            action_selected = hit;
+        } else if (Inside(300, 365, 100, 25)) {
+            --action_detail;
+        } else if (Inside(480, 365, 100, 25)) {
+            ++action_detail;
+        }
+    }
+    action_selected = std::clamp(action_selected, 0, std::max(0, count - 1));
+    action_list.SetSelectedIndex(action_selected, count);
+    if (previous != action_selected) {
+        action_detail = 0;
+        action_error.clear();
+    }
+    action_detail = std::max(0, action_detail);
+    if (count && ((pressed & PAD_CROSS) || ((clicked & 1) && Inside(42, 393, 160, 28)))) {
+        Scripts().QueueAction(action_owner, actions[action_selected].id, action_error);
+    }
+}
+
+void DrawActions() {
+    UI::Divider::DrawVertical(282, 148, 348);
+    Text(0, "Mod Actions", 42, 94, 540, true);
+    Text(1, Literal(action_owner) + " - current run", 42, 120, 550);
+    const auto actions = Scripts().Actions(action_owner);
+    const int  count = static_cast<int>(actions.size());
+    action_selected = std::clamp(action_selected, 0, std::max(0, count - 1));
+    action_list.SetSelectedIndex(action_selected, count);
+    action_list.Draw(count, [&](int i, const UI::Rect &rect, bool selected_row, int) {
+        Text(10 + i - action_list.FirstRow(), Literal(actions[i].title), rect.x, rect.y, rect.w, selected_row);
+    });
+    std::string body = "No actions available in this run.";
+    if (count) {
+        const auto &a = actions[action_selected];
+        body = a.id;
+        if (!a.result.empty()) {
+            body += "\n\n" + a.result;
+        }
+        body += std::string("\n\n") + (a.available ? "Ready. Runs on the next gameplay tick." : "Unavailable: gameplay or package stopped.");
+        body += "\n\n" + a.description;
+    }
+    if (!action_error.empty()) {
+        body = action_error + "\n\n" + body;
+    }
+    const auto lines = Lines(body, 298);
+    const int  pages = std::max(1, (static_cast<int>(lines.size()) + 8) / 9);
+    action_detail = std::clamp(action_detail, 0, pages - 1);
+    for (int i = 0; i < 9 && action_detail * 9 + i < static_cast<int>(lines.size()); ++i) {
+        Text(40 + i, Literal(lines[action_detail * 9 + i]), 295, 150 + i * 21, 300);
+    }
+    Text(60, "<  Details " + std::to_string(action_detail + 1) + "/" + std::to_string(pages) + "  >", 300, 365, 285);
+    Text(61, "{cross} Run", 42, 395, 160);
+    Text(63, "{circle} Back", 490, 395, 110);
+    if (pointer) {
+        cursor.SetPointer(px, py);
+        cursor.Draw();
+    }
+}
 } // namespace
 
 void Open() {
@@ -137,13 +270,21 @@ void Open() {
     list.Reset();
     buttons = InputTakeMenuMouse().buttons;
     trust_id.clear();
+    action_owner.clear();
 }
 
-void Close() { open = false; }
+void Close() {
+    open = false;
+    action_owner.clear();
+}
 
 bool IsOpen() { return open; }
 
 void Run(std::uint16_t pressed) {
+    if (!action_owner.empty()) {
+        RunActions(pressed);
+        return;
+    }
     if (!trust_id.empty()) {
         const auto mouse = InputTakeMenuMouse();
         int        w = 640, h = 480;
@@ -196,6 +337,9 @@ void Run(std::uint16_t pressed) {
     if (pressed & PAD_TRIANGLE) {
         ReviewTrust();
     }
+    if (pressed & PAD_R1) {
+        OpenActions();
+    }
     const auto mouse = InputTakeMenuMouse();
     if (mouse.dx != 0 || mouse.dy != 0 || mouse.buttons != buttons) {
         pointer = true;
@@ -229,6 +373,8 @@ void Run(std::uint16_t pressed) {
             ReviewTrust();
         } else if (Inside(490, 393, 100, 28)) {
             Close();
+        } else if (Inside(42, 365, 225, 25)) {
+            OpenActions();
         } else if (Inside(300, 365, 100, 25)) {
             detail = std::max(0, detail - 1);
         } else if (Inside(480, 365, 100, 25)) {
@@ -243,6 +389,10 @@ void Run(std::uint16_t pressed) {
 
 void Draw() {
     UI::Window::Draw(25, 85, 590, 351, 0x80, UI::WindowPreset::BlueStone);
+    if (!action_owner.empty()) {
+        DrawActions();
+        return;
+    }
     if (!trust_id.empty()) {
         Text(0, trust_value ? "Trust native plugin?" : "Revoke native trust?", 42, 94, 550, true);
         const auto lines = Lines("Package: " + trust_id + "\nNative code runs with the game's access to your computer. It is not sandboxed. Trust only code you have reviewed or obtained from a trusted author.\nPermissions: " + trust_permissions + "\nChanges require restart; enabling remains separate.", 540);
@@ -330,6 +480,9 @@ void Draw() {
         Text(40 + i, Literal(lines[detail * page_lines + i]), 295, 150 + i * 21, 300);
     }
     Text(60, "<  Details " + std::to_string(detail + 1) + "/" + std::to_string(pages) + "  >", 300, 365, 285);
+    if (!SelectedActionOwner().empty()) {
+        Text(65, "{R1} Actions", 42, 365, 225);
+    }
     Text(61, "{cross} Toggle", 42, 395, 135);
     Text(62, "{square} Rescan", 180, 395, 135);
     Text(64, "{triangle} Trust", 320, 395, 150);

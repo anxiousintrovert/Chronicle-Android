@@ -334,7 +334,7 @@ bool Supports(std::string_view capability) {
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
            capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
            capability == "party.read.v1" || capability == "inventory.read.v1" ||
-           capability == "resources.read.v1" || capability == "logging.v1" || capability == "host.calls.v1" || capability == "plugins.native.v1" || capability == "events.lifecycle.v1" || capability == "services.query.v1";
+           capability == "resources.read.v1" || capability == "logging.v1" || capability == "host.calls.v1" || capability == "plugins.native.v1" || capability == "events.lifecycle.v1" || capability == "services.query.v1" || capability == "menu.actions.v1";
 }
 
 void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, const std::map<std::string, bool> &enabled,

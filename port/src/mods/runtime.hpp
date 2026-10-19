@@ -40,22 +40,29 @@ struct QuestStatus {
     int         progress = 0, goal = 1;
 };
 
+struct ActionStatus {
+    std::string owner, id, title, description, result;
+    bool        available = false;
+};
+
 class Runtime {
 public:
     Runtime();
     ~Runtime();
     Runtime(const Runtime &) = delete;
-    Runtime                 &operator=(const Runtime &) = delete;
-    void                     Start(const Manager &manager);
-    void                     Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
-                                  const QueryGame &query_game = {}, const CommitGame &commit_game = {});
-    void                     ResetState();
-    bool                     HasGameplay() const;
-    std::vector<std::string> Logs() const;
-    std::string              SaveState() const;
-    bool                     LoadState(const std::string &json, std::string &error);
-    std::vector<QuestStatus> Quests() const;
-    std::vector<std::string> Diagnostics() const;
+    Runtime                  &operator=(const Runtime &) = delete;
+    void                      Start(const Manager &manager);
+    void                      Tick(const World &world, const std::function<bool(int)> &add_money = {}, const ReadGame &read_game = {},
+                                   const QueryGame &query_game = {}, const CommitGame &commit_game = {});
+    void                      ResetState();
+    bool                      HasGameplay() const;
+    std::vector<std::string>  Logs() const;
+    std::string               SaveState() const;
+    bool                      LoadState(const std::string &json, std::string &error);
+    std::vector<QuestStatus>  Quests() const;
+    std::vector<ActionStatus> Actions(std::string_view owner) const;
+    bool                      QueueAction(std::string_view owner, std::string_view id, std::string &error);
+    std::vector<std::string>  Diagnostics() const;
 
 private:
     struct Impl;

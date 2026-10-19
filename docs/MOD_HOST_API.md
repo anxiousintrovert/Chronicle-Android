@@ -37,18 +37,18 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `economy.add` | `amount` | `economy.write` | Add currency, clamped to wallet storage capacity |
 | `economy.spend` | `amount` | `economy.write` | Spend currency; reject the whole callback batch if funds are insufficient |
 
-| `player.max_hp_set` | `max_hp`, optional `character` | `game.write` | Set capacity (1ñ32767); clamp current HP and cancel HP interpolation |
-| `player.max_water_set` | `max_water`, optional `character` | `game.write` | Set capacity (1ñ32767, fractional allowed); clamp water and cancel interpolation |
-| `player.defense_set` | `defense`, optional `character` | `game.write` | Set base defense (integer 0ñ32767) |
+| `player.max_hp_set` | `max_hp`, optional `character` | `game.write` | Set capacity (1‚Äì32767); clamp current HP and cancel HP interpolation |
+| `player.max_water_set` | `max_water`, optional `character` | `game.write` | Set capacity (1‚Äì32767, fractional allowed); clamp water and cancel interpolation |
+| `player.defense_set` | `defense`, optional `character` | `game.write` | Set base defense (integer 0‚Äì32767) |
 | `player.status_get` | optional `character` | `game.read` | Native ailment mask and shared duration counter; does not introduce independent effect timers |
 | `weapons.durability_set` | `slot`, `durability`, optional `character` | `game.write` | Set WHP gauge within native maximum; not repair-powder item use, broken-default-weapon conversion, or weapon-break logic |
-| `story.flag_get` / `story.flag_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global bit 0ñ8191, value 0 or 1 |
-| `story.int_get` / `story.int_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global integer 0ñ31, signed 32-bit value |
-| `map.flag_get` / `map.flag_set` | `map`, `id`, plus `value` for set | `game.read` / `game.write` | Map 0ñ79, bit 0ñ511, value 0 or 1 |
+| `story.flag_get` / `story.flag_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global bit 0‚Äì8191, value 0 or 1 |
+| `story.int_get` / `story.int_set` | `id`, plus `value` for set | `game.read` / `game.write` | Global integer 0‚Äì31, signed 32-bit value |
+| `map.flag_get` / `map.flag_set` | `map`, `id`, plus `value` for set | `game.read` / `game.write` | Map 0‚Äì79, bit 0‚Äì511, value 0 or 1 |
 | `map.init_flag_get` / `map.init_flag_set` | `map`, `id`, plus `value` for set | `game.read` / `game.write` | Map initialization bit, same bounds as map flags |
 | `fishing.get` | none | `game.read` | Points and native capacity (9999) |
 | `fishing.add` / `fishing.spend` | `amount` | `economy.write` | Add within native capacity; spending above balance rejects the entire batch |
-| `georama.get` | `town` | `game.read` | Town 0ñ5: 24 saved plot records, placements until native sentinel, request completion entries |
+| `georama.get` | `town` | `game.read` | Town 0‚Äì5: 24 saved plot records, placements until native sentinel, request completion entries |
 | `dungeon.progress` | none | `game.read` | Seven native dungeon progress slots and their highest reached floors |
 
 | `inventory.count` | `item` | `game.read` | Owned retail copies across bag and quick slots; world map uses its native ownership flag |
@@ -176,10 +176,10 @@ They do not define a custom item or weapon format, registry, ID allocation schem
 or content-loading hook. Contributor boundaries are in
 [MOD_CONTRIBUTOR_BOUNDARIES.md](MOD_CONTRIBUTOR_BOUNDARIES.md).
 
-Bag item IDs are 132ñ256; weapon IDs are 257ñ376; definition inspection also accepts
-attachment IDs 81ñ131. IDs still need an actual matching native definition. A numeric
+Bag item IDs are 132‚Äì256; weapon IDs are 257‚Äì376; definition inspection also accepts
+attachment IDs 81‚Äì131. IDs still need an actual matching native definition. A numeric
 ID is revision-specific retail data, not a persistent custom-content handle.
-Quantity is 1ñ100. `seed` is required for grants and is an integer 0ñ4294967295.
+Quantity is 1‚Äì100. `seed` is required for grants and is an integer 0‚Äì4294967295.
 
 Grants use native base definitions, with explicit local random state for feather
 volume, amulet charges, and non-default weapon durability traits. The local stream
@@ -196,7 +196,7 @@ Removal orders bag slots before quick slots, updates `item_count`, and never
 silently discards more items than requested. Attachment inventory grants/removals,
 item use and weapon equip are not supplied by these operations.
 
-ABS `amount` and optional `synthesis` are integers 0ñ32767. Synthesis addition
+ABS `amount` and optional `synthesis` are integers 0‚Äì32767. Synthesis addition
 rejects signed-32-bit overflow; ABS clamps to the native threshold. This does not
 consume attachments, run level-up random rolls, build up, or status-break a weapon.
 Existing equipped weapons remain equipped. All writes participate in the same
@@ -298,7 +298,7 @@ assert(quote.amount == 30)
 ```
 
 Requests and results are detached structured objects with the common argument
-limits. Export names use the owned-state key syntax: 1ñ64 lowercase letters,
+limits. Export names use the owned-state key syntax: 1‚Äì64 lowercase letters,
 digits, underscore or dot. Returned arrays/scalars/functions are not a valid root
 result. A provider can call its own declared providers. The outer callback shares
 at most 16 invocations, including nested calls, and a maximum depth of eight;
@@ -315,3 +315,49 @@ authors should keep query calculations stateless and read persistent values thro
 `chronicle.get`. Mutating cross-mod commands, arbitrary custom events, and native
 plugin exports are still separate remaining work. This API does not implement
 custom item/weapon registration or the contributor's cutscene framework.
+
+## Mod manager actions
+
+Require `menu.actions.v1`. During script initialization register up to 32 named
+callbacks; return the usual callback table afterwards:
+
+```lua
+assert(chronicle.action("show_progress", "Show progress",
+    "Record the current objective progress in the package log.", function(world)
+        assert(chronicle.log("info", "Progress: " .. tostring(chronicle.quest_get("visit"))))
+    end))
+return {}
+```
+
+The example requires a declared `visit` quest. Registering an action adds a button
+under **Mod Manager ‚Üí R1 Actions** for the running package. It does not execute the
+callback. IDs use 1‚Äì64 lowercase ASCII letters, digits, underscores or dots and
+must be unique within the package. Titles/descriptions are 1‚Äì256 valid UTF-8 bytes
+without control characters. UI text is literal, including braces. Actions are
+listed by ID. Registration after initialization is rejected with `nil, reason`.
+No new manifest section, content format or custom-item ID space is reserved.
+
+Cross/Run queues the selected action; Circle/Back returns to package management.
+The runtime accepts at most 16 pending actions globally and rejects duplicate
+owner/ID requests until dispatched. It requires a live script and a previously
+observed gameplay tick. Requests run once on the next gameplay tick in package
+dependency order, after lifecycle entry callbacks and before the package's tick
+callback; requests within one package retain queue order. The callback receives
+the normal world table and its own instruction/call budget. Queries, declared
+permissions, dependency query exports, owned state and queued game writes follow
+the same rules as lifecycle callbacks. The menu never invokes Lua directly.
+
+An action's successful callback commits its transaction; a Lua error or rejected
+commit restores its owned state and discards its pending writes, then stops the
+package and records diagnostics. Earlier callbacks' committed changes remain.
+The action pane displays queued/completed/failed/canceled status; ‚ÄúCompleted‚Äù
+means the callback and its transaction succeeded, not that the framework checked
+an author's gameplay objective. Native plugin callbacks are separate transactions.
+
+Pending requests are canceled if gameplay stops or mode/map/dungeon/floor changes
+before dispatch, or discarded when loading/resetting a save or restarting the
+runtime. Requests, registrations and UI results are not saved. Failed/unloaded
+packages cannot execute actions;
+disabled packages register none at startup. Changing enable selection still
+requires restart, so actions shown before restart belong to the current run.
+There are no arbitrary Lua UI controls or native-plugin action bindings yet.

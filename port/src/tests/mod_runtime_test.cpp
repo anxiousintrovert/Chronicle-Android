@@ -665,4 +665,178 @@ TEST_F(ModRuntime, ListenerAndExportRegistrationAreBoundedAndOwnedByRuntimeLifet
     EXPECT_TRUE(runtime.Diagnostics().empty());
 }
 
+TEST_F(ModRuntime, MenuActionQueuesOnceAndCommitsOnlyOnGameplayTick) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"economy.write"};
+    manifest["requires_capabilities"] = {"menu.actions.v1"};
+    Add(R"(
+        assert(chronicle.action('reward','Reward','Add two coins.',function(w)
+            assert(w.playing and w.map==0)
+            assert(chronicle.set('runs',(chronicle.get('runs') or 0)+1))
+            assert(chronicle.add_money(2))
+        end))
+        return {on_tick=function() assert(chronicle.action('late','Late','Late',function() end)==nil) end}
+    )",
+        manifest);
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    ASSERT_EQ(runtime.Actions("test.mod").size(), 1u);
+    EXPECT_FALSE(runtime.Actions("test.mod")[0].available);
+    std::string error;
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "reward", error));
+    int        total = 0;
+    const auto commit = [&](int amount) { total += amount; return true; };
+    runtime.Tick({1, 0, 0, true}, commit);
+    EXPECT_TRUE(runtime.Actions("test.mod")[0].available);
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "reward", error)) << error;
+    EXPECT_EQ(total, 0);
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "reward", error));
+    EXPECT_EQ(error, "Action is already queued.");
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "unknown", error));
+    runtime.Tick({1, 0, 0, true}, commit);
+    EXPECT_EQ(total, 2);
+    EXPECT_EQ(State()["values"]["runs"], 1);
+    EXPECT_EQ(runtime.Actions("test.mod")[0].result, "Completed.");
+    runtime.Tick({1, 0, 0, true}, commit);
+    EXPECT_EQ(total, 2);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
+TEST_F(ModRuntime, MenuActionsRollbackOwnedStateAndWritesOnCallbackOrCommitFailure) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"economy.write"};
+    for (const bool callback_error : {true, false}) {
+        Add("assert(chronicle.action('fail','Fail','Failure test',function() chronicle.set('partial',1); assert(chronicle.add_money(3)); " +
+                std::string(callback_error ? "error('action failure')" : "") + " end)); return {}",
+            manifest);
+        Start();
+        runtime.Tick({1, 0, 0, true});
+        std::string error;
+        ASSERT_TRUE(runtime.QueueAction("test.mod", "fail", error));
+        int commits = 0;
+        runtime.Tick({1, 0, 0, true}, [&](int) { ++commits; return false; });
+        EXPECT_EQ(commits, callback_error ? 0 : 1);
+        EXPECT_FALSE(State().contains("values"));
+        EXPECT_FALSE(runtime.Diagnostics().empty());
+        EXPECT_FALSE(runtime.Actions("test.mod")[0].available);
+        EXPECT_EQ(runtime.Actions("test.mod")[0].result, "Failed. See module diagnostics.");
+        EXPECT_FALSE(runtime.QueueAction("test.mod", "fail", error));
+    }
+}
+
+TEST_F(ModRuntime, MenuActionsCancelOnGameplayExitLoadResetAndDisable) {
+    Add("assert(chronicle.action('run','Run','Run once',function() chronicle.set('ran',true) end)); return {}");
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "run", error));
+    runtime.Tick({0, 0, 0, false});
+    EXPECT_TRUE(runtime.Actions("test.mod")[0].result.starts_with("Canceled:"));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(State().contains("values"));
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "run", error));
+    ASSERT_TRUE(runtime.LoadState(runtime.SaveState(), error)) << error;
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_TRUE(runtime.Actions("test.mod")[0].result.empty());
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "run", error));
+    runtime.ResetState();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(State().contains("values"));
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "run", error));
+    enabled["test.mod"] = false;
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Actions("test.mod").empty());
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "run", error));
+    EXPECT_FALSE(runtime.HasGameplay());
+}
+
+TEST_F(ModRuntime, MenuActionRegistrationRejectsInvalidMetadataAndEnforcesBounds) {
+    Add(R"(
+        local function f() end
+        assert(chronicle.action('bad id','Title','Description',f)==nil)
+        assert(chronicle.action('bad\0id','Title','Description',f)==nil)
+        assert(chronicle.action('bad','','Description',f)==nil)
+        assert(chronicle.action('bad','Title','new\nline',f)==nil)
+        assert(chronicle.action('bad','Title','nul\0text',f)==nil)
+        assert(chronicle.action('bad',string.char(255),'Description',f)==nil)
+        assert(chronicle.action('bad','Title',string.rep('a',257),f)==nil)
+        assert(chronicle.action('bad','Title','Description',{})==nil)
+        for i=1,32 do assert(chronicle.action('action'..i,'Literal {cross}','Description',f)) end
+        assert(chronicle.action('action1','Title','Description',f)==nil)
+        assert(chronicle.action('extra','Title','Description',f)==nil)
+        return {}
+    )");
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(runtime.Actions("test.mod").size(), 32u);
+    EXPECT_TRUE(runtime.Actions("unknown").empty());
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    for (int i = 1; i <= 16; ++i) {
+        ASSERT_TRUE(runtime.QueueAction("test.mod", "action" + std::to_string(i), error));
+    }
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "action17", error));
+    EXPECT_EQ(error, "At most 16 queued actions.");
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.QueueAction("test.mod", "action17", error));
+}
+
+TEST_F(ModRuntime, MenuActionsUseDependencyOrderAndDoNotRunAfterDependencyFailure) {
+    auto provider = Manifest("test.provider");
+    Add(R"(
+        assert(chronicle.action('set','Set','Set value',function() chronicle.set('value',42) end))
+        assert(chronicle.export_query('get',function() return {value=chronicle.get('value')} end))
+        return {}
+    )",
+        provider);
+    auto consumer = Manifest();
+    consumer["requires"] = {"test.provider"};
+    Add(R"(
+        assert(chronicle.action('read','Read','Read provider',function()
+            chronicle.set('value',assert(chronicle.invoke_query('test.provider','get',{})).value)
+        end)); return {}
+    )",
+        consumer);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "read", error));
+    ASSERT_TRUE(runtime.QueueAction("test.provider", "set", error));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(State()["values"]["value"], 42);
+    Add("assert(chronicle.action('set','Set','Fail provider',function() error('failed') end)); return {}", provider);
+    Start();
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "read", error));
+    ASSERT_TRUE(runtime.QueueAction("test.provider", "set", error));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_TRUE(runtime.Actions("test.mod")[0].result.starts_with("Canceled:"));
+    EXPECT_FALSE(runtime.Actions("test.mod")[0].available);
+}
+
+TEST_F(ModRuntime, MenuActionsCancelOnWorldChangeAndKeepNormalCallbackBudgets) {
+    Add(R"(
+        assert(chronicle.action('run','Run','Run once',function() chronicle.set('ran',true) end))
+        assert(chronicle.action('loop','Loop','Budget failure',function() while true do end end))
+        return {}
+    )");
+    Start();
+    runtime.Tick({1, 0, 0, true, 0, 1});
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "run", error));
+    runtime.Tick({1, 0, 0, true, 0, 2});
+    EXPECT_FALSE(State().contains("values"));
+    EXPECT_TRUE(runtime.Actions("test.mod")[1].result.starts_with("Canceled:"));
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "loop", error));
+    runtime.Tick({1, 0, 0, true, 0, 2});
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(runtime.HasGameplay());
+    EXPECT_FALSE(runtime.QueueAction("test.mod", "run", error));
+}
+
 } // namespace

@@ -17,6 +17,7 @@ extern "C" {
 #include <fstream>
 #include <iterator>
 #include <map>
+#include <utility>
 
 namespace mods {
 using Json = nlohmann::json;
@@ -24,12 +25,19 @@ using Json = nlohmann::json;
 namespace {
 constexpr std::size_t memory_limit = 8 * 1024 * 1024;
 
+struct Action {
+    std::string title, description, result;
+    int         reference = LUA_NOREF;
+};
+
 struct Module {
     Package                                                                                        package;
     lua_State                                                                                     *lua = nullptr;
     std::size_t                                                                                    memory = 0;
     int                                                                                            remaining = 0, pending_money = 0;
     int                                                                                            reference = LUA_NOREF;
+    int                                                                                            action_reference = LUA_NOREF;
+    std::map<std::string, Action>                                                                  actions;
     bool                                                                                           failed = false, playing = false;
     Json                                                                                          *state = nullptr;
     const World                                                                                   *world = nullptr;
@@ -466,6 +474,37 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
     }
 }
 
+int RegisterAction(lua_State *L) {
+    auto       &m = Self(L);
+    const char *id = luaL_checkstring(L, 1);
+    const char *title = luaL_checkstring(L, 2);
+    const char *description = luaL_checkstring(L, 3);
+    if (!m.initializing || !Key(id) || lua_rawlen(L, 1) != std::strlen(id) || !lua_isfunction(L, 4)) {
+        return Failure(L, "action requires an ID and function during initialization");
+    }
+    for (int i : {2, 3}) {
+        const auto  size = lua_rawlen(L, i);
+        const char *text = lua_tostring(L, i);
+        if (!size || size > 256 || std::any_of(text, text + size, [](unsigned char c) { return c < 32 || c == 127; })) {
+            return Failure(L, "action labels require 1-256 UTF-8 bytes without control characters");
+        }
+        // JSON serialization validates UTF-8 before labels reach the shared renderer.
+        try {
+            (void) Json(std::string(text, size)).dump();
+        } catch (const std::exception &) {
+            return Failure(L, "action labels must be UTF-8");
+        }
+    }
+    if (m.actions.size() >= 32 || m.actions.contains(id)) {
+        return Failure(L, "duplicate action or at most 32 actions");
+    }
+    lua_pushvalue(L, 4);
+    const int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    m.actions.emplace(id, Action{title, description, {}, ref});
+    lua_pushboolean(L, true);
+    return 1;
+}
+
 int Subscribe(lua_State *L) {
     auto       &m = Self(L);
     const char *event = luaL_checkstring(L, 1);
@@ -568,24 +607,25 @@ int Bootstrap(lua_State *L) {
     }
     lua_newtable(L);
     const luaL_Reg api[] = {
-        {"subscribe",     Subscribe    },
-        {"export_query",  ExportQuery  },
-        {"invoke_query",  InvokeQuery  },
-        {"get",           Get          },
-        {"set",           Set          },
-        {"quest_add",     QuestAdd     },
-        {"quest_get",     QuestGet     },
-        {"add_money",     AddMoney     },
-        {"supports",      HasCapability},
-        {"player",        Player       },
-        {"party",         Party        },
-        {"inventory",     Inventory    },
-        {"log",           Log          },
-        {"resource",      Resource     },
-        {"call",          ApiCall      },
-        {"api_available", ApiAvailable },
-        {"api_list",      ApiList      },
-        {nullptr,         nullptr      }
+        {"action",        RegisterAction},
+        {"subscribe",     Subscribe     },
+        {"export_query",  ExportQuery   },
+        {"invoke_query",  InvokeQuery   },
+        {"get",           Get           },
+        {"set",           Set           },
+        {"quest_add",     QuestAdd      },
+        {"quest_get",     QuestGet      },
+        {"add_money",     AddMoney      },
+        {"supports",      HasCapability },
+        {"player",        Player        },
+        {"party",         Party         },
+        {"inventory",     Inventory     },
+        {"log",           Log           },
+        {"resource",      Resource      },
+        {"call",          ApiCall       },
+        {"api_available", ApiAvailable  },
+        {"api_list",      ApiList       },
+        {nullptr,         nullptr       }
     };
     luaL_setfuncs(L, api, 0);
     lua_pushinteger(L, 1);
@@ -618,6 +658,12 @@ void PushWorld(lua_State *L, const World &world) {
 
 int Dispatch(lua_State *L) {
     auto &m = Self(L);
+    if (m.action_reference != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, m.action_reference);
+        PushWorld(L, *m.world);
+        lua_call(L, 1, 0);
+        return 0;
+    }
     lua_rawgeti(L, LUA_REGISTRYINDEX, m.reference);
     lua_getfield(L, -1, m.callback);
     if (!lua_isnil(L, -1)) {
@@ -649,14 +695,15 @@ int Reference(lua_State *L) {
 } // namespace
 
 struct Runtime::Impl {
-    std::vector<std::unique_ptr<Module>> modules;
-    Json                                 state = Json::object();
-    std::vector<std::string>             diagnostics;
-    std::vector<std::string>             logs;
-    World                                previous;
-    bool                                 observed = false;
-    bool                                 was_playing = false, loaded_pending = false;
-    Manager                              plan;
+    std::vector<std::unique_ptr<Module>>             modules;
+    Json                                             state = Json::object();
+    std::vector<std::string>                         diagnostics;
+    std::vector<std::string>                         logs;
+    World                                            previous;
+    bool                                             observed = false;
+    bool                                             was_playing = false, loaded_pending = false;
+    Manager                                          plan;
+    std::vector<std::pair<std::string, std::string>> pending_actions;
 
     ~Impl() { modules.clear(); } // Lua states close before the storage their API references.
 
@@ -737,7 +784,7 @@ struct Runtime::Impl {
     }
 
     void Call(Module &m, const char *name, const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
-              const QueryGame &query_game, const CommitGame &commit_game) {
+              const QueryGame &query_game, const CommitGame &commit_game, int action_reference = LUA_NOREF) {
         if (m.failed || !m.lua) {
             return;
         }
@@ -753,6 +800,7 @@ struct Runtime::Impl {
         m.query_game = &query_game;
         m.commit_game = &commit_game;
         m.callback = name;
+        m.action_reference = action_reference;
         lua_pushcfunction(L, Dispatch);
         ResetBudget(m);
         if (!Check(m, lua_pcall(L, 0, 0, 0))) {
@@ -837,6 +885,7 @@ void Runtime::Start(const Manager &manager) {
     impl_->observed = false;
     impl_->was_playing = false;
     impl_->loaded_pending = false;
+    impl_->pending_actions.clear();
     for (const auto &id : manager.LoadOrder()) {
         const auto found = std::ranges::find(manager.Packages(), id, &Package::id);
         if (found == manager.Packages().end()) {
@@ -929,6 +978,17 @@ void Runtime::Start(const Manager &manager) {
 
 void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
                    const QueryGame &query_game, const CommitGame &commit_game) {
+    // UI requests are consumed exactly once, never carried into another session.
+    const auto actions = std::exchange(impl_->pending_actions, {});
+    const bool action_context = world.playing && impl_->was_playing && world.mode == impl_->previous.mode &&
+                                world.map == impl_->previous.map && world.dungeon == impl_->previous.dungeon && world.floor == impl_->previous.floor;
+    for (auto &ptr : impl_->modules) {
+        for (const auto &[owner, id] : actions) {
+            if (owner == ptr->package.id) {
+                ptr->actions.at(id).result = "Canceled: gameplay context changed or package unavailable.";
+            }
+        }
+    }
     const bool game_enter = world.playing && !impl_->was_playing;
     const bool game_leave = !world.playing && impl_->was_playing;
     const bool floor_enter = world.playing && world.dungeon >= 0 && world.floor >= 0 && (!impl_->observed || world.dungeon != impl_->previous.dungeon || world.floor != impl_->previous.floor);
@@ -975,6 +1035,13 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
         }
         if (world.playing) {
+            for (const auto &[owner, id] : actions) {
+                if (owner == m.package.id && action_context && !m.failed) {
+                    auto &action = m.actions.at(id);
+                    impl_->Call(m, "menu action", world, money, read_game, query_game, commit_game, action.reference);
+                    action.result = m.failed ? "Failed. See module diagnostics." : "Completed.";
+                }
+            }
             impl_->Call(m, "on_tick", world, money, read_game, query_game, commit_game);
             impl_->NativeTick(m, query_game, commit_game);
         }
@@ -989,6 +1056,45 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
 
 bool Runtime::HasGameplay() const {
     return std::ranges::any_of(impl_->modules, [](const auto &m) { return !m->failed; });
+}
+
+std::vector<ActionStatus> Runtime::Actions(std::string_view owner) const {
+    std::vector<ActionStatus> result;
+    for (const auto &m : impl_->modules) {
+        if (m->package.id == owner) {
+            for (const auto &[id, action] : m->actions) {
+                result.push_back({m->package.id, id, action.title, action.description, action.result,
+                                  !m->failed && impl_->was_playing});
+            }
+        }
+    }
+    return result;
+}
+
+bool Runtime::QueueAction(std::string_view owner, std::string_view id, std::string &error) {
+    error.clear();
+    const std::pair<std::string, std::string> request{owner, id};
+    if (!impl_->was_playing) {
+        error = "Actions require gameplay.";
+    } else if (impl_->pending_actions.size() >= 16) {
+        error = "At most 16 queued actions.";
+    } else if (std::ranges::find(impl_->pending_actions, request) != impl_->pending_actions.end()) {
+        error = "Action is already queued.";
+    } else {
+        for (auto &m : impl_->modules) {
+            if (m->package.id != owner || m->failed || !m->lua) {
+                continue;
+            }
+            const auto found = m->actions.find(std::string(id));
+            if (found != m->actions.end()) {
+                impl_->pending_actions.push_back(request);
+                found->second.result = "Queued for gameplay.";
+                return true;
+            }
+        }
+        error = "Action or package is unavailable.";
+    }
+    return false;
 }
 
 std::vector<std::string> Runtime::Logs() const { return impl_->logs; }

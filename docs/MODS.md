@@ -13,7 +13,9 @@ Documentation: [manifest reference](MOD_FORMAT.md), [author walkthrough and Lua 
 and [coverage and remaining work](MOD_PARITY.md).
 
 The native manager uses Chronicle's shared `UI` menu framework for its window,
-labels, list, selection brackets, and pointer. API 1 does not expose Lua menus.
+labels, list, selection brackets, and pointer. Lua packages can contribute
+[named actions](MOD_HOST_API.md#mod-manager-actions) to this manager; arbitrary
+script-drawn menus are not exposed.
 
 Open **Options → Mods → Mod Manager**. Select a package with Up/Down, confirm to
 toggle it, Left/Right to page through its details, Square to rescan, and Circle
@@ -23,6 +25,11 @@ The manager displays current-session activation separately from next-launch
 status, plus conflicts, script errors, permissions, logs, and quest progress.
 For native packages, Triangle or Trust opens a separate confirmation. Trust and
 enabling are independent; both are needed to load native code after restart.
+Packages with registered actions show **R1 Actions**. Open that list, select an
+action, and press Cross (or click Run) to queue it for a gameplay tick. Circle
+returns to the package list. The action pane shows readiness and the last result;
+script failures also appear in package diagnostics. Actions belong to the current
+run, even if you have changed the package's next-launch enable selection.
 
 Enable selections are written atomically to `<save>/mods-profile.json`; they do
 not edit the distributed manifests. Conflicts are recomputed immediately.
