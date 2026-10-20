@@ -1995,3 +1995,23 @@ The audio smoke suite also verifies a loaded/playing PAL sequence, stops it via
 a shared-menu action, reads the stopped state on the next callback, and completes
 back-floor travel. Loading/playing a different set and owned sequence music
 replacement remain separate work.
+
+### Restart a loaded native music track
+
+`audio.bgm_play {"track": 0}` (`game.write`) restarts a zero-based track in the
+currently loaded native BGM set. Inspect `audio.bgm_state.tracks` to choose a
+ready track (0-9). It is a deferred sole engine write with no currency delta,
+allowed only in stable gameplay. It rejects disabled music, pending native
+loads, missing sets, unavailable tracks and an unavailable default-volume track
+zero before stopping current music. Unknown arguments are rejected.
+
+Successful commits invoke native stop then play, so an already playing track
+restarts and a different ready track can be selected. Native stop includes
+core-zero voice release. Volume and the user's soundtrack replacement follow
+native behavior. This is a one-time playback request, not persistent ownership;
+later native events can replace it. It does not load a different set or stop
+custom stream voices. No mod request means no new driver action.
+
+The audio author smoke suite now includes a PAL shared-action stop/restart
+scenario which checks playing state on the next callback before back-floor
+travel. This is gameplay dispatch evidence, not physical-device listening.

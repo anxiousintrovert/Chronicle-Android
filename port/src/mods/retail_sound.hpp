@@ -9,6 +9,8 @@ namespace mods {
 // imply the corresponding bank/sample is currently loaded or dispatch audio.
 std::optional<SND_SE_INFO> ResolveRetailEffect(int id, int basic, int chapter, int voice, std::string &error);
 nlohmann::json ReadRetailBgm();
+std::string ValidateRetailBgmPlay(const nlohmann::json &arguments);
+bool PlayRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error);
 bool StopRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error);
 bool RetailEffectHasSamples(const audio::Bank *bank, int program, int effect);
 // Checks the actual loaded port bank and resolves native default volume.

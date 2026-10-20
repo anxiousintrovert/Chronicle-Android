@@ -132,3 +132,25 @@ TEST(ModRetailSound, BgmSnapshotsAndStopValidateBeforeTouchingNativeState) {
     EXPECT_EQ(now_bgm_no, 3);
     EXPECT_TRUE(mods::StopRetailBgm({stop}, 0, error)); // native idempotent stop
 }
+
+TEST(ModRetailSound, BgmPlayRejectsInvalidOrUnavailableTracksWithoutStoppingMusic) {
+    now_bgm_no = 3; now_bgm_play = 1; now_bgm_vol = 90; bgm_off = 0; load_bgm_no = -1;
+    std::string error;
+    const mods::GameCommand play{"audio.bgm_play", {{"track", 0}}, "test"};
+    EXPECT_FALSE(mods::PlayRetailBgm({play, play}, 0, error));
+    EXPECT_FALSE(mods::PlayRetailBgm({play}, 1, error));
+    EXPECT_FALSE(mods::PlayRetailBgm({play}, 0, error)); // no decoded tracks
+    load_bgm_no = 4;
+    EXPECT_FALSE(mods::PlayRetailBgm({play}, 0, error));
+    load_bgm_no = -1; bgm_off = 1;
+    EXPECT_FALSE(mods::PlayRetailBgm({play}, 0, error));
+    EXPECT_EQ(now_bgm_play, 1);
+    EXPECT_EQ(now_bgm_vol, 90);
+    EXPECT_EQ(now_bgm_no, 3);
+    bgm_off = 0;
+    for (const auto &a : {nlohmann::json::object(), nlohmann::json{{"track", -1}},
+         nlohmann::json{{"track", 10}}, nlohmann::json{{"track", 0.5}},
+         nlohmann::json{{"track", 0}, {"set", 3}}})
+        EXPECT_FALSE(mods::ValidateRetailBgmPlay(a).empty());
+    EXPECT_TRUE(mods::ValidateRetailBgmPlay({{"track", 9}}).empty());
+}

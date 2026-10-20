@@ -350,6 +350,27 @@ nlohmann::json ReadRetailBgm() {
             {"disabled", bgm_off != 0}, {"loading", load_bgm_no >= 0}, {"bank_loaded", bool(g_slot_banks[0])},
             {"tracks", std::move(tracks)}};
 }
+bool PlayRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error) {
+    if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.bgm_play") {
+        error = "BGM play requires one owned command and no other engine writes"; return false;
+    }
+    error = ValidateRetailBgmPlay(commands[0].arguments);
+    if (!error.empty()) return false;
+    if (load_bgm_no >= 0) { error = "a native music load is pending"; return false; }
+    if (bgm_off || now_bgm_no < 0) { error = "native music is disabled or no set is loaded"; return false; }
+    const auto snapshot = ReadRetailBgm();
+    const auto &tracks = snapshot.at("tracks");
+    const auto track = commands[0].arguments.at("track").get<int>();
+    // SndBgmPlay also dereferences track zero for its default volume, even
+    // when another track is requested. Validate both before native stop.
+    if (tracks.empty() || track >= static_cast<int>(tracks.size()) ||
+        !tracks[0].at("ready").get<bool>() || !tracks[track].at("ready").get<bool>()) {
+        error = "requested BGM track or default-volume track is not ready"; return false;
+    }
+    SndBgmStop();
+    SndBgmPlay(track);
+    error.clear(); return true;
+}
 bool StopRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error) {
     if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.bgm_stop" ||
         !commands[0].arguments.is_object() || !commands[0].arguments.empty()) {

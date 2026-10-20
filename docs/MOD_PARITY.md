@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 131 implemented operations, native plugins and author
+a real host-call boundary, 132 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -3050,3 +3050,24 @@ and configuration, publish staged state safely, and test failure preservation
 and playback through the shared menu action. Archive size limits do not yet
 constitute a separate decoded-bank memory budget. Owned music replacement also
 remains outstanding.
+
+
+### Restart a loaded native BGM track (2026-10-20)
+
+Added audio.bgm_play with strict track-only arguments, sole owned commit,
+stable-gameplay gating and readiness validation before native stop/play. It
+checks track zero too because native default-volume lookup dereferences that
+track regardless of the selected track. Disabled music and pending loads are
+rejected. The native driver has no new default call site.
+
+The shared-menu PAL replay now covers stop and restart followed by back-floor
+travel. All three audio scenarios passed, along with 20 focused native tests
+and 38 Python tests, using Clang 23.1.2. Author audio suite has three scenarios
+(36 default scenarios). Public operation count is 132. Loading another BGM set
+and owned sequence replacement are still incomplete; this operation selects
+only a currently loaded track. Physical-device listening and other platforms
+remain unverified.
+
+PAL report: bgm-play-2f26ba6bbebd40f3b112ced9810831e0/report.json in local
+framework expansion evidence. Full Clang regression completed without failures;
+PS2 diff against the Chronicle baseline is empty.

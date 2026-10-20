@@ -180,3 +180,12 @@ bool ApplyRetailEffect(const std::vector<GameCommand> &commands, int money, int 
     return row && QueueRetailEffect(*row, a.value("volume", -1), error);
 }
 }
+
+namespace mods {
+std::string ValidateRetailBgmPlay(const nlohmann::json &a) {
+    if (!a.is_object() || a.size() != 1 || !a.contains("track") ||
+        !a["track"].is_number_integer() || a["track"].get<double>() < 0 || a["track"].get<double>() > 9)
+        return "audio.bgm_play requires only an integer track 0..9";
+    return {};
+}
+}
