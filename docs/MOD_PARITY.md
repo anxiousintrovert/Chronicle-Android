@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 99 implemented operations, native plugins and author
+a real host-call boundary, 101 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -17,7 +17,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
-| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; native settlement travel and dungeon entry with optional native floor selection through deferred owner-bound requests; vanilla generation unchanged | Registered-map and broader floor transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
+| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; vanilla generation unchanged | Registered-map and broader floor transitions, owned layout/population/loot/floor-rule overrides, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
@@ -1348,3 +1348,30 @@ including position and return to play, unchanged inventory when bypassing the
 transport requirement, and no replay. Cancellation, existing native requests,
 unsupported floors and no-mod paths need separate tests. This audit is source
 evidence only; it adds no API or engine hook and does not close the coverage gap.
+
+
+### Native back-floor transport implementation
+
+The experimental arbitrary-script-boundary failure above is resolved by starting
+the actual native transport from ordinary play. The adapter uses the placed
+transport event's position/direction and native scene sequence, including its
+confirmation and animation. Moon Sea uses script 201; the other six use 200.
+An owned in-flight context supplies only that transport's access flag query;
+no temporary save flag or inventory write occurs. Normal native flag reads retain
+their original behavior without an in-flight transport. The API catalog is 101.
+
+Seven separate PAL first-floor tests passed through shared-manager Lua actions,
+checking 90 consecutive normal-play frames after arrival, no pending replay,
+byte-identical inventory, and all 50 saved event flags unchanged. Queue tests
+cover exclusivity, native request arbitration, owner/epoch/save/floor/map changes,
+timeout and one-shot dispatch. A native-function test checks all 50 flag reads,
+integer/float arguments and non-pointer outputs without a mod transport.
+
+Other floors, playable characters, regions and platforms remain unverified.
+Back-floor exit still uses native gameplay; custom destinations, extra floors,
+layout/population/loot and floor-rule overrides remain outstanding.
+
+Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
+796 registered, 763 passed, 32 skipped and one disabled, with no failures.
+All 18 Python checks and 3,840 empty/disabled generator comparisons passed.
+CLI discovery lists both back-floor operations. PS2 files remain unchanged.

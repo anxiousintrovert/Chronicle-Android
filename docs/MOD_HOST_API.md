@@ -1427,3 +1427,32 @@ native entrance menu. Owner shutdown, runtime replacement, a different save or
 destination, or a second scene initialization discards it. Canceling the floor
 request after travel has begun does not undo travel; native floor selection
 remains available. With no floor request the native entrance argument stays -1.
+
+
+### Native back-floor transport
+
+`dungeon.back_floor_state {}` (`game.read`) returns `ready`, `reason`, `active`,
+`dungeon`, `floor`, `pending`, and the last `request`. When native resources are
+available, `floor_gate_key` reports its item number and carried count. This is
+the floor exit key, not proof that a back-floor transport item is held.
+
+`dungeon.back_floor_enter {}` (`game.write`) queues entry as the callback's sole
+engine write, including currency. It requires ordinary dungeon play and loaded
+procedural front/back maps with a recognized transport event. Already being on
+the back floor is an unchanged no-op. Pending requests identify their owner and
+expire after 1,800 game frames; owner/runtime/save/floor changes cancel them.
+Native requests are never overwritten. Readiness does not guarantee completion.
+
+Dispatch starts the native transport event, including its confirmation and
+animation. Moon Sea uses event 201; the other retail dungeons use event 200.
+The caller bypasses the transport-item requirement through a scoped native flag
+query; inventory and saved event flags are not changed. No scoped access exists
+without a mod-started transport. Once dispatched, native travel continues if
+its mod stops. Context retirement or native return to play releases the access.
+`dispatched` means transport started; cancellation at the native confirmation
+can still leave the player on the front floor. Inspect `active` to confirm arrival.
+
+This does not register destinations, change floor generation or increase engine
+capacities. Boss/free-layout floors or floors without a recognized transport
+reject. Retail validation covers the first floor of all seven dungeons with
+Toan on PAL Windows, not all floors, characters, regional assets or platforms.

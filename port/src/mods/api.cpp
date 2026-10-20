@@ -17,6 +17,7 @@
 #include "player_combat.hpp"
 #include "quick_items.hpp"
 #include "world_transition.hpp"
+#include "back_floor.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -24,6 +25,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"dungeon.back_floor_state", "game.read", "Read native back-floor availability and request state.", false},
+    {"dungeon.back_floor_enter", "game.write", "Queue native back-floor transport from ordinary dungeon play.", true},
     {"dungeon.locations", "game.read", "List retail dungeons and native floor counts.", false},
     {"dungeon.enter", "game.write", "Queue native dungeon entry with an optional zero-based floor.", true},
     {"world.locations", "game.read", "List supported retail settlement destinations.", false},
@@ -241,6 +244,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "items.quick_slots" || name == "items.quick_slot_select" || name == "items.quick_slot_use") return ValidateQuickItems(name, a);
+    if (name == "dungeon.back_floor_state" || name == "dungeon.back_floor_enter") return a.is_object() && a.empty() ? "" : "back-floor operations take no arguments";
     if (name == "dungeon.locations" || name == "dungeon.enter" || name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);

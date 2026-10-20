@@ -1,0 +1,142 @@
+#include <SDL3/SDL.h>
+#include <gtest/gtest.h>
+
+#include <array>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+
+#include "character.hpp"
+#include "dun/gameloop.hpp"
+#include "dungeoneventman.hpp"
+#include "gameloop.hpp"
+#include "gamemode.hpp"
+#include "gfx_fixture.hpp"
+#include "main.hpp"
+#include "mods/back_floor.hpp"
+#include "mods/world_transition.hpp"
+#include "platform/clock.hpp"
+#include "platform/config.hpp"
+#include "platform/input_script.hpp"
+#include "platform/paths.hpp"
+#include "savedata.hpp"
+
+extern s32 gameTask;
+
+namespace {
+bool               queued = false, arrived = false;
+int                stable = 0, maximum_stable = 0;
+bool               input_released = false;
+std::string        last_state;
+ITEM_PACK          inventory_before{};
+std::array<s8, 50> flags_before{};
+
+void BackPump() {
+    WindowPollEvents();
+    InputPoll();
+    InputScriptApply(GameFrameCount());
+    const auto state = mods::ReadBackFloor();
+    last_state = state.dump();
+    if (!queued && state.value("ready", false)) {
+        for (const auto &action : mods::Scripts().Actions("audit.back")) {
+            if (action.id == "enter" && action.available) {
+                std::string error;
+                inventory_before = SaveData->GetDngStatus()->item_pack;
+                std::copy_n(SaveData->GetDngStatus()->event_flags, 50, flags_before.begin());
+                queued = mods::Scripts().QueueAction("audit.back", "enter", error);
+                EXPECT_TRUE(queued) << error;
+            }
+        }
+    }
+    if (queued && state.value("active", false) && gameTask == GAME_TASK_PLAY) {
+        if (!input_released) {
+            InputScript release;
+            std::string error;
+            EXPECT_TRUE(InputScriptParse("0\n", release, error));
+            InputScriptInstall(std::move(release));
+            input_released = true;
+        }
+        ++stable;
+        maximum_stable = std::max(maximum_stable, stable);
+        if (stable >= 90) {
+            arrived = true;
+            EXPECT_EQ(state["request"]["state"], "dispatched");
+            EXPECT_FALSE(state.value("pending", true));
+            EXPECT_EQ(std::memcmp(&inventory_before, &SaveData->GetDngStatus()->item_pack, sizeof(inventory_before)), 0);
+            EXPECT_TRUE(std::equal(flags_before.begin(), flags_before.end(), SaveData->GetDngStatus()->event_flags));
+            EXPECT_FALSE(mods::BackFloorTransportAccess(1));
+            GameRequestStop();
+        }
+    } else {
+        stable = 0;
+    }
+}
+
+void RunBackAudit(int dungeon) {
+    const char *data = std::getenv("DC_DATA"), *audit = std::getenv("DC_BACK_FLOOR_AUDIT");
+    if (!data || !audit || !*audit) {
+        GTEST_SKIP() << "Run alone with DC_DATA and DC_BACK_FLOOR_AUDIT";
+    }
+    queued = arrived = false;
+    stable = maximum_stable = 0;
+    input_released = false;
+    const std::filesystem::path root = audit;
+    std::filesystem::create_directories(root / "mods/audit.back");
+    std::ofstream(root / "mods-profile.json") << R"({"schema_version":1,"enabled":{"audit.back":true}})";
+    std::ofstream(root / "mods/audit.back/mod.json") << R"({"schema_version":1,"api_version":1,"id":"audit.back","name":"Back-floor audit","version":"1.0.0","game":"chronicle","files":{},"script":"main.lua","permissions":["game.read","game.write"],"requires_capabilities":["host.calls.v1","menu.actions.v1"],"requires_operations":["dungeon.back_floor_state","dungeon.back_floor_enter"]})";
+    std::ofstream(root / "mods/audit.back/main.lua") << R"(
+local armed=false
+local requested=false
+assert(chronicle.action('enter','Enter back floor','Request native back-floor entry.',function() armed=true end))
+return {on_tick=function()
+ if not armed or requested then return end
+ local state=assert(chronicle.call('dungeon.back_floor_state'))
+ if not state.ready then return end
+ assert(chronicle.call('dungeon.back_floor_enter'))
+ requested=true
+end}
+)";
+    PathsSetDataRoot(data);
+    PathsSetSaveRoot(root);
+    ConfigLoad();
+    dc::test::GfxFixture graphics(640, 480, 1.0f, dc::test::GfxOptions{.offscreen = true});
+    InputInit();
+    InputScript script;
+    std::string input = "0\n", error;
+    for (int i = 90; i < 18100; i += 100) {
+        input += std::to_string(i) + " cross\n" + std::to_string(i + 5) + "\n";
+    }
+    ASSERT_TRUE(InputScriptParse(input, script, error)) << error;
+    InputScriptInstall(std::move(script));
+    ClockSetUnbounded(true);
+    ClockReset();
+    ClockAddPumpHook(BackPump);
+    ASSERT_TRUE(GameSetJump(("dungeon:" + std::to_string(dungeon)).c_str()));
+    GameSetFastLoad(true);
+    GameSetAutosave(false);
+    GameSetFrameBudget(18500);
+    const int result = RunGame(0, nullptr);
+    ClockRemovePumpHook(BackPump);
+    InputShutdown();
+    EXPECT_EQ(result, 0);
+    EXPECT_TRUE(queued) << last_state;
+    EXPECT_TRUE(arrived) << last_state << " task=" << gameTask << " longest_play=" << maximum_stable;
+    for (const auto &diagnostic : mods::Scripts().Diagnostics()) {
+        ADD_FAILURE() << diagnostic;
+    }
+}
+
+TEST(ModBackFloorRetail, SharedActionReachesBackFloorThroughNativeScriptBoundary) { RunBackAudit(0); }
+
+TEST(ModBackFloorRetail, WiseOwlTransport) { RunBackAudit(1); }
+
+TEST(ModBackFloorRetail, ShipwreckTransport) { RunBackAudit(2); }
+
+TEST(ModBackFloorRetail, TempleTransport) { RunBackAudit(3); }
+
+TEST(ModBackFloorRetail, MoonSeaTransport) { RunBackAudit(4); }
+
+TEST(ModBackFloorRetail, GalleryTransport) { RunBackAudit(5); }
+
+TEST(ModBackFloorRetail, DemonShaftTransport) { RunBackAudit(6); }
+} // namespace

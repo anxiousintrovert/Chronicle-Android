@@ -35,6 +35,7 @@
 #include "mods/party.hpp"
 #include "mods/town.hpp"
 #include "mods/world_transition.hpp"
+#include "mods/back_floor.hpp"
 #include "mods/player_tuning_native.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
@@ -981,6 +982,7 @@ int RunGame(int argc, char **argv) {
             mods::FinishPartySwitch();
             mods::FinishTownSelection();
             mods::FinishWorldTransition();
+            mods::PollBackFloor();
             ++g_frames;
             PresenceTick();
 
