@@ -45,6 +45,30 @@ TEST_F(ModTexturePackage, ChangedSourceFallsBackAndRescanValidatesMalformedImage
     EXPECT_FALSE(mods::ApplyTextureReplacement(manager,"atlas",mods::TexturePixelIdentity(decoded),decoded,error));EXPECT_FALSE(error.empty());EXPECT_EQ(decoded.levels,before);
     manager.Scan({root},{},{{"test.one",true}});EXPECT_TRUE(manager.Textures().empty());ASSERT_EQ(manager.Packages().size(),1u);EXPECT_FALSE(manager.Packages()[0].problems.empty());
 }
+TEST_F(ModTexturePackage, FailedReplacementUploadReleasesCandidateAndRendersOriginal) {
+    Add("test.one");manager.Scan({root},{},{{"test.one",true}});texfix::TexEnv env;
+    const auto original=Original();unsigned palette=0,calls=0,temporary_palette=0;std::string error;
+    const auto key=mods::CreatePackageTexture(manager,"atlas",mods::TexturePixelIdentity(original),original,PortTextureOwner::Manager,&palette,error,
+        [&](const PortDecodedTexture &image,PortTextureOwner owner,unsigned *clut) {
+            ++calls;
+            if(calls==1) {
+                EXPECT_EQ(image.width,4u);EXPECT_EQ(image.logical_width,2u);
+                // A failing uploader may have allocated a palette before reporting failure.
+                auto indexed=original;indexed.format=gfx::TextureFormat::Index8;indexed.levels={{0,0}};
+                const auto temporary=PortCreateTexture(indexed,owner,&temporary_palette);PortReleaseKey(temporary);*clut=temporary_palette;return 0u;
+            }
+            EXPECT_EQ(image.levels,original.levels);return PortCreateTexture(image,owner,clut);
+        });
+    EXPECT_EQ(calls,2u);EXPECT_FALSE(error.empty());EXPECT_FALSE(PortKeyLive(temporary_palette));EXPECT_EQ(palette,0u);
+    const auto ref=PortTextureFromTex0(static_cast<u_long>(key),0);ASSERT_TRUE(ref.valid);EXPECT_EQ(ref.width,2u);
+    env.gfx.Frame({0,0,0,128},[&]{env.Draw(ref,0,0,320,160,0,0,2,1);});EXPECT_TRUE(env.gfx.PixelNear(240,40,255,0,0));
+}
+TEST_F(ModTexturePackage, NoTextureTargetUploadsOriginalExactlyOnce) {
+    const auto original=Original();unsigned calls=0,palette=999;std::string error;
+    EXPECT_EQ(mods::CreatePackageTexture(manager,"atlas",{},original,PortTextureOwner::Manager,&palette,error,
+        [&](const PortDecodedTexture &image,PortTextureOwner,unsigned *clut){++calls;EXPECT_EQ(&image,&original);*clut=0;return 42u;}),42u);
+    EXPECT_EQ(calls,1u);EXPECT_EQ(palette,0u);EXPECT_TRUE(error.empty());
+}
 TEST_F(ModTexturePackage, NativeTextureEntryUploadsFullResolutionAndRestartDisablesIt) {
     Add("test.one");std::ofstream(root/"mods-profile.json")<<Json{{"schema_version",1},{"enabled",{{"test.one",true}}}}.dump();
     mods::Shared().Start({root},{},root);ASSERT_EQ(mods::Shared().Active().Textures().size(),1u);

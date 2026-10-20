@@ -44,9 +44,30 @@ bool ApplyTextureReplacement(const Manager &manager,std::string_view name,std::s
         texture=std::move(replacement);return true;
     }catch(const std::exception &failure){error=failure.what();return false;}
 }
-void ApplyPackageTexture(std::string_view name,std::string_view identity,PortDecodedTexture &texture) {
-    if(identity.empty())return;
-    std::string error;ApplyTextureReplacement(Shared().Active(),name,identity,texture,error);
+unsigned CreatePackageTexture(const Manager &manager,std::string_view name,std::string_view identity,
+                              const PortDecodedTexture &original,PortTextureOwner owner,unsigned *palette,
+                              std::string &error,const TextureUpload &upload) {
+    error.clear();
+    if(!identity.empty()) {
+        // Only carry metadata into the candidate; keep native pixels and palette intact for fallback.
+        PortDecodedTexture candidate;candidate.width=original.width;candidate.height=original.height;
+        candidate.logical_width=original.logical_width;candidate.logical_height=original.logical_height;
+        candidate.has_alpha=original.has_alpha;
+        if(ApplyTextureReplacement(manager,name,identity,candidate,error)) {
+            unsigned candidate_palette=0,key=0;
+            try {
+                key=upload(candidate,owner,&candidate_palette);
+                if(key&&PortTextureFromTex0(static_cast<u_long>(key),0).valid) {
+                    if(palette)*palette=candidate_palette;
+                    return key;
+                }
+                error="Replacement GPU upload failed";
+            }catch(const std::exception &failure){error=std::string("Replacement GPU upload failed: ")+failure.what();}
+            if(key)PortReleaseKey(key);
+            if(candidate_palette)PortReleaseKey(candidate_palette);
+        }
+    }
     if(!error.empty())std::fprintf(stderr,"mods: texture %.*s: %s; using original\n",static_cast<int>(name.size()),name.data(),error.c_str());
+    return upload(original,owner,palette);
 }
 }

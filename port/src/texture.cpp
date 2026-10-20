@@ -13,6 +13,7 @@
 #include "mglib.hpp"
 #include "texture_port.hpp"
 #include "mods/texture_packages.hpp"
+#include "mods/session.hpp"
 #include "tim2.hpp"
 
 namespace {
@@ -356,8 +357,8 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
         caption::PreparePainted(name, decoded);
         MakeGroundPeriodic(name, decoded);
         DumpTexture(name, decoded);
-        mods::ApplyPackageTexture(name,mod_identity,decoded);
-        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
+        if(mod_identity.empty())tbp=PortCreateTexture(decoded,PortTextureOwner::Manager,&cbp);
+        else {std::string error;tbp=mods::CreatePackageTexture(mods::Shared().Active(),name,mod_identity,decoded,PortTextureOwner::Manager,&cbp,error);}
     }
     tex->tex0 = Tex0(tbp, tbw, psm, tw, th, cbp, indexed ? 1 : 0);
 
@@ -461,8 +462,8 @@ PORT_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
         LocalizeTexture(name, decoded);
         caption::PreparePainted(name, decoded);
         DumpTexture(name, decoded);
-        mods::ApplyPackageTexture(name,mod_identity,decoded);
-        tbp = PortCreateTexture(decoded, PortTextureOwner::Manager, &cbp);
+        if(mod_identity.empty())tbp=PortCreateTexture(decoded,PortTextureOwner::Manager,&cbp);
+        else {std::string error;tbp=mods::CreatePackageTexture(mods::Shared().Active(),name,mod_identity,decoded,PortTextureOwner::Manager,&cbp,error);}
     }
     tex->tex0 = SCE_GS_SET_TEX0(tbp, 10, kPsmT8H, 10, 8, 1, 0, cbp, 0, 0, 0, 1);
 }
