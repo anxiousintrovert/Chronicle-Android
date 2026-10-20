@@ -256,17 +256,33 @@ def validate(root, data=None):
     return mod
 
 
-def create(package_id, output):
+def create(package_id, output, template="basic"):
     require(identity(package_id), "invalid package ID")
+    require(template in ("basic", "quest"), "unknown package template")
     root = Path(output)
+    require(not any(part.casefold() == "ps2" for path in (root.absolute(), root.resolve())
+                    for part in path.parts), "PS2 output is forbidden")
+    if template == "quest":
+        source = Path(__file__).resolve().parents[1] / "examples/mods/dungeon-contract"
+        mod = validate(source)
+        mod["id"] = package_id
+        mod["name"] = package_id
+        script = (source / "main.lua").read_text(encoding="utf-8")
+        readme = (source / "README.md").read_text(encoding="utf-8")
+        readme = readme.split("Validate from the repository root:", 1)[0]
+        readme = readme.replace("# Dungeon Contract example", "# " + package_id)
+        readme += "Validate this directory with chronicle_mod.py check before packing.\n"
+    else:
+        mod = {"schema_version": 1, "api_version": 1, "id": package_id,
+               "name": package_id, "version": "1.0.0", "game": "chronicle",
+               "requires_capabilities": ["scripts.lua.v1", "logging.v1"],
+               "script": "main.lua", "files": {}}
+        script = 'assert(chronicle.log("info", "Package loaded"))\nreturn {}\n'
+        readme = "Install this folder in <save>/mods, enable in Options > Mods, then restart.\n"
     root.mkdir(parents=True, exist_ok=False)
-    mod = {"schema_version": 1, "api_version": 1, "id": package_id,
-           "name": package_id, "version": "1.0.0", "game": "chronicle",
-           "requires_capabilities": ["scripts.lua.v1", "logging.v1"],
-           "script": "main.lua", "files": {}}
     (root / "mod.json").write_text(json.dumps(mod, indent=2) + "\n", encoding="utf-8")
-    (root / "main.lua").write_text('assert(chronicle.log("info", "Package loaded"))\nreturn {}\n', encoding="utf-8")
-    (root / "README.md").write_text("Install this folder in <save>/mods, enable in Options > Mods, then restart.\n", encoding="utf-8")
+    (root / "main.lua").write_text(script, encoding="utf-8")
+    (root / "README.md").write_text(readme, encoding="utf-8")
 
 
 def pack(root, output):
@@ -490,6 +506,8 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     new = commands.add_parser("new", help="create a disabled starter package")
     new.add_argument("id"); new.add_argument("--output", required=True)
+    new.add_argument("--template", choices=("basic", "quest"), default="basic",
+                     help="basic logging package or event-driven quest with shared-menu start")
     for command in ("check", "inspect"):
         cmd = commands.add_parser(command)
         cmd.add_argument("package"); cmd.add_argument("--data", help="optional logical asset tree for exact-path size checks")
@@ -515,7 +533,7 @@ def main(argv=None):
             return int(any(not (item['matches'] or (args.allow_map_size_change and item['map_size_only']))
                            for item in report['candidates']))
         if args.command == "new":
-            create(args.id, args.output)
+            create(args.id, args.output, args.template)
         elif args.command == "install":
             print(json.dumps(install(args.archive, args.mods, args.replace, args.data), indent=2))
         elif args.command == "pack":

@@ -20,6 +20,39 @@ class AuthorTools(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_quest_template_pack_install_preserves_script_and_stays_disabled(self):
+        folder = self.root / "authored"
+        self.assertEqual(tool.main(["new", "test.hunt", "--template", "quest", "--output", str(folder)]), 0)
+        manifest = tool.validate(folder)
+        self.assertEqual(manifest["id"], "test.hunt")
+        self.assertNotIn("enabled", manifest)
+        self.assertIn("quests.rewards.v1", manifest["requires_capabilities"])
+        source = Path(tool.__file__).resolve().parents[1] / "examples/mods/dungeon-contract/main.lua"
+        self.assertEqual((folder / "main.lua").read_text(encoding="utf-8"), source.read_text(encoding="utf-8"))
+        archive = self.root / "quest.zip"
+        tool.pack(folder, archive)
+        result = tool.install(archive, self.root / "mods")
+        self.assertTrue(result["profile_unchanged"])
+        self.assertFalse((self.root / "mods-profile.json").exists())
+        self.assertEqual(tool.validate(self.root / "mods/test.hunt"), manifest)
+        self.assertEqual((folder / "main.lua").read_bytes(), (self.root / "mods/test.hunt/main.lua").read_bytes())
+        self.assertNotIn("examples/mods/dungeon-contract", (folder / "README.md").read_text())
+
+    def test_new_template_rejects_unknown_existing_and_ps2_before_writing(self):
+        for template, output in [("missing", self.root / "missing"),
+                                 ("quest", self.root / "PS2" / "new"),
+                                 ("basic", self.root / "ps2" / "new")]:
+            with self.assertRaises(ValueError):
+                tool.create("test.hunt", output, template)
+            self.assertFalse(output.exists())
+        self.assertFalse((self.root / "PS2").exists())
+        existing = self.root / "existing"
+        existing.mkdir()
+        (existing / "keep").write_text("unchanged")
+        with self.assertRaises(FileExistsError):
+            tool.create("test.hunt", existing, "quest")
+        self.assertEqual(list(existing.iterdir()), [existing / "keep"])
+
     def package(self, name, **changes):
         folder = self.root / 'mods' / name
         tool.create(name, folder)

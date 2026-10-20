@@ -191,3 +191,25 @@ disabled package with shared-menu start, two named event objectives and a single
 transactional reward. Its walkthrough includes install, enable/restart, quest
 browsing and save/reload behavior. The native integration test reads the shipped
 manifest and Lua directly; use it when adapting the example.
+
+## Generate a quest package
+
+From a checkout, create an independent package using the tested event-driven
+quest starter:
+
+```text
+python tools/chronicle_mod.py new author.my-quest --template quest --output mod-work/my-quest
+python tools/chronicle_mod.py check mod-work/my-quest
+python tools/chronicle_mod.py pack mod-work/my-quest --output my-quest.zip
+python tools/chronicle_mod.py install my-quest.zip --mods "C:/Games/Chronicle/mod-test-save/mods"
+```
+
+Use your own ID and test-save path. `--template basic` is the default logging-only
+package. The quest template reuses Dungeon Contract's tested Lua, with your
+package identity and a self-contained walkthrough. The repository examples must
+be present when generating it. Customize objectives/rewards before publishing
+and keep immutable definitions stable for existing saves. Both templates refuse
+existing output directories and PS2 paths. Neither creation nor installation
+enables the package; enable it through the shared mod manager, then restart.
+Offline validation checks package structure and declarations; it does not execute
+Lua or certify the authored quest in gameplay.

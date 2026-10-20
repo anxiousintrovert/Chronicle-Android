@@ -110,3 +110,12 @@ Clang 23.1.2 test build and all 40 focused save/quest/menu tests passed. Events
 are injected in this disk test; the separate retail native-poison probe validates
 the producer/queue path. These results do not certify a controller-driven full
 quest playthrough or other platforms. No production engine, PS2 or Kazarov edits.
+
+## Quest author-tool starter (2026-10-20)
+
+`chronicle_mod.py new --template quest` generates the tested Dungeon Contract
+workflow under the author's chosen ID, retaining default-disabled installation.
+The basic template remains the default. Tests cover CLI generation, exact Lua
+content reuse, manifest validation, pack/install preservation, no enable-profile
+creation, existing-directory rejection and PS2-path rejection before creation.
+All 73 Python tests passed. No native sources or compiler selection changed.
