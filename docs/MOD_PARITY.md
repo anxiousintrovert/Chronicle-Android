@@ -1115,3 +1115,42 @@ Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
 765 registered, 747 passed, 17 skipped and one disabled, with no failures. All
 18 Python checks passed; CLI discovery includes items.use. The 3,840 seed cases
 match pinned upstream with empty and disabled mods. No PS2 files changed.
+
+### Quick-slot native-path audit
+
+Implementation remains pending. The pinned MoonMod Chronicle adapter selects
+one-based slots 1–3 by writing itemNowSel and activeItem.now. It checks active
+dungeon play and nonempty saved inventory. Its use operation additionally queues
+a four-frame Square-button request in the port's DunMoveChara override; it does
+not invoke inventory-menu ItemUseFunc directly.
+
+The native sources establish why these operations need a separate adapter:
+
+- ps2/src/itembombeffect.cpp: checkItemUsed uses a 0.2-point floating water
+  threshold, unlike ItemUseFunc's integer-truncated two-point threshold.
+- usedActiveItem applies native action healing/drinking and different ailment
+  clearing semantics. It can call sound and status globals. It is not a detached
+  save transaction helper.
+- port/src/dun/movechara.cpp dispatches separate drink, eat, throwable and held
+  feather paths. Drinks allocate a hand model and complete across frames;
+  throwables enter aiming; feathers consume duration while the button is held.
+- CActiveItemPack::CheckStatusType reads the loaded activeItem.item cache, whereas
+  checkItemUsed reads saved quick_item_slot. Those are separate state sources.
+- Native item loaders in btitem.cpp and menu_dungeon.cpp install the cached item
+  and model together. Native DeleteItemModel/DelActiveItem retire the model when
+  the final use is consumed. Merely changing saved inventory is not a model load.
+
+The next integration must stage selection/action intent until all callback writes
+succeed, validate saved versus loaded slot identity and model readiness, and
+route use through native action dispatch. Requests need bounded lifetime and
+cancellation on owner stop or scene change; they must not replay into a different
+slot after inventory changes. Consumption remains owned by the native action,
+with readiness/request outcome distinguished from successful consumption.
+Ordinary play must retain its existing input path when no request is pending.
+
+Validation must exercise real loaded quick-slot models, last-item retirement,
+drinks, food, thrown items and feather holds; ineffective items; overlapping
+physical input; callback rollback; disable/scene cancellation; and empty-mod
+behavior. This audit adds no API or hook and is not evidence of implementation
+or runtime success. Existing inventory snapshots already expose saved quick-slot
+contents; native selection/readiness and action dispatch remain coverage gaps.
