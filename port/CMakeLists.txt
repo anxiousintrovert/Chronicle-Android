@@ -222,10 +222,10 @@ add_library(dc_port OBJECT ${PORT_LIB_SOURCES} ${DC_SCE_SOURCES})
 target_link_libraries(dc_port PRIVATE dc_options SDL3::SDL3 Vulkan::Vulkan nlohmann_json::nlohmann_json kz_port_headers)
 target_link_libraries(dc_port PRIVATE chronicle_mod_lua)
 target_include_directories(dc_port PRIVATE ${PORT_DIR} ${SHADER_HEADER_DIR})
-# Font rasterization and legacy UI PNG normalization reuse Kazarov's staged headers.
+# Font/image handling and bounded mod audio decoding reuse Kazarov's staged headers.
 get_target_property(dc_host_includes dc_host INCLUDE_DIRECTORIES)
 foreach(include_dir IN LISTS dc_host_includes)
-    if(EXISTS ${include_dir}/stb_truetype.h OR EXISTS ${include_dir}/stb_image.h)
+    if(EXISTS ${include_dir}/stb_truetype.h OR EXISTS ${include_dir}/stb_image.h OR EXISTS ${include_dir}/dr_wav.h OR EXISTS ${include_dir}/dr_flac.h OR EXISTS ${include_dir}/stb_vorbis.c)
         target_include_directories(dc_port PRIVATE ${include_dir})
     endif()
 endforeach()

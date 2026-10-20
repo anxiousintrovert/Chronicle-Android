@@ -2805,3 +2805,31 @@ or menu actions. Public operation count remains 125. Bounded compressed decoding
 callback transactions, live lifecycle cleanup, music replacement and public audio
 services remain outstanding; post-decode registration limits alone do not bound
 decoder allocations. No global mixer or retail playback hooks were changed.
+
+
+### Bounded mod audio decoding (2026-10-20)
+
+DecodeAudio reuses the pinned official Kazarov decoder symbols and staged
+headers, without changing Kazarov or retail LoadPcmTrack. WAV, FLAC and Ogg
+Vorbis decode in 1024-frame chunks; mono duplicates and multichannel input uses
+the front pair. Input is capped at 32 MiB, output at a caller-selected budget
+up to 32 MiB, and source formats at 8..192 kHz and 1..8 channels. WAV/FLAC use
+an 8 MiB accounted scratch allocator; Vorbis uses an 8 MiB fixed scratch arena.
+Output capacity is reserved within its separate budget before decoding.
+Declared lossless frame counts are checked before output allocation and against
+actual output where available. Rejection returns no partial track.
+
+Four tests cover mono/stereo/multichannel WAV, generated FLAC/Vorbis tones,
+exact and exceeded output budgets, invalid inputs, truncated FLAC and a forged
+WAV data length. dr_wav clamps that forged length to real input; this loader
+does not promise strict container validation. Fixtures contain generated tones
+only. No external encoder is required to build or run the tests.
+
+This decoder and AudioStreams remain internal foundations. Package asset
+snapshots, aggregate decode admission, host-call transactions, shared-menu
+actions and live cleanup still need integration. Public operation count stays
+125. No default retail playback path calls this decoder.
+
+Clang 23.1.2 builds passed; 856 native tests passed, 92 skipped and one
+disabled. PS2 diff remains empty. Device playback and non-Windows verification
+remain outstanding.
