@@ -16,6 +16,12 @@
 #ifndef DNG_GRID
 #define DNG_GRID 20
 #endif
+#if __has_include("chronicle/dungeon_limits.hpp")
+#include "chronicle/dungeon_limits.hpp"
+constexpr int AuditStorageStride = chronicle::dungeon::GridStride;
+#else
+constexpr int AuditStorageStride = DNG_GRID;
+#endif
 TEST(ModVanillaAudit, SeedMatrix) {
     const char *out = std::getenv("AUDIT_OUTPUT");
     if (!out) {
@@ -70,9 +76,11 @@ TEST(ModVanillaAudit, SeedMatrix) {
                         j["rooms"].push_back({r.x, r.y, r.width, r.height});
                     }
                     j["cells"] = nlohmann::json::array();
-                    for (int y = 0; y < DNG_GRID; ++y) {
-                        for (int x = 0; x < DNG_GRID; ++x) {
-                            auto &c = map->cells[x + y * DNG_GRID];
+                    // Export every occupied storage cell, including the unused
+                    // border. An accidental extra cell must fail comparison.
+                    for (int y = 0; y < AuditStorageStride; ++y) {
+                        for (int x = 0; x < AuditStorageStride; ++x) {
+                            auto &c = map->cells[x + y * AuditStorageStride];
                             if (c.parts_no != MAP_PARTS_NONE) {
                                 j["cells"].push_back({x, y, c.parts_no, c.direction});
                             }

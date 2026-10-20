@@ -1405,21 +1405,21 @@ PORT_OVERRIDE void DunMoveChara() {
                                                                 for (z = 0; z < 20; z++) {
                                                                     for (x = 0; x < 20; x++) {
                                                                         CDungeonMap *cmap = NowDngMap;
-                                                                        int          parts_no = cmap->cells[x + z * 20]
+                                                                        int          parts_no = cmap->cells[x + z * chronicle::dungeon::GridStride]
                                                                                                     .parts_no;
                                                                         MAP_CELL    *cell;
                                                                         int          turn;
 
                                                                         collision = parts_no == -1 ? NULL : NowDngMap->parts[parts_no].collision;
                                                                         cell = &NowDngMap
-                                                                                    ->cells[x + z * 20];
+                                                                                    ->cells[x + z * chronicle::dungeon::GridStride];
 
                                                                         if (selectMapNo == DUNGEON_GALLERY_OF_TIME && parts_no >= 0x28 && parts_no < 0x2C) {
                                                                             cell->camera_dist -= 160.0f;
                                                                         }
 
                                                                         if (collision != NULL && cell->camera_dist <= 240.0f) {
-                                                                            int dir = NowDngMap->cells[x + z * 20].direction;
+                                                                            int dir = NowDngMap->cells[x + z * chronicle::dungeon::GridStride].direction;
                                                                             int base = parts_no == -1 ? 0 : NowDngMap->parts[parts_no].collision_turn;
 
                                                                             turn = dir;

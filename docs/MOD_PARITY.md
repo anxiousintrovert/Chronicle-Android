@@ -1633,3 +1633,33 @@ covering native front/back loading and travel with the new class layout. All
 28 Python checks passed. These results do not prove all floors, platforms or
 larger-layout generation; those validation requirements remain open.
 
+### Expanded grid storage foundation
+
+Port build copies now use a shared 48-cell storage stride for the cell/mask
+arrays and builder workspaces. Rendering, collision, first-person movement,
+events and generator indexing use that stride. Retail generation still uses
+its original build area, room sizes and RNG order; no layout API is exposed.
+Active bounds, room-link scanning and requested large-floor generation remain
+unfinished, so this does not yet establish expanded-layout capability parity.
+
+Moon Sea scenery has legacy row-wrapping and adjacent-field reads outside its
+logical 20x20 cell array. A dedicated retail-layout reader preserves those
+values through object-byte reads, including the original 16-room suffix,
+instead of allowing the new stride to alter scenery acceptance and RNG.
+Future expanded-layout requests require independently bounded sampling.
+
+The initial retail replay caught missed old-stride accesses in normal player
+collision and first-person movement. Both port consumers now use the shared
+stride. After that correction, all seven PAL first-floor back-floor scenarios
+pass, including 90 consecutive normal-play frames after transport and unchanged
+inventory/event flags. This is not a full first-person or all-floor playthrough.
+
+Validation: llvm-mingw Clang 23.1.2 game/test builds pass. The full suite has
+812 registered tests: 777 passed, 34 skipped and one disabled. All 28 Python
+checks pass. Across 3,840 cases each, empty and disabled frameworks match every
+exported upstream field except map size (76,576 versus 115,616 bytes).
+Exports inspect all 48x48 storage cells, including any unintended occupied cells.
+Raw hashes remain different and the explicit map-size-only comparison passes.
+Protected PS2 sources remain unchanged. Other platforms and larger requested
+layouts remain unverified.
+

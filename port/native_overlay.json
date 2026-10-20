@@ -18,6 +18,16 @@
           "old": "rooms[16]",
           "new": "rooms[chronicle::dungeon::RoomCapacity]",
           "count": 1
+        },
+        {
+          "old": "mask[400]",
+          "new": "mask[chronicle::dungeon::GridCells]",
+          "count": 1
+        },
+        {
+          "old": "cells[400]",
+          "new": "cells[chronicle::dungeon::GridCells]",
+          "count": 1
         }
       ]
     },
@@ -62,6 +72,891 @@
         {
           "old": "int   room_list[32];",
           "new": "int   room_list[chronicle::dungeon::RoomCapacity];",
+          "count": 1
+        },
+        {
+          "old": "buildMapDat[400]",
+          "new": "buildMapDat[chronicle::dungeon::GridCells]",
+          "count": 1
+        },
+        {
+          "old": "buildMapWork[400]",
+          "new": "buildMapWork[chronicle::dungeon::GridCells]",
+          "count": 1
+        },
+        {
+          "old": "< 400;",
+          "new": "< chronicle::dungeon::GridCells;",
+          "count": 5
+        },
+        {
+          "old": "for (row = 0; row < 20; row++) {\n        for (col = 0; col < 20; col++) {\n            buildMapDat",
+          "new": "for (row = 0; row < chronicle::dungeon::GridStride; row++) {\n        for (col = 0; col < chronicle::dungeon::GridStride; col++) {\n            buildMapDat",
+          "count": 1
+        },
+        {
+          "old": "for (row = 0; row < 20; row++) {\n        for (col = 0; col < 20; col++) {\n            this->cells",
+          "new": "for (row = 0; row < chronicle::dungeon::GridStride; row++) {\n        for (col = 0; col < chronicle::dungeon::GridStride; col++) {\n            this->cells",
+          "count": 1
+        },
+        {
+          "old": "\n                int cell_no = col + row * 20;\n",
+          "new": "\n                int cell_no = col + row * chronicle::dungeon::GridStride;\n",
+          "count": 3
+        },
+        {
+          "old": "\n            cell_no = col + row * 20;\n",
+          "new": "\n            cell_no = col + row * chronicle::dungeon::GridStride;\n",
+          "count": 2
+        },
+        {
+          "old": "\n        cell = cellx + (int) ((80.0f + this->trap_circle[i].pos[2]) / 160.0f) * 20;\n",
+          "new": "\n        cell = cellx + (int) ((80.0f + this->trap_circle[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;\n",
+          "count": 1
+        },
+        {
+          "old": "\n        cell = cellx + (int) ((80.0f + this->boxes[i].pos[2]) / 160.0f) * 20;\n",
+          "new": "\n        cell = cellx + (int) ((80.0f + this->boxes[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;\n",
+          "count": 1
+        },
+        {
+          "old": "\n        cell = cellx + (int) ((80.0f + this->atra[i].pos[2]) / 160.0f) * 20;\n",
+          "new": "\n        cell = cellx + (int) ((80.0f + this->atra[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        this->mask[col + row * 20] = 1;\n",
+          "new": "\n                        this->mask[col + row * chronicle::dungeon::GridStride] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    this->mask[cell_x + cell_z * 20] = 1;\n",
+          "new": "\n    this->mask[cell_x + cell_z * chronicle::dungeon::GridStride] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            int   cell_no = col + row * 20;\n",
+          "new": "\n            int   cell_no = col + row * chronicle::dungeon::GridStride;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (j + y) * 20 + i].kind != MAP_PARTS_NONE) {\n",
+          "new": "\n                if (buildMapDat[x + (j + y) * chronicle::dungeon::GridStride + i].kind != MAP_PARTS_NONE) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[x + (y + j) * 20 + i].kind = MAP_PARTS_ROOM_FLOOR;\n",
+          "new": "\n            buildMapDat[x + (y + j) * chronicle::dungeon::GridStride + i].kind = MAP_PARTS_ROOM_FLOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[x + (y + j) * 20 + i].link[room_no] = 1;\n",
+          "new": "\n            buildMapDat[x + (y + j) * chronicle::dungeon::GridStride + i].link[room_no] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[x + (y + j) * 20 + i].content |= BUILD_CELL_ROOM;\n",
+          "new": "\n            buildMapDat[x + (y + j) * chronicle::dungeon::GridStride + i].content |= BUILD_CELL_ROOM;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                int north = buildMapDat[col + (row - 1) * 20].content;\n",
+          "new": "\n                int north = buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].content;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                int south = buildMapDat[col + (row + 1) * 20].content;\n",
+          "new": "\n                int south = buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].content;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                int east = buildMapDat[col + row * 20 + 1].content;\n",
+          "new": "\n                int east = buildMapDat[col + row * chronicle::dungeon::GridStride + 1].content;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                int west = buildMapDat[col + row * 20 - 1].content;\n",
+          "new": "\n                int west = buildMapDat[col + row * chronicle::dungeon::GridStride - 1].content;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((north & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + (row - 1) * 20].direction != 0) {\n",
+          "new": "\n                if ((north & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].direction != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((south & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + (row + 1) * 20].direction != 2) {\n",
+          "new": "\n                if ((south & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].direction != 2) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((east & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + row * 20 + 1].direction != 1) {\n",
+          "new": "\n                if ((east & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + row * chronicle::dungeon::GridStride + 1].direction != 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((west & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + row * 20 - 1].direction != 3) {\n",
+          "new": "\n                if ((west & (BUILD_CELL_STAIR_DOWN | BUILD_CELL_STAIR_UP)) != 0 && buildMapDat[col + row * chronicle::dungeon::GridStride - 1].direction != 3) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    if (buildMapDat[col + row * 20].link[room_no] == 1) {\n",
+          "new": "\n                    if (buildMapDat[col + row * chronicle::dungeon::GridStride].link[room_no] == 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[col + (row - 1) * 20].link[room_no] == 1 && allow_north != 0) {\n",
+          "new": "\n                        if (buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].link[room_no] == 1 && allow_north != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[col + (row + 1) * 20].link[room_no] == 1 && allow_south != 0) {\n",
+          "new": "\n                        if (buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].link[room_no] == 1 && allow_south != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[col + row * 20 + 1].link[room_no] == 1 && allow_east != 0) {\n",
+          "new": "\n                        if (buildMapDat[col + row * chronicle::dungeon::GridStride + 1].link[room_no] == 1 && allow_east != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[col + row * 20 - 1].link[room_no] == 1 && allow_west != 0) {\n",
+          "new": "\n                        if (buildMapDat[col + row * chronicle::dungeon::GridStride - 1].link[room_no] == 1 && allow_west != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].kind = chainTableRoad[table_no][1];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].kind = chainTableRoad[table_no][1];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].direction = chainTableRoad[table_no][2];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].direction = chainTableRoad[table_no][2];\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                north = row != 0 ? buildMapDat[col + (row - 1) * 20].content & BUILD_CELL_ROOM : 0;\n",
+          "new": "\n                north = row != 0 ? buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM : 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                south = row != 19 ? buildMapDat[col + (row + 1) * 20].content & BUILD_CELL_ROOM : 0;\n",
+          "new": "\n                south = row != 19 ? buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM : 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                east = col != 19 ? buildMapDat[col + row * 20 + 1].content & BUILD_CELL_ROOM : 0;\n",
+          "new": "\n                east = col != 19 ? buildMapDat[col + row * chronicle::dungeon::GridStride + 1].content & BUILD_CELL_ROOM : 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                west = col != 0 ? buildMapDat[col + row * 20 - 1].content & BUILD_CELL_ROOM : 0;\n",
+          "new": "\n                west = col != 0 ? buildMapDat[col + row * chronicle::dungeon::GridStride - 1].content & BUILD_CELL_ROOM : 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].kind = chainTableRoom[table_no][1];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].kind = chainTableRoom[table_no][1];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].direction = chainTableRoom[table_no][2];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].direction = chainTableRoom[table_no][2];\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & (BUILD_CELL_DOOR | BUILD_CELL_ROOM_LINK)) == BUILD_CELL_DOOR) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & (BUILD_CELL_DOOR | BUILD_CELL_ROOM_LINK)) == BUILD_CELL_DOOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[col + (row - 1) * 20].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[col + (row + 1) * 20].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[col + row * 20 + 1].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[col + row * chronicle::dungeon::GridStride + 1].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[col + row * 20 - 1].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[col + row * chronicle::dungeon::GridStride - 1].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].kind = chainTableDoor[table_no][1];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].kind = chainTableDoor[table_no][1];\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_HEAL_SPRING) == BUILD_CELL_HEAL_SPRING) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_HEAL_SPRING) == BUILD_CELL_HEAL_SPRING) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].kind = MAP_PARTS_HEAL_SPRING_NORTH;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_HEAL_SPRING_NORTH;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].direction = 0;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 2
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_PILLAR) == BUILD_CELL_PILLAR) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_PILLAR) == BUILD_CELL_PILLAR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[col + row * 20].kind = MAP_PARTS_PILLAR_1;\n",
+          "new": "\n                    buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_PILLAR_1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[col + row * 20].kind = MAP_PARTS_PILLAR_2;\n",
+          "new": "\n                    buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_PILLAR_2;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_DIVIDING_WALL) == BUILD_CELL_DIVIDING_WALL) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_DIVIDING_WALL) == BUILD_CELL_DIVIDING_WALL) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    north = buildMapDat[col + (row - 1) * 20].content;\n",
+          "new": "\n                    north = buildMapDat[col + (row - 1) * chronicle::dungeon::GridStride].content;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                    south = buildMapDat[col + (row + 1) * 20].content;\n",
+          "new": "\n                    south = buildMapDat[col + (row + 1) * chronicle::dungeon::GridStride].content;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                    east = buildMapDat[col + row * 20 + 1].content;\n",
+          "new": "\n                    east = buildMapDat[col + row * chronicle::dungeon::GridStride + 1].content;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                    west = buildMapDat[col + row * 20 - 1].content;\n",
+          "new": "\n                    west = buildMapDat[col + row * chronicle::dungeon::GridStride - 1].content;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].kind = chainTableDivid[table_no][1];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].kind = chainTableDivid[table_no][1];\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_DIVIDING_DOOR) == BUILD_CELL_DIVIDING_DOOR) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_DIVIDING_DOOR) == BUILD_CELL_DIVIDING_DOOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        buildMapDat[col + row * 20].kind = chainTableDividDoor[table_no][1];\n",
+          "new": "\n                        buildMapDat[col + row * chronicle::dungeon::GridStride].kind = chainTableDividDoor[table_no][1];\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_STAIR_DOWN) == BUILD_CELL_STAIR_DOWN) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_STAIR_DOWN) == BUILD_CELL_STAIR_DOWN) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].kind = MAP_PARTS_STAIR_DOWN;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_STAIR_DOWN;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_STAIR_UP) == BUILD_CELL_STAIR_UP) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_STAIR_UP) == BUILD_CELL_STAIR_UP) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].kind = MAP_PARTS_STAIR_UP;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_STAIR_UP;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[col + row * 20].content & BUILD_CELL_URA_ENTRANCE) == BUILD_CELL_URA_ENTRANCE) {\n",
+          "new": "\n            if ((buildMapDat[col + row * chronicle::dungeon::GridStride].content & BUILD_CELL_URA_ENTRANCE) == BUILD_CELL_URA_ENTRANCE) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].kind = MAP_PARTS_URA_ENTRANCE_NORTH;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_URA_ENTRANCE_NORTH;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + (cy + 1) * 20].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n            buildMapWork[cx + (cy + 1) * chronicle::dungeon::GridStride].content |= BUILD_CELL_DOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + (cy + 1) * 20].link[from_room] = 1;\n",
+          "new": "\n            buildMapWork[cx + (cy + 1) * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + (roomStack[from_room].y + roomStack[from_room].height - 1) * 20].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n            buildMapWork[cx + (roomStack[from_room].y + roomStack[from_room].height - 1) * chronicle::dungeon::GridStride].content |= BUILD_CELL_DOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + (roomStack[from_room].y + roomStack[from_room].height - 1) * 20].link[from_room] = 1;\n",
+          "new": "\n            buildMapWork[cx + (roomStack[from_room].y + roomStack[from_room].height - 1) * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + cy * 20 - 1].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n            buildMapWork[cx + cy * chronicle::dungeon::GridStride - 1].content |= BUILD_CELL_DOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + cy * 20 - 1].link[from_room] = 1;\n",
+          "new": "\n            buildMapWork[cx + cy * chronicle::dungeon::GridStride - 1].link[from_room] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + cy * 20 + 1].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n            buildMapWork[cx + cy * chronicle::dungeon::GridStride + 1].content |= BUILD_CELL_DOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapWork[cx + cy * 20 + 1].link[from_room] = 1;\n",
+          "new": "\n            buildMapWork[cx + cy * chronicle::dungeon::GridStride + 1].link[from_room] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if (buildMapWork[cx + cy * 20].kind == MAP_PARTS_NONE) {\n",
+          "new": "\n            if (buildMapWork[cx + cy * chronicle::dungeon::GridStride].kind == MAP_PARTS_NONE) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapWork[cx + cy * 20].kind = from_room;\n",
+          "new": "\n                buildMapWork[cx + cy * chronicle::dungeon::GridStride].kind = from_room;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapWork[cx + cy * 20].link[from_room] = 1;\n",
+          "new": "\n                buildMapWork[cx + cy * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapWork[cx + cy * 20].content |= BUILD_CELL_CORRIDOR;\n",
+          "new": "\n                buildMapWork[cx + cy * chronicle::dungeon::GridStride].content |= BUILD_CELL_CORRIDOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapWork[cx + cy * 20].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapWork[cx + cy * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapWork[cx + cy * 20].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n                    buildMapWork[cx + cy * chronicle::dungeon::GridStride].content |= BUILD_CELL_DOOR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapWork[cx + cy * 20].link[from_room] = 1;\n",
+          "new": "\n                    buildMapWork[cx + cy * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                        if (buildMapWork[cx + cy * 20].kind == MAP_PARTS_NONE) {\n",
+          "new": "\n                        if (buildMapWork[cx + cy * chronicle::dungeon::GridStride].kind == MAP_PARTS_NONE) {\n",
+          "count": 2
+        },
+        {
+          "old": "\n                            buildMapWork[cx + cy * 20].kind = from_room;\n",
+          "new": "\n                            buildMapWork[cx + cy * chronicle::dungeon::GridStride].kind = from_room;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                            buildMapWork[cx + cy * 20].link[from_room] = 1;\n",
+          "new": "\n                            buildMapWork[cx + cy * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                            buildMapWork[cx + cy * 20].content |= BUILD_CELL_CORRIDOR;\n",
+          "new": "\n                            buildMapWork[cx + cy * chronicle::dungeon::GridStride].content |= BUILD_CELL_CORRIDOR;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                            if ((buildMapWork[cx + cy * 20].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                            if ((buildMapWork[cx + cy * chronicle::dungeon::GridStride].content & BUILD_CELL_ROOM) == BUILD_CELL_ROOM) {\n",
+          "count": 2
+        },
+        {
+          "old": "\n                                buildMapWork[cx + cy * 20].content |= BUILD_CELL_DOOR;\n",
+          "new": "\n                                buildMapWork[cx + cy * chronicle::dungeon::GridStride].content |= BUILD_CELL_DOOR;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                                buildMapWork[cx + cy * 20].link[from_room] = 1;\n",
+          "new": "\n                                buildMapWork[cx + cy * chronicle::dungeon::GridStride].link[from_room] = 1;\n",
+          "count": 4
+        },
+        {
+          "old": "\n                if ((buildMapDat[roomStack[i].x + (x + roomStack[i].y * 20)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[roomStack[i].x + (x + roomStack[i].y * chronicle::dungeon::GridStride)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[found_x + found_y * 20].content |= BUILD_CELL_HEAL_SPRING;\n",
+          "new": "\n                    buildMapDat[found_x + found_y * chronicle::dungeon::GridStride].content |= BUILD_CELL_HEAL_SPRING;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[roomStack[i].x + (x + (y + roomStack[i].y) * 20)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_HEAL_SPRING | BUILD_CELL_PILLAR)) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[roomStack[i].x + (x + (y + roomStack[i].y) * chronicle::dungeon::GridStride)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_HEAL_SPRING | BUILD_CELL_PILLAR)) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[found_x + found_y * 20].content |= BUILD_CELL_PILLAR;\n",
+          "new": "\n                buildMapDat[found_x + found_y * chronicle::dungeon::GridStride].content |= BUILD_CELL_PILLAR;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[roomStack[i].x + (x + (y + roomStack[i].y) * 20)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_HEAL_SPRING | BUILD_CELL_PILLAR)) != BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[roomStack[i].x + (x + (y + roomStack[i].y) * chronicle::dungeon::GridStride)].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_HEAL_SPRING | BUILD_CELL_PILLAR)) != BUILD_CELL_ROOM) {\n",
+          "count": 2
+        },
+        {
+          "old": "\n                buildMapDat[x + line_y[line_no] * 20].content |= BUILD_CELL_DIVIDING_WALL;\n",
+          "new": "\n                buildMapDat[x + line_y[line_no] * chronicle::dungeon::GridStride].content |= BUILD_CELL_DIVIDING_WALL;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[line_x[line_no] + line_y[line_no] * 20 + (int) (((float) (line_len[line_no] - 2) * (float) rand()) / 2147483648.0f) + 1]\n",
+          "new": "\n            buildMapDat[line_x[line_no] + line_y[line_no] * chronicle::dungeon::GridStride + (int) (((float) (line_len[line_no] - 2) * (float) rand()) / 2147483648.0f) + 1]\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[y * 20 + line_x[line_no]].content |= BUILD_CELL_DIVIDING_WALL;\n",
+          "new": "\n                buildMapDat[y * chronicle::dungeon::GridStride + line_x[line_no]].content |= BUILD_CELL_DIVIDING_WALL;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[line_x[line_no] + (line_y[line_no] + (int) (((float) (line_len[line_no] - 2) * (float) rand()) / 2147483648.0f) + 1) * 20]\n",
+          "new": "\n            buildMapDat[line_x[line_no] + (line_y[line_no] + (int) (((float) (line_len[line_no] - 2) * (float) rand()) / 2147483648.0f) + 1) * chronicle::dungeon::GridStride]\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[x + y * 20].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_DIVIDING_WALL)) == BUILD_CELL_ROOM && safe_num < 60) {\n",
+          "new": "\n            if ((buildMapDat[x + y * chronicle::dungeon::GridStride].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR | BUILD_CELL_DIVIDING_WALL)) == BUILD_CELL_ROOM && safe_num < 60) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n        if (buildMapDat[x + (y - 1) * 20].content == 0) {\n",
+          "new": "\n        if (buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content == 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[x + y * 20 + 1].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "new": "\n            if ((buildMapDat[x + y * chronicle::dungeon::GridStride + 1].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if ((buildMapDat[x + y * 20 - 1].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "new": "\n                if ((buildMapDat[x + y * chronicle::dungeon::GridStride - 1].content & (BUILD_CELL_ROOM | BUILD_CELL_DOOR)) == BUILD_CELL_ROOM) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[x + y * 20].content = BUILD_CELL_ROOM | BUILD_CELL_URA_ENTRANCE;\n",
+          "new": "\n                    buildMapDat[x + y * chronicle::dungeon::GridStride].content = BUILD_CELL_ROOM | BUILD_CELL_URA_ENTRANCE;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[x + y * 20].kind = MAP_PARTS_ROOM_GATE_NORTH;\n",
+          "new": "\n                    buildMapDat[x + y * chronicle::dungeon::GridStride].kind = MAP_PARTS_ROOM_GATE_NORTH;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    buildMapDat[x + y * 20].direction = 0;\n",
+          "new": "\n                    buildMapDat[x + y * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[x + y * 20].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n            if ((buildMapDat[x + y * chronicle::dungeon::GridStride].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 2
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y - 1) * 20].content == 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content == 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y - 1) * 20].content = BUILD_CELL_STAIR_DOWN;\n",
+          "new": "\n    buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content = BUILD_CELL_STAIR_DOWN;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y - 1) * 20].kind = buildMapDat[x + y * 20].kind;\n",
+          "new": "\n    buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].kind = buildMapDat[x + y * chronicle::dungeon::GridStride].kind;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y - 1) * 20].link[buildMapDat[x + y * 20].kind] = 1;\n",
+          "new": "\n    buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].link[buildMapDat[x + y * chronicle::dungeon::GridStride].kind] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y - 1) * 20].direction = 0;\n",
+          "new": "\n    buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y + 1) * 20].content == 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content == 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y + 1) * 20].content = BUILD_CELL_STAIR_UP;\n",
+          "new": "\n    buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content = BUILD_CELL_STAIR_UP;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y + 1) * 20].kind = buildMapDat[x + y * 20].kind;\n",
+          "new": "\n    buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].kind = buildMapDat[x + y * chronicle::dungeon::GridStride].kind;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y + 1) * 20].link[buildMapDat[x + y * 20].kind] = 1;\n",
+          "new": "\n    buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].link[buildMapDat[x + y * chronicle::dungeon::GridStride].kind] = 1;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + (y + 1) * 20].direction = 2;\n",
+          "new": "\n    buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].direction = 2;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (this->cells[x + (i + (j + z) * 20)].parts_no != MAP_PARTS_NONE) {\n",
+          "new": "\n                        if (this->cells[x + (i + (j + z) * chronicle::dungeon::GridStride)].parts_no != MAP_PARTS_NONE) {\n",
+          "count": 3
+        },
+        {
+          "old": "\n                    if (this->cells[z + x * 20].parts_no == MAP_PARTS_URA_ENTRANCE_NORTH) {\n",
+          "new": "\n                    if (this->cells[z + x * chronicle::dungeon::GridStride].parts_no == MAP_PARTS_URA_ENTRANCE_NORTH) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if (this->cells[x + y * 20].parts_no == MAP_PARTS_STAIR_DOWN) {\n",
+          "new": "\n            if (this->cells[x + y * chronicle::dungeon::GridStride].parts_no == MAP_PARTS_STAIR_DOWN) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n            if ((buildMapDat[x + y * 20].content & BUILD_CELL_DOOR) != 0) {\n",
+          "new": "\n            if ((buildMapDat[x + y * chronicle::dungeon::GridStride].content & BUILD_CELL_DOOR) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    buildMapDat[x + y * 20].content |= BUILD_CELL_ROOM_LINK;\n",
+          "new": "\n    buildMapDat[x + y * chronicle::dungeon::GridStride].content |= BUILD_CELL_ROOM_LINK;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    if ((buildMapDat[x + (y - 1) * 20].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n    if ((buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    if ((buildMapDat[x + (y + 1) * 20].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n    if ((buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    if ((buildMapDat[x + y * 20 + 1].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n    if ((buildMapDat[x + y * chronicle::dungeon::GridStride + 1].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n    if ((buildMapDat[x + y * 20 - 1].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "new": "\n    if ((buildMapDat[x + y * chronicle::dungeon::GridStride - 1].content & BUILD_CELL_CORRIDOR) == BUILD_CELL_CORRIDOR) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                switch (buildMapDat[x + y * 20].content & (BUILD_CELL_ROOM | BUILD_CELL_CORRIDOR | BUILD_CELL_DOOR)) {\n",
+          "new": "\n                switch (buildMapDat[x + y * chronicle::dungeon::GridStride].content & (BUILD_CELL_ROOM | BUILD_CELL_CORRIDOR | BUILD_CELL_DOOR)) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y - 1) * 20].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y - 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y - 1) * 20].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y - 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[x + y * 20].link[i] == 1 && buildMapDat[x + (y - 1) * 20].link[i] == 1) {\n",
+          "new": "\n                        if (buildMapDat[x + y * chronicle::dungeon::GridStride].link[i] == 1 && buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].link[i] == 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y + 1) * 20].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y + 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y + 1) * 20].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y + 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[x + y * 20].link[i] == 1 && buildMapDat[x + (y + 1) * 20].link[i] == 1) {\n",
+          "new": "\n                        if (buildMapDat[x + y * chronicle::dungeon::GridStride].link[i] == 1 && buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].link[i] == 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + y * 20 - 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 - 1] == -1 && (propagation_mask & buildMapDat[x + y * 20 - 1].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride - 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 - 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride - 1].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[x + y * 20].link[i] == 1 && buildMapDat[x + y * 20 - 1].link[i] == 1) {\n",
+          "new": "\n                        if (buildMapDat[x + y * chronicle::dungeon::GridStride].link[i] == 1 && buildMapDat[x + y * chronicle::dungeon::GridStride - 1].link[i] == 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + y * 20 + 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 + 1] == -1 && (propagation_mask & buildMapDat[x + y * 20 + 1].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride + 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 + 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride + 1].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        if (buildMapDat[x + y * 20].link[i] == 1 && buildMapDat[x + y * 20 + 1].link[i] == 1) {\n",
+          "new": "\n                        if (buildMapDat[x + y * chronicle::dungeon::GridStride].link[i] == 1 && buildMapDat[x + y * chronicle::dungeon::GridStride + 1].link[i] == 1) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n            this->cells[this->room_link[result_no].door_x + this->room_link[result_no].door_y * 20].parts_no = door_part;\n",
+          "new": "\n            this->cells[this->room_link[result_no].door_x + this->room_link[result_no].door_y * chronicle::dungeon::GridStride].parts_no = door_part;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            this->cells[this->room_link[result_no].door_x + this->room_link[result_no].door_y * 20].direction = 0;\n",
+          "new": "\n            this->cells[this->room_link[result_no].door_x + this->room_link[result_no].door_y * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n        this->cells[i * 20 + 19].parts_no = MAP_PARTS_URA_ROAD;\n",
+          "new": "\n        this->cells[i * chronicle::dungeon::GridStride + 19].parts_no = MAP_PARTS_URA_ROAD;\n",
+          "count": 1
+        },
+        {
+          "old": "\n        this->cells[i * 20 + 19].direction = 0;\n",
+          "new": "\n        this->cells[i * chronicle::dungeon::GridStride + 19].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (this->cells[col + row * 20].parts_no >= first_part && this->cells[col + row * 20].parts_no <= last_part) {\n",
+          "new": "\n                if (this->cells[col + row * chronicle::dungeon::GridStride].parts_no >= first_part && this->cells[col + row * chronicle::dungeon::GridStride].parts_no <= last_part) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    int cell_no = dx + (col + (row + dy) * 20);\n",
+          "new": "\n                    int cell_no = dx + (col + (row + dy) * chronicle::dungeon::GridStride);\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (this->cells[col + row * 20].parts_no == first_part && free != 0) {\n",
+          "new": "\n                if (this->cells[col + row * chronicle::dungeon::GridStride].parts_no == first_part && free != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_XIAO;\n",
+          "new": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_XIAO;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);\n",
+          "new": "\n                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);\n",
+          "count": 9
+        },
+        {
+          "old": "\n                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;\n",
+          "new": "\n                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;\n",
+          "count": 3
+        },
+        {
+          "old": "\n                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_OSMOND;\n",
+          "new": "\n                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_OSMOND;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                    this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_XIAO;\n",
+          "new": "\n                    this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_XIAO;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);\n",
+          "new": "\n                address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);\n",
+          "count": 3
+        },
+        {
+          "old": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;\n",
+          "new": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_OSMOND;\n",
+          "new": "\n                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_OSMOND;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[col + row * 20].kind = MAP_PARTS_NONE;\n",
+          "new": "\n            buildMapDat[col + row * chronicle::dungeon::GridStride].kind = MAP_PARTS_NONE;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[col + row * 20].direction = 0;\n",
+          "new": "\n            buildMapDat[col + row * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                buildMapDat[col + row * 20].link[j] = 0;\n",
+          "new": "\n                buildMapDat[col + row * chronicle::dungeon::GridStride].link[j] = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            buildMapDat[col + row * 20].content = 0;\n",
+          "new": "\n            buildMapDat[col + row * chronicle::dungeon::GridStride].content = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            this->cells[col + row * 20].direction = 0;\n",
+          "new": "\n            this->cells[col + row * chronicle::dungeon::GridStride].direction = 0;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            this->cells[col + row * 20].parts_no = buildMapDat[col + row * 20].kind;\n",
+          "new": "\n            this->cells[col + row * chronicle::dungeon::GridStride].parts_no = buildMapDat[col + row * chronicle::dungeon::GridStride].kind;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            this->cells[col + row * 20].direction = buildMapDat[col + row * 20].direction;\n",
+          "new": "\n            this->cells[col + row * chronicle::dungeon::GridStride].direction = buildMapDat[col + row * chronicle::dungeon::GridStride].direction;\n",
+          "count": 1
+        },
+        {
+          "old": "#include \"dungeonmap.hpp\"",
+          "new": "#include \"dungeonmap.hpp\"\n#include \"chronicle/dungeon_grid.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "this->cells[x + (i + (j + z) * chronicle::dungeon::GridStride)].parts_no",
+          "new": "chronicle::dungeon::RetailDummyPart(*this, x + i, z + j)",
+          "count": 3
+        }
+      ]
+    },
+    "src/dungeonparts.cpp": {
+      "sha256": "1cd64526147dac300dcf2a0d730039b6562353309d44ce5a70267033a85ca5ac",
+      "replacements": [
+        {
+          "old": "\n            int parts_no = (cells + row * 20)[col].parts_no;\n",
+          "new": "\n            int parts_no = (cells + row * chronicle::dungeon::GridStride)[col].parts_no;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            int direction = (cells + row * 20)[col].direction;\n",
+          "new": "\n            int direction = (cells + row * chronicle::dungeon::GridStride)[col].direction;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            model = PartsCollision(map, map->cells[x + z * 20].parts_no);\n",
+          "new": "\n            model = PartsCollision(map, map->cells[x + z * chronicle::dungeon::GridStride].parts_no);\n",
+          "count": 1
+        },
+        {
+          "old": "\n            float angle = (float) map->cells[x + z * 20].direction;\n",
+          "new": "\n            float angle = (float) map->cells[x + z * chronicle::dungeon::GridStride].direction;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            angle += (float) PartsCollisionTurn(map, map->cells[x + z * 20].parts_no);\n",
+          "new": "\n            angle += (float) PartsCollisionTurn(map, map->cells[x + z * chronicle::dungeon::GridStride].parts_no);\n",
+          "count": 1
+        }
+      ]
+    },
+    "src/dungeoneventman.cpp": {
+      "sha256": "b292f863c5c94eb9a533a30a1c187421d8710e469beb471c622b50d736e50914",
+      "replacements": [
+        {
+          "old": "\n                int parts_id = map->cells[column + row * 20].parts_no;\n",
+          "new": "\n                int parts_id = map->cells[column + row * chronicle::dungeon::GridStride].parts_no;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    float direction = (float) map->cells[column + row * 20].direction;\n",
+          "new": "\n                    float direction = (float) map->cells[column + row * chronicle::dungeon::GridStride].direction;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                    direction += (float) (map->cells[column + row * 20].parts_no == MAP_PARTS_NONE ? 0 : map->parts[map->cells[column + row * 20].parts_no].collision_turn);\n",
+          "new": "\n                    direction += (float) (map->cells[column + row * chronicle::dungeon::GridStride].parts_no == MAP_PARTS_NONE ? 0 : map->parts[map->cells[column + row * chronicle::dungeon::GridStride].parts_no].collision_turn);\n",
+          "count": 1
+        }
+      ]
+    },
+    "src/dun/gameloop.cpp": {
+      "sha256": "6f23010e4f454f4092ac51e42b717aa889c6719546931ba52e883d64dba9ff50",
+      "replacements": [
+        {
+          "old": "\n                                                                        int          parts_no = cmap->cells[x + z * 20]\n",
+          "new": "\n                                                                        int          parts_no = cmap->cells[x + z * chronicle::dungeon::GridStride]\n",
+          "count": 1
+        },
+        {
+          "old": "\n                                                                                    ->cells[x + z * 20];\n",
+          "new": "\n                                                                                    ->cells[x + z * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                                                                            int dir = NowDngMap->cells[x + z * 20].direction;\n",
+          "new": "\n                                                                            int dir = NowDngMap->cells[x + z * chronicle::dungeon::GridStride].direction;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                s32          parts_no = map->cells[i + j * 20].parts_no;\n",
+          "new": "\n                s32          parts_no = map->cells[i + j * chronicle::dungeon::GridStride].parts_no;\n",
+          "count": 1
+        },
+        {
+          "old": "\n                MAP_CELL *cell = &map->cells[i + j * 20];\n",
+          "new": "\n                MAP_CELL *cell = &map->cells[i + j * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                int turn = map->cells[i + j * 20].direction;\n",
+          "new": "\n                int turn = map->cells[i + j * chronicle::dungeon::GridStride].direction;\n",
+          "count": 1
+        }
+      ]
+    },
+    "src/shot_freefuncs.cpp": {
+      "sha256": "b86cae970b62a90b674e1bd70cba3d25f54e0d5135c027f7f6161d0ffe9fced4",
+      "replacements": [
+        {
+          "old": "\n            int parts_no = NowDngMap->cells[row * 20 + column].parts_no;\n",
+          "new": "\n            int parts_no = NowDngMap->cells[row * chronicle::dungeon::GridStride + column].parts_no;\n",
+          "count": 1
+        },
+        {
+          "old": "\n    parts_no = NowDngMap->cells[row * 20 + column].parts_no;\n",
+          "new": "\n    parts_no = NowDngMap->cells[row * chronicle::dungeon::GridStride + column].parts_no;\n",
           "count": 1
         }
       ]

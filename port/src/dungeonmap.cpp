@@ -66,7 +66,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_XIAO;
+                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_XIAO;
             }
         }
 
@@ -82,7 +82,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -97,7 +97,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -110,7 +110,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_RUBY_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -125,7 +125,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -138,7 +138,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_RUBY_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -151,7 +151,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;
+                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;
                         return;
                     }
                 }
@@ -163,7 +163,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -176,7 +176,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_RUBY_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -189,7 +189,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;
+                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;
                         return;
                     }
                 }
@@ -199,7 +199,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_OSMOND;
+                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_OSMOND;
                         return;
                     }
                 }
@@ -211,7 +211,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -224,7 +224,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                        address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                         address += (std::uintptr_t) this;
                         cell = &((CDungeonMap *) address)->cells[0];
                         cell->parts_no += MAP_PARTS_KEY_DOOR_RUBY_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -237,7 +237,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;
+                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;
                         return;
                     }
                 }
@@ -247,7 +247,7 @@ PORT_OVERRIDE void CDungeonMap::BuildCharaSpecialParts() {
 
                     if (num > 0) {
                         pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                        this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_OSMOND;
+                        this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_OSMOND;
                     }
                 }
 
@@ -273,7 +273,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
                 if (num > 0) {
                     pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                    this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_XIAO;
+                    this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_XIAO;
                 }
             }
 
@@ -283,7 +283,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                 address += (std::uintptr_t) this;
                 cell = &((CDungeonMap *) address)->cells[0];
                 cell->parts_no += MAP_PARTS_KEY_DOOR_XIAO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -295,7 +295,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                 address += (std::uintptr_t) this;
                 cell = &((CDungeonMap *) address)->cells[0];
                 cell->parts_no += MAP_PARTS_KEY_DOOR_GORO_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -307,7 +307,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                address = (list[pick * 2] + list[pick * 2 + 1] * 20) * sizeof(MAP_CELL);
+                address = (list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride) * sizeof(MAP_CELL);
                 address += (std::uintptr_t) this;
                 cell = &((CDungeonMap *) address)->cells[0];
                 cell->parts_no += MAP_PARTS_KEY_DOOR_RUBY_NORTH - MAP_PARTS_ROOM_DOOR_NORTH;
@@ -319,7 +319,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_UNGAGA;
+                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_UNGAGA;
             }
 
             break;
@@ -328,7 +328,7 @@ PORT_OVERRIDE int CDungeonMap::SetCharaDoor(int chara_no) {
 
             if (num > 0) {
                 pick = (int) (((float) num * (float) rand()) / 2147483648.0f);
-                this->cells[list[pick * 2] + list[pick * 2 + 1] * 20].parts_no = MAP_PARTS_KEY_OSMOND;
+                this->cells[list[pick * 2] + list[pick * 2 + 1] * chronicle::dungeon::GridStride].parts_no = MAP_PARTS_KEY_OSMOND;
             }
 
             break;
@@ -387,7 +387,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player
             cell_delta[2] = delta_z;
             cell_delta[3] = 0.0f;
             dist = DistVector(cell_delta);
-            cell_no = col + row * 20;
+            cell_no = col + row * chronicle::dungeon::GridStride;
             this->cells[cell_no].camera_dist = dist;
 
             if (this->cells[cell_no].parts_no == MAP_PARTS_NONE) {
@@ -671,7 +671,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
 
     for (row = 0; row < 20; row++) {
         for (col = 0; col < 20; col++) {
-            cell_no = col + row * 20;
+            cell_no = col + row * chronicle::dungeon::GridStride;
             masked = this->mask[cell_no];
             show = masked;
 
@@ -722,7 +722,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         map_x = (int) (this->trap_circle[i].pos[0] * 0.1f);
         map_y = (int) (this->trap_circle[i].pos[2] * 0.1f);
         cellx = (int) ((80.0f + this->trap_circle[i].pos[0]) / 160.0f);
-        cell = cellx + (int) ((80.0f + this->trap_circle[i].pos[2]) / 160.0f) * 20;
+        cell = cellx + (int) ((80.0f + this->trap_circle[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;
         show = this->mask[cell];
 
         if (BtEquipMasuisyou == 1) {
@@ -752,7 +752,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         map_x = (int) (this->boxes[i].pos[0] * 0.1f);
         map_y = (int) (this->boxes[i].pos[2] * 0.1f);
         cellx = (int) ((80.0f + this->boxes[i].pos[0]) / 160.0f);
-        cell = cellx + (int) ((80.0f + this->boxes[i].pos[2]) / 160.0f) * 20;
+        cell = cellx + (int) ((80.0f + this->boxes[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;
         show = this->mask[cell];
 
         if (BtEquipMasuisyou == 1) {
@@ -782,7 +782,7 @@ PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
         map_x = (int) (this->atra[i].pos[0] * 0.1f);
         map_y = (int) (this->atra[i].pos[2] * 0.1f);
         cellx = (int) ((80.0f + this->atra[i].pos[0]) / 160.0f);
-        cell = cellx + (int) ((80.0f + this->atra[i].pos[2]) / 160.0f) * 20;
+        cell = cellx + (int) ((80.0f + this->atra[i].pos[2]) / 160.0f) * chronicle::dungeon::GridStride;
         show = this->mask[cell];
 
         if (BtEquipMasuisyou == 1) {
