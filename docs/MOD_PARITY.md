@@ -2984,3 +2984,22 @@ Clang 23.1.2 builds passed; 868 native tests passed, 92 skipped and one
 disabled; 38 Python checks passed. Fresh 3840-case empty/disabled comparisons
 against pinned upstream 50eaff63 again show only map allocation size differences,
 not a non-size generation difference. PS2 is unchanged.
+
+
+### PAL retail sound shared-menu replay (2026-10-20)
+
+A fresh PAL Divine Beast Cave replay commits audio.se_play for native SE 1 at
+volume 100 through the shared-manager action, runtime transaction and live game
+bridge. The mod then waits six callbacks and completes native back-floor travel
+without diagnostics. No table, bank or sound sample fixture is substituted in
+this replay. It verifies loaded-bank readiness and dispatch in gameplay; the
+separate driver test proves rendered PCM timing. This is not physical-device
+listening evidence and does not cover every scene or SE ID.
+
+The author smoke runner now exposes --suite audio, taking its default scenario
+count to 34. The new real PAL scenario passed with Clang 23.1.2 and a fresh
+isolated profile; all 38 Python checks passed. Report, binary hash, compiler
+metadata, process log and road image are in local issue evidence under
+se-retail-f58f5317d6b34b4d89f76ad3b10d1235. PS2 remains unchanged.
+BGM controls and owned sequence music replacement remain the next audio
+coverage gaps; public operation count remains 129.

@@ -447,7 +447,7 @@ The default runs thirty-three built-in scenarios: seven retail back-floor transi
 seven public 256-monster layouts, seven owned chest-loot scenarios, five
 population lifecycle/rejection cases, three Georama/Atla scenarios and four
 camera/lighting scenarios. Use repeatable `--suite retail`, `--suite population`,
-`--suite chests`, `--suite lifecycle`, `--suite georama`, or `--suite rendering`
+`--suite chests`, `--suite lifecycle`, `--suite georama`, `--suite rendering`, or `--suite audio`
 to select a subset. `--timeout 120` controls the per-process deadline in seconds.
 
 For example, reproduce the shared-menu Georama request/placement/Atla tests and
@@ -1968,3 +1968,10 @@ same existing effect. Retail sounds have no custom voice handle, and
 `audio.stop` applies only to custom audio. The game controls retail effect
 lifetimes; this operation does not add persistent gameplay changes or install
 any sound modification by default.
+
+The `audio` smoke suite runs `RetailSoundThroughSharedActionPreservesBackTransition`
+in a fresh PAL save profile. It commits SE 1 at volume 100 through the actual
+shared-menu/runtime/game bridge, waits six callbacks, and completes back-floor
+travel with no mod diagnostics. Together with driver PCM tests this covers
+live dispatch readiness and native timing; it does not certify audible output
+on a physical device or every sound ID/scene.

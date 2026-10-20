@@ -13,6 +13,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {
+    'audio': ['RetailSoundThroughSharedActionPreservesBackTransition'],
     'retail': ['SharedActionReachesBackFloorThroughNativeScriptBoundary', 'WiseOwlTransport',
                'ShipwreckTransport', 'TempleTransport', 'MoonSeaTransport', 'GalleryTransport', 'DemonShaftTransport'],
     'population': ['PublicMaximum' + name + 'Population' for name in

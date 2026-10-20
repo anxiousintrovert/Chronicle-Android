@@ -345,7 +345,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false) {
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
@@ -441,6 +441,30 @@ end}
  assert(again.front.fog.far==original,'lighting snapshots must be detached')
 )");
         std::ofstream(script_path) << source;
+    }
+    if (retail_sound) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string source((std::istreambuf_iterator<char>(input_script)), {});
+        input_script.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ if not chronicle.get('se_committed') then
+  assert(chronicle.call('audio.se_play',{se=1,volume=100}))
+  chronicle.set('se_committed',true)
+  return
+ end
+ local hold=chronicle.get('se_hold') or 0
+ if hold<6 then chronicle.set('se_hold',hold+1);return end
+)");
+        std::ofstream(script_path) << source;
+        const auto manifest_path = root / "mods/audit.back/mod.json";
+        std::ifstream input_manifest(manifest_path);
+        auto manifest = nlohmann::json::parse(input_manifest);
+        input_manifest.close();
+        manifest["requires_operations"].push_back("audio.se_play");
+        std::ofstream(manifest_path) << manifest.dump();
     }
     if (lighting_write) {
         const auto script_path = root / "mods/audit.back/main.lua";
@@ -575,6 +599,12 @@ end}
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
+    if (retail_sound) {
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        const auto values = state.at("mods").at("audit.back").at("values");
+        EXPECT_EQ(values["se_committed"], true);
+        EXPECT_EQ(values["se_hold"], 6);
+    }
     if (camera_write) { EXPECT_TRUE(camera_applied); EXPECT_TRUE(camera_released); }
     if (lighting_write) {
         EXPECT_GE(lighting_red[0], 0); EXPECT_GE(lighting_red[2], 0);
@@ -682,3 +712,5 @@ TEST(ModBackFloorRetail, CameraOrbitThroughSharedActionRestoresBeforeBackTransit
 TEST(ModBackFloorRetail, LightingSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, true); }
 TEST(ModBackFloorRetail, LightingWriteResetRendersAndPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, true); }
 } // namespace
+
+TEST(ModBackFloorRetail, RetailSoundThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, true); }
