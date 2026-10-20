@@ -140,9 +140,11 @@ gameplay/save effects, and removal instructions. Distribute only assets you have
 permission to share; the examples contain no extracted game data.
 
 Use exact package versions in release notes. A gameplay save requires its recorded
-version strings. Updating even `1.0.0` to `1.0.1` currently prevents loading those
-saves until matching versions are restored. Keeping the string unchanged does
-not make incompatible code safe. No migration or force-load command exists.
+version strings unless the new release declares a tested direct
+[save migration](MOD_FORMAT.md#save-migrations) from the recorded version. Without
+that declaration, updating even `1.0.0` to `1.0.1` prevents loading until matching
+versions are restored. Keeping a version string unchanged does not make
+incompatible code safe. There is no force-load command.
 
 Disable through the manager and restart to stop a mod. Removing a gameplay mod
 does not undo native effects already saved, and saves requiring that mod will

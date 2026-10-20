@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -13,7 +14,7 @@ import uuid
 import zipfile
 
 CAPABILITIES = {
-    "assets.mesh_replace.v1", "combat.rules.v1", "entities.spawn_tuning.v1",
+    "save.migrations.v1", "assets.mesh_replace.v1", "combat.rules.v1", "entities.spawn_tuning.v1",
     "assets.replace.v1", "scripts.lua.v1", "quests.progress.v1", "save.metadata.v1",
     "economy.write.v1", "events.map.v1", "events.tick.v1", "player.read.v1",
     "party.read.v1", "inventory.read.v1", "resources.read.v1", "logging.v1", "host.calls.v1", "plugins.native.v1", "plugins.native.v2", "events.custom.v1", "events.lifecycle.v1", "events.enemy_killed.v1", "services.native.v1", "services.command.v1", "services.query.v1", "menu.actions.v1", "menu.native.v1",
@@ -21,7 +22,7 @@ CAPABILITIES = {
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}
 FIELDS = REQUIRED | {"api_version", "enabled", "requires", "conflicts", "exclusive",
-                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio", "meshes"}
+                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio", "meshes", "save_migrations"}
 
 
 def require(condition, message):
@@ -100,6 +101,37 @@ def contained(root, value):
     return path
 
 
+def validate_save_migrations(rules, current):
+    require(isinstance(rules,list) and len(rules)<=16, 'save_migrations must contain at most 16 direct migrations')
+    versions=set()
+    def key(value,quest=False):
+        return isinstance(value,str) and re.fullmatch(r'[a-z][a-z0-9._-]{0,95}' if quest else r'[a-z0-9._]{1,64}',value) is not None
+    for rule in rules:
+        require(isinstance(rule,dict) and rule.keys() <= {'from','rename_values','rename_quests','remove_values','defaults'}, 'invalid save migration fields')
+        version=rule.get('from')
+        require(text(version) and version!=current and version not in versions, 'invalid, current, or duplicate migration version')
+        versions.add(version);names=set()
+        for field,quest in [('rename_values',False),('rename_quests',True)]:
+            renames=rule.get(field,{})
+            require(isinstance(renames,dict) and len(renames)<=(64 if quest else 128), 'invalid migration rename map')
+            targets=set()
+            for source,target in renames.items():
+                require(key(source,quest) and key(target,quest) and source!=target and target not in targets, 'invalid migration rename key/destination')
+                targets.add(target)
+                if not quest:names.update((source,target))
+        remove=rule.get('remove_values',[])
+        require(isinstance(remove,list) and len(remove)<=128, 'invalid migration removal list')
+        for value in remove:
+            require(key(value) and value not in names, 'invalid, repeated, or renamed migration removal')
+            names.add(value)
+        defaults=rule.get('defaults',{})
+        require(isinstance(defaults,dict) and len(defaults)<=128, 'invalid migration defaults')
+        for name,value in defaults.items():
+            require(key(name) and name not in remove, 'invalid/removed migration default key')
+            scalar=type(value) is bool or (type(value) in (int,float) and math.isfinite(value)) or (isinstance(value,str) and len(value.encode('utf-8'))<=256)
+            require(scalar,'migration defaults must be bounded scalar values')
+
+
 def validate(root, data=None):
     root = Path(root).resolve(strict=True)
     manifest = contained(root, "mod.json")
@@ -113,6 +145,7 @@ def validate(root, data=None):
     require(identity(mod["id"]), "invalid package ID")
     require(all(text(mod[k]) for k in ("name", "version", "game")), "invalid name/version/game")
     require(mod["game"] == "chronicle", "game must be chronicle")
+    validate_save_migrations(mod.get("save_migrations", []), mod["version"])
     if "enabled" in mod:
         require(type(mod["enabled"]) is bool, "enabled must be boolean (legacy; cannot auto-enable)")
     if "api_version" in mod:

@@ -27,6 +27,7 @@ schema 1; put release notes and attribution in a separate README.
 | `api_version` | For code | Integer | Exactly `1`; required for `script` or `native_library` |
 | `script` | No | String | Relative path to a contained, regular `.lua` file, at most 1 MiB; text source only |
 | `permissions` | No | String array, `[]` | `economy.write`, `game.read`, `game.write`, `resources.read`, `native.extension`; no duplicates |
+| `save_migrations` | No | Array, `[]` | Up to 16 direct old-version migrations for owned state; see [save migrations](#save-migrations) |
 | `quests` | No | Array, `[]` | Up to 64 quest definitions, described below |
 | `resources` | No | Object, `{}` | Up to 16 resource ID → contained relative file mappings; each file at most 64 KiB |
 | `audio` | No | Object, `{}` | Up to 16 local IDs (`[a-z][a-z0-9._-]*`, at most 64 bytes) mapped to contained WAV/FLAC/Ogg Vorbis paths; nonempty, at most 32 MiB each and 64 MiB encoded per package; see audio support below |
@@ -106,6 +107,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | Capability | Host service |
 |---|---|
 | `assets.replace.v1` | Existing same-size game asset replacement |
+| `save.migrations.v1` | Explicit declarative migration of package-owned saved values and quest IDs |
 | `assets.mesh_replace.v1` | Declarative existing-model geometry replacement with inherited native animation/materials |
 | `scripts.lua.v1` | Isolated Lua script runtime |
 | `quests.progress.v1` | Declared objectives and owned progress |
@@ -203,3 +205,54 @@ and appears in its diagnostics. Declaring audio does not start playback.
 `audio.state` requires `game.read`; `audio.play` and `audio.stop` require
 `game.write`. Use `requires_operations` to require these operations. See the
 [audio host API](MOD_HOST_API.md#owned-audio-playback).
+
+
+## Save migrations
+
+Exact package versions remain the default requirement for a modded save. A new
+release may explicitly accept an old version with `save_migrations`; require
+`save.migrations.v1` when using it. Each rule migrates directly from one exact
+`from` string to this manifest's current `version`, with no inferred version
+ranges, chaining, automatic downgrades or removal of missing packages.
+
+```json
+"save_migrations": [
+  {
+    "from": "1.0.0",
+    "rename_values": {"old_counter": "counter"},
+    "rename_quests": {"old.quest": "new.quest"},
+    "remove_values": ["obsolete_cache"],
+    "defaults": {"introduced_flag": false}
+  }
+]
+```
+
+There are at most 16 rules, each with a unique old version different from the
+current version. Only `from` is required. A rule containing only `from` explicitly
+asserts unchanged owned-state compatibility for that release. Unknown fields and
+invalid declarations block package discovery, even when the package is disabled.
+
+Value keys use `[a-z0-9._]{1,64}`; quest IDs use the normal quest/package ID syntax.
+Rename maps have unique destinations and at most 128 value or 64 quest entries.
+Renames are simultaneous (swaps are supported), ignore absent source keys and
+reject collisions with existing unrelated destinations. Removals are bounded to
+128 distinct value keys and cannot overlap either side of a value rename.
+Defaults are up to 128 boolean, finite-number or at-most-256-byte string values;
+they only fill absent keys after renaming/removal and cannot recreate a removed
+key. Quest progress is preserved, not clamped or reset. Include any corresponding
+reward-granted flags in the migration design; the framework does not infer reward
+semantics or replay rewards for you.
+
+Loading validates old state, applies each required owner's declared transform to
+a detached copy, validates the resulting state and initializes the new runtime
+before publishing it. Any failure leaves current state and runtime epoch intact.
+The existing 128-value/64-quest per-owner and 4 MiB save limits still apply.
+Migrations have no script callbacks, engine writes, file access or access to
+another package's state. Normal `save_loaded` notification follows successful
+loading. New saves record the current package versions; loading alone does not
+rewrite the source save. Keep backups and test every accepted old version.
+
+This supports owned scalar/quest schema changes. Native inventory/world save
+changes, arbitrary scripted transforms, save branching and full NG+ migration
+are separate unfinished work. Keep packages disabled by default and use the
+existing shared manager to enable them before loading dependent saves.

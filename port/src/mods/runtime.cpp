@@ -6,6 +6,7 @@
 #include "arguments.hpp"
 #include "audio_streams.hpp"
 #include "mesh_packages.hpp"
+#include "save_migrations.hpp"
 #include "audio/mixer.hpp"
 #include "native.hpp"
 extern "C" {
@@ -1664,51 +1665,69 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
         if (text.size() > 4 * 1024 * 1024) {
             throw std::runtime_error("mod state exceeds 4 MiB");
         }
-        const auto json = Json::parse(text);
+        auto json = Json::parse(text);
         if (json.at("schema_version") != 1 || !json.at("mods").is_object() || json["mods"].size() > 1024) {
             throw std::runtime_error("invalid mod state format");
         }
         if (!json.at("required").is_object()) {
             throw std::runtime_error("missing gameplay mod requirements");
         }
+        const auto validate_states = [&]() {
+            for (const auto &[id, state] : json["mods"].items()) {
+                if (!state.is_object()) {
+                    throw std::runtime_error("invalid mod state");
+                }
+                if (state.contains("last_map") && (!state["last_map"].is_number_integer() || state["last_map"] < -1 || state["last_map"] > 999)) {
+                    throw std::runtime_error("invalid saved map");
+                }
+                if (state.contains("values")) {
+                    if (!state["values"].is_object() || state["values"].size() > 128) {
+                        throw std::runtime_error("invalid state values");
+                    }
+                    for (const auto &[key, value] : state["values"].items()) {
+                        if (!Key(key.c_str()) || !(value.is_boolean() || value.is_number() || (value.is_string() && value.get_ref<const std::string &>().size() <= 256))) {
+                            throw std::runtime_error("invalid state value");
+                        }
+                    }
+                }
+                if (state.contains("quests")) {
+                    if (!state["quests"].is_object() || state["quests"].size() > 64) {
+                        throw std::runtime_error("invalid quest state");
+                    }
+                    for (const auto &[key, value] : state["quests"].items()) {
+                        if (!value.is_number_integer() || value < 0 || value > 1000000) {
+                            throw std::runtime_error("invalid quest progress");
+                        }
+                    }
+                }
+            }
+        };
+        validate_states();
         for (const auto &[id, version] : json["required"].items()) {
             if (!version.is_string()) {
                 throw std::runtime_error("invalid required mod version");
             }
             const auto version_text = version.get<std::string>();
-            const auto found = std::ranges::find_if(impl_->modules, [&](const auto &m) { return m->package.id == id && m->package.version == version_text; });
+            const auto found = std::ranges::find_if(impl_->modules, [&](const auto &m) { return m->package.id == id && !m->failed; });
             if (found == impl_->modules.end()) {
                 throw std::runtime_error("save requires enabled, working mod " + id + " at version " + version.dump());
             }
-        }
-        for (const auto &[id, state] : json["mods"].items()) {
-            if (!state.is_object()) {
-                throw std::runtime_error("invalid mod state");
-            }
-            if (state.contains("last_map") && (!state["last_map"].is_number_integer() || state["last_map"] < -1 || state["last_map"] > 999)) {
-                throw std::runtime_error("invalid saved map");
-            }
-            if (state.contains("values")) {
-                if (!state["values"].is_object() || state["values"].size() > 128) {
-                    throw std::runtime_error("invalid state values");
+            if ((*found)->package.version != version_text) {
+                const auto &rules = (*found)->package.save_migrations;
+                if (rules.empty()) throw std::runtime_error("save requires mod " + id + " at version " + version.dump() + "; no migration declared");
+                auto owner_state = json["mods"].value(id, Json::object());
+                try {
+                    if (!MigrateSavedState(owner_state, Json::parse(rules), version_text))
+                        throw std::runtime_error("no direct migration from " + version_text);
+                } catch (const std::exception &failure) {
+                    throw std::runtime_error("save migration for " + id + ": " + failure.what());
                 }
-                for (const auto &[key, value] : state["values"].items()) {
-                    if (!Key(key.c_str()) || !(value.is_boolean() || value.is_number() || (value.is_string() && value.get_ref<const std::string &>().size() <= 256))) {
-                        throw std::runtime_error("invalid state value");
-                    }
-                }
-            }
-            if (state.contains("quests")) {
-                if (!state["quests"].is_object() || state["quests"].size() > 64) {
-                    throw std::runtime_error("invalid quest state");
-                }
-                for (const auto &[key, value] : state["quests"].items()) {
-                    if (!value.is_number_integer() || value < 0 || value > 1000000) {
-                        throw std::runtime_error("invalid quest progress");
-                    }
-                }
+                json["mods"][id] = std::move(owner_state);
             }
         }
+        validate_states();
+        if (json["mods"].size() > 1024 || json.dump().size() > 4 * 1024 * 1024)
+            throw std::runtime_error("migrated state exceeds save limits");
         Runtime staged;
         staged.Start(impl_->plan);
         if (!staged.impl_->diagnostics.empty()) {

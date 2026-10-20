@@ -13,6 +13,7 @@
 #include "api.hpp"
 #include "native.hpp"
 #include "mesh_asset.hpp"
+#include "save_migrations.hpp"
 
 namespace mods {
 namespace {
@@ -144,7 +145,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio", "meshes"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio", "meshes", "save_migrations"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -159,6 +160,10 @@ void Read(Package &package, const FileIndex &base) {
     }
     package.name = String(json, "name");
     package.version = String(json, "version");
+    if (json.contains("save_migrations")) {
+        ValidateSaveMigrations(json["save_migrations"], package.version);
+        package.save_migrations = json["save_migrations"].dump();
+    }
     if (String(json, "game") != "chronicle") {
         throw std::runtime_error("package does not target Chronicle");
     }
@@ -378,7 +383,7 @@ void Problem(Package &package, const std::string &message) {
 } // namespace
 
 bool Supports(std::string_view capability) {
-    return capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
+    return capability == "save.migrations.v1" || capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
            capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
            capability == "party.read.v1" || capability == "inventory.read.v1" ||

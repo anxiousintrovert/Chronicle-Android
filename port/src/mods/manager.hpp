@@ -33,6 +33,7 @@ struct Package {
     std::string                                  id;
     std::string                                  name;
     std::string                                  version;
+    std::string                                  save_migrations; // Validated JSON; empty means exact-version loading only.
     bool                                         enabled = false;
     std::vector<std::string>                     dependencies;
     std::map<std::string, VersionRequirement>    dependency_versions;

@@ -29,6 +29,24 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_save_migrations_validate_and_survive_pack_install(self):
+        rules=[{'from':'1','rename_values':{'old':'new'},'rename_quests':{'old.quest':'new.quest'},
+                'remove_values':['obsolete'],'defaults':{'new':99,'introduced':True}}]
+        folder=self.package('test.migration',version='2',save_migrations=rules,requires_capabilities=['save.migrations.v1'])
+        self.assertEqual(tool.validate(folder)['save_migrations'],rules)
+        archive=self.root/'migration.zip';tool.pack(folder,archive)
+        with zipfile.ZipFile(archive) as packed:
+            self.assertEqual(json.loads(packed.read('test.migration/mod.json'))['save_migrations'],rules)
+        installed=self.root/'installed';tool.install(archive,installed)
+        self.assertEqual(tool.validate(installed/'test.migration')['save_migrations'],rules)
+        self.assertFalse((installed/'mods-profile.json').exists())
+        for invalid in [[{'from':'2'}],[{'from':'1'},{'from':'1'}],[{'from':'1','unknown':True}],
+                        [{'from':'1','rename_values':{'a':'x','b':'x'}}],
+                        [{'from':'1','rename_values':{'a':'b'},'remove_values':['b']}],
+                        [{'from':'1','defaults':{'bad':[]}}],
+                        [{'from':'1','remove_values':['x'],'defaults':{'x':1}}]]:
+            with self.subTest(invalid=invalid),self.assertRaises(ValueError):tool.validate_save_migrations(invalid,'2')
+
     def test_combat_rules_are_discoverable_and_permission_checked(self):
         names = ['combat.rules_get', 'combat.rule_set', 'combat.rule_remove']
         operations = {entry['name']: entry for entry in tool.apis()}

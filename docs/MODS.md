@@ -188,8 +188,9 @@ are committed together using the existing atomic file writer, for manual saves
 and autosaves. An unmodded save remains readable and starts fresh mod progress.
 New-game initialization resets mod state and Lua globals.
 
-Extended saves require the gameplay mods and exact versions recorded in them.
-Missing, disabled, failed, or changed required mods cause load to fail before the
+Extended saves require working enabled gameplay mods at their recorded versions,
+or an explicit [direct migration](MOD_FORMAT.md#save-migrations) declared by the
+new package. Missing, disabled, failed, or incompatible required mods fail before the
 active native save is replaced. Corrupt extensions are rejected. The diagnostic
 is printed to stderr; the game's load screen uses its existing failure message.
 Earlier Chronicle builds may ignore the extension and drop it when saving, so

@@ -25,7 +25,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
-| Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
+| Saves | Namespaced trailer, atomic writes, exact package/version checks and explicit direct migrations of owned values/quest IDs with atomic load rollback | Scripted/native-data migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
 Spheda) are outside this Chronicle-only framework's scope.
@@ -3889,3 +3889,32 @@ triangle attributes to five decimal places. Retail assets and generated test GLB
 remain local-only. No native source, PS2 or Kazarov changes in this tooling step.
 The existing Clang-built runtime consumes the same schema; no new runtime API
 is advertised. DAE and broader native content registration remain outstanding.
+
+
+## Explicit owned-state save migrations (2026-10-20)
+
+save.migrations.v1 adds up to 16 direct exact-version declarations in
+save_migrations. Rules can simultaneously rename owned scalar keys and quest
+IDs, remove obsolete scalar keys, and fill absent scalar defaults. No Lua/native
+migration callback, file access, engine write or cross-owner mutation is exposed.
+Missing declarations still reject changed package versions; disabled and failed
+owners remain incompatible. Validation runs before and after detached transforms,
+and all owners/runtime initialization must succeed before live state is replaced.
+
+Seven Clang tests cover progress/version publication, save-loaded notification,
+simultaneous swaps, collision/multiple-owner rollback, failed/disabled/missing
+migrators, corrupted source state, budgets and invalid manifest declarations.
+The checksummed-save test proves migration does not rewrite the source file,
+resaving preserves the native prefix, and a fresh no-mod save remains native-only.
+Its first run exposed a fixture retaining previous-session state; the fixture now
+uses the existing new-session ResetState boundary rather than changing startup
+semantics. Final full regression: 981 passed, 105 skipped, one disabled benchmark.
+All 66 Python checks passed, including validate/pack/install migration metadata.
+The dormant PAL combat/shared-manager replay passed. Clang 23.1.2 game/tests built;
+PS2 baseline and official Kazarov diffs remain empty. Other platforms unverified.
+
+Documentation specifies bounds, ordering, collision handling, default behavior,
+reward-flag author responsibility and source-save preservation. This covers owned
+scalar/quest transformations, not arbitrary native inventory/world migrations,
+NG+ prototype trailer conversion, scripted transforms or independent save branches.
+Those remaining save capabilities and broader MoonMod coverage remain unfinished.

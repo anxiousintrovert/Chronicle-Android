@@ -148,7 +148,10 @@ Values use the existing namespaced mod save trailer and exact package/version
 checks. Loading/resetting rebinds callbacks to restored/cleared storage; it does
 not serialize native pointers or heap state. Failed callbacks or rejected commits
 restore only that callback's owned values and discard its queued writes.
-Save migration remains future work; native exports are documented below.
+Manifest [save migrations](MOD_FORMAT.md#save-migrations) apply to these same owned
+values without a new native ABI or migration callback. Native pointers, arbitrary
+heap state and native game-save structures are not migrated. Native exports are
+documented below.
 
 The [standalone lifecycle example](../examples/native-lifecycle) counts entries
 using owned save values without gameplay permissions. It builds with Clang, is
