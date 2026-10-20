@@ -29,6 +29,14 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_skill_operations_are_discoverable_and_permission_checked(self):
+        names=['skills.register','skills.list','skills.get','skills.unlock','skills.set_rank']
+        operations={entry['name']:entry for entry in tool.apis()}
+        for name in names:
+            self.assertEqual(operations[name]['writes'],name not in ['skills.list','skills.get'])
+        folder=self.package('test.skills',requires_capabilities=['skills.trees.v1'],requires_operations=names,permissions=['game.read','game.write'])
+        self.assertEqual(tool.validate(folder)['requires_operations'],names)
+
     def test_dynamic_quest_operations_are_explicit_writes(self):
         names=['quests.register','quests.advance','quests.start'];operations={entry['name']:entry for entry in tool.apis()}
         for name in names:

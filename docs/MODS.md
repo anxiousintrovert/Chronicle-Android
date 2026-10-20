@@ -37,6 +37,10 @@ description. Square or the Filter button cycles All, In progress, and Completed.
 Circle returns to the package list. This view reads existing progress without
 advancing objectives or granting rewards; it uses the same shared UI framework.
 
+Packages with registered skills show **L2 Skills** (or click Skills in the header).
+This read-only page shows ranks and missing prerequisites using the same controls
+and shared UI. Training can be exposed through explicit mod actions.
+
 Enable selections are written atomically to `<save>/mods-profile.json`; they do
 not edit the distributed manifests. Conflicts are recomputed immediately.
 **Restart to apply changes**. Rescanning never reloads live scripts or assets.

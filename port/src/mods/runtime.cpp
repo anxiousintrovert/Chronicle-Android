@@ -8,6 +8,7 @@
 #include "mesh_packages.hpp"
 #include "save_migrations.hpp"
 #include "quests.hpp"
+#include "skills.hpp"
 #include "audio/mixer.hpp"
 #include "native.hpp"
 extern "C" {
@@ -468,7 +469,7 @@ int ApiCall(lua_State *L) {
     if (lua_gettop(L) > 2 || (!lua_isnoneornil(L, 2) && !lua_istable(L, 2))) {
         return Failure(L, "arguments must be a table");
     }
-    if (!ReadArguments(L, 2, m.arguments, m.call_error)) {
+    if (!ReadArguments(L, 2, m.arguments, m.call_error,OperationArgumentLimits(op->name))) {
         return Failure(L, m.call_error.c_str());
     }
     m.call_error = ValidateOperation(name, m.arguments);
@@ -479,6 +480,12 @@ int ApiCall(lua_State *L) {
         if (m.read_only && op->writes) return Failure(L,"query exports cannot write owned state");
         try { m.snapshot=RuntimeQuestCall(m,op->name,m.arguments); }
         catch(const std::exception &error) { m.call_error=error.what(); return Failure(L,m.call_error.c_str()); }
+        PushJson(L,m.snapshot);return 1;
+    }
+    if (op->name.starts_with("skills.")) {
+        if(m.read_only&&op->writes)return Failure(L,"query exports cannot write skill state");
+        try {m.snapshot=CallOwnedSkill(*m.state,op->name,m.arguments);}
+        catch(const std::exception &error){m.call_error=error.what();return Failure(L,m.call_error.c_str());}
         PushJson(L,m.snapshot);return 1;
     }
     if (op->name == "services.query") {
@@ -561,7 +568,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         return 0;
     }
     try {
-        if (!name || !arguments || std::strlen(arguments) > 16384) {
+        if (!name || !arguments || std::strlen(arguments) > OperationArgumentLimits(name?name:"").bytes) {
             throw std::runtime_error("invalid native API arguments");
         }
         if (++m.native_calls > 128) {
@@ -578,7 +585,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             throw std::runtime_error("host operation requires active gameplay");
         }
         const auto args = Json::parse(arguments);
-        const auto transport_error = ValidateArguments(args);
+        const auto transport_error = ValidateArguments(args,OperationArgumentLimits(op->name));
         if (!transport_error.empty()) {
             throw std::runtime_error(transport_error);
         }
@@ -592,6 +599,9 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         if (op->name.starts_with("quests.")) {
             m.native_result=RuntimeQuestCall(m,op->name,args).dump();
             *result=m.native_result.c_str();return 1;
+        }
+        if(op->name.starts_with("skills.")) {
+            m.native_result=CallOwnedSkill(*m.state,op->name,args).dump();*result=m.native_result.c_str();return 1;
         }
         if (op->name == "services.query") {
             Json        value;
@@ -1337,8 +1347,8 @@ void Runtime::Start(const Manager &manager) {
             impl_->state[id] = Json::object();
         }
         m.state = &impl_->state[id];
-        try { QuestDefinitions(m.package,*m.state); }
-        catch(const std::exception &error) { m.failed=true;impl_->diagnostics.push_back(id+": quest state invalid: "+error.what()); }
+        try { QuestDefinitions(m.package,*m.state); ValidateSkillsState(*m.state); }
+        catch(const std::exception &error) { m.failed=true;impl_->diagnostics.push_back(id+": progression state invalid: "+error.what()); }
         for (const auto &dependency : m.package.dependencies) {
             for (const auto &loaded : impl_->modules) {
                 if (loaded->package.id == dependency && loaded->failed) {
@@ -1742,7 +1752,7 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
                         }
                     }
                 }
-                QuestDefinitions(Package{},state); // Validate even retained state without an active owner.
+                ValidateSkillsState(state);QuestDefinitions(Package{},state); // Validate even retained state without an active owner.
                 if (state.contains("quests")) {
                     if (!state["quests"].is_object() || state["quests"].size() > 64) {
                         throw std::runtime_error("invalid quest state");
@@ -1803,6 +1813,19 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
         error = e.what();
         return false;
     }
+}
+
+std::vector<SkillStatus> Runtime::Skills() const {
+    std::vector<SkillStatus> result;
+    for(const auto &m:impl_->modules)if(!m->failed) {
+        const auto trees=CallOwnedSkill(*m->state,"skills.list",Json::object());
+        for(const auto &tree:trees["trees"])for(const auto &node:tree["nodes"]) {
+            auto description=tree["title"].get<std::string>()+"\n\n"+node["description"].get<std::string>();
+            for(const auto &missing:node["missing"])description+="\nRequires "+missing["id"].get<std::string>()+" rank "+std::to_string(missing["rank"].get<int>());
+            result.push_back({m->package.id,tree["id"].get<std::string>(),node["id"].get<std::string>(),node["title"].get<std::string>(),description,node["rank"].get<int>(),node["max_rank"].get<int>(),node["available"].get<bool>()});
+        }
+    }
+    return result;
 }
 
 std::vector<QuestStatus> Runtime::Quests() const {

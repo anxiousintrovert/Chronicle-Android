@@ -47,6 +47,12 @@ struct QuestStatus {
     std::string status;
 };
 
+struct SkillStatus {
+    std::string owner, tree, id, title, description;
+    int rank=0, maximum=1;
+    bool available=false;
+};
+
 struct ActionStatus {
     std::string owner, id, title, description, result;
     bool        available = false;
@@ -77,6 +83,7 @@ public:
     std::string               SaveState() const;
     bool                      LoadState(const std::string &json, std::string &error);
     std::vector<QuestStatus>  Quests() const;
+    std::vector<SkillStatus> Skills() const;
     std::vector<ActionStatus> Actions(std::string_view owner) const;
     bool                      QueueAction(std::string_view owner, std::string_view id, std::string &error);
     std::vector<std::string>  Diagnostics() const;

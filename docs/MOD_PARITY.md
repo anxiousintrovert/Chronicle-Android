@@ -7,13 +7,13 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 148 implemented operations, native plugins and author
+a real host-call boundary, 153 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
-| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists and a filtered/paginated quest page with controller/mouse navigation | Skill-tree/character-sheet UI, broader journal services and custom controls |
+| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists and a filtered/paginated quest page with controller/mouse navigation | Skill-training/character-sheet UI, broader journal services and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
@@ -21,7 +21,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible assets, package resources and explicitly enabled existing-model mesh replacement with inherited native animation/materials and runtime fallback | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
-| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards plus map/floor/death event bindings, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page | Quest stage lifecycle, dialogue trees, pickup/Georama quest events, skill trees, native script interception |
+| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards plus map/floor/death event bindings, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page; owned skill trees with prerequisites, ranks and shared-manager browsing | Quest stage lifecycle, dialogue trees, pickup/Georama quest events, native skill effects/training events, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
@@ -4076,3 +4076,34 @@ PS2 baseline and official Kazarov diffs remain empty; other platforms unverified
 Pickup/Georama event bindings, quest stage sequencing, dialogue, skills and broader
 ledger items remain outstanding. Also corrected stale introductory version-range
 documentation to reflect the existing dependency constraint implementation.
+
+
+### Owned skill trees and shared manager page (2026-10-20)
+
+Added skills.trees.v1 and five shared Lua/native operations (153 host operations):
+register/list/get/unlock/set_rank. Each owner can register 32 immutable trees of
+1..128 nodes, with ranks 0..99, validated same-tree prerequisites and cycle
+rejection. Rank changes and definitions participate in callback rollback and
+save validation; resets preserve dependent ranks while blocking further increases
+when prerequisites are missing. Registration and ranks alone change no native
+combat state. Unsupported effect fields are rejected.
+
+The shared manager now has an L2 Skills/header-click page reusing its list,
+detail pagination, filters and controller/mouse paths. It displays rank limits
+and missing prerequisites without writing state. Tree registration alone opts
+into a 65536-node/2-MiB argument budget so a full 128-node definition is actually
+usable through Lua; all other calls retain the original small transport limits.
+
+Clang 23.1.2 builds passed. Seven new skill tests cover immutable definitions,
+prerequisites/reset, cycles, corruption, capacities, scoped transport limits,
+actual full-tree Lua registration, owner/save isolation and rollback. An ABI-2
+DLL also registers, unlocks and reads a node. Full regression: 1016 passed,
+105 skipped and one disabled benchmark. All 69 Python checks passed. Final
+PAL menu checks include controller and mouse entry and unchanged saved state;
+rank/prerequisite screenshots were inspected. A six-pixel animated border
+mismatch at x=267 was excluded from the existing content comparison. Dormant
+PAL combat replay passed. PS2 baseline and official Kazarov diffs remain empty.
+
+Local visual evidence: issue-evidence/framework-expansion-20261019/skills-menu-final-2a19309f611c4d6f9c05dd94b7a8e5d0.
+Native passive skill effects, training-request events, richer character sheets,
+tree-definition migrations and other ledger gaps remain outstanding.

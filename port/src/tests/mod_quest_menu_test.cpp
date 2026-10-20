@@ -42,6 +42,11 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     state["mods"]["test.quests"]["quest_objectives"]["quest.0"]={{"home",1},{"people",2}};
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["explicit_start"]=true;
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",50}}}}};
+    auto &skillTree=state["mods"]["test.quests"]["skill_trees"]["combat"];
+    skillTree={{"title","Combat"},{"description","Training"},{"nodes",Json::array()}};
+    skillTree["nodes"].push_back({{"id","focus"},{"title","Focus"},{"description","Build focus before learning Power."},{"max_rank",2}});
+    skillTree["nodes"].push_back({{"id","power"},{"title","Power"},{"description","Improve your power."},{"max_rank",3},{"prerequisites",{{{"id","focus"},{"rank",2}}}}});
+    state["mods"]["test.quests"]["skill_ranks"]["combat"]["focus"]=1;
     std::string error;ASSERT_TRUE(mods::Scripts().LoadState(state.dump(),error))<<error;
     const auto before=mods::Scripts().SaveState();
     InputSetMenuMouse(true);
@@ -50,9 +55,9 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     const auto draw=[&](const char *name){graphics.Frame({0,0,0,128},[]{mods::menu::Draw();});
         if(const char *folder=std::getenv("DC_QUEST_MENU_AUDIT")){fs::create_directories(folder);EXPECT_TRUE(gfx::WritePng(fs::path(folder)/name,graphics.pixels.data(),graphics.width,graphics.height));}
         return graphics.pixels;};
-    // Selection brackets pulse with the native UI clock; compare text/pane content.
+    // Selection brackets pulse with the native UI clock (including x=267); compare text/pane content.
     const auto same_content=[](const auto &a,const auto &b){
-        for(int y=90;y<345;++y)for(int x=42;x<595;++x)if(x<268||x>=295)
+        for(int y=90;y<345;++y)for(int x=42;x<595;++x)if(x<267||x>=295)
             for(int c=0;c<4;++c)if(a[(y*640+x)*4+c]!=b[(y*640+x)*4+c])return false;
         return true;
     };
@@ -67,11 +72,19 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     mods::menu::Run(PAD_SQUARE);EXPECT_TRUE(same_content(draw("all-again.png"),all));
     for(int i=0;i<9;++i)mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("scrolled.png")!=all);
     mods::menu::Run(PAD_CIRCLE);EXPECT_TRUE(mods::menu::IsOpen());EXPECT_TRUE(same_content(draw("returned.png"),manager));
+    mods::menu::Run(PAD_L2);const auto skills=draw("skills.png");EXPECT_TRUE(skills!=manager);
+    mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("skill-locked.png")!=skills);
+    mods::menu::Run(PAD_CIRCLE);EXPECT_TRUE(same_content(draw("skills-returned.png"),manager));
     // Pointer starts at 320,240; click the new Quests entry at 80,374.
     InputScript mouse;ASSERT_TRUE(InputScriptParse("0 mouse:-240,134 mouse1\n1\n",mouse,error))<<error;
     InputScriptInstall(std::move(mouse));InputScriptApply(0);mods::menu::Run(0);const auto clicked=draw("mouse.png");
     // Ignore the cursor below the content; the quest page itself must match controller entry.
     EXPECT_TRUE(same_content(all,clicked));
+    InputScriptApply(1);mods::menu::Run(0);mods::menu::Run(PAD_CIRCLE);
+    InputScript skillMouse;ASSERT_TRUE(InputScriptParse("0 mouse:440,-269 mouse1\n1 mouse:0,280\n",skillMouse,error))<<error;
+    InputScriptInstall(std::move(skillMouse));InputScriptApply(0);mods::menu::Run(0);
+    InputScriptApply(1);mods::menu::Run(0); // Move the cursor below the compared content.
+    EXPECT_TRUE(same_content(skills,draw("skills-mouse.png")));
     InputScriptApply(1);mods::menu::Run(0);mods::menu::Run(PAD_CIRCLE);mods::menu::Run(PAD_CIRCLE);EXPECT_FALSE(mods::menu::IsOpen());
     EXPECT_EQ(mods::Scripts().SaveState(),before);
 }

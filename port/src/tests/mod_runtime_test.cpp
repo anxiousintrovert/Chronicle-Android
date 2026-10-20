@@ -1055,6 +1055,11 @@ protected:
     }
 };
 
+TEST_F(ModNativeV2, SharedSkillsRegisterUnlockAndReadWithoutNativeWrites) {
+    LoadPlugin("skills");runtime.Tick({1,2,0,true});EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["skill_read"],true);
+    ASSERT_EQ(runtime.Skills().size(),1u);EXPECT_EQ(runtime.Skills()[0].rank,1);
+}
+
 TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
     LoadPlugin("quests");int commits=0;
     const mods::CommitGame commit=[&](const auto &commands,int,std::string &){++commits;EXPECT_EQ(commands.size(),1u);EXPECT_EQ(commands[0].operation,"economy.add");EXPECT_EQ(commands[0].arguments["amount"],7);return true;};

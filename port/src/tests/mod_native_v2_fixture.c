@@ -80,6 +80,12 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
             return 0;
         return !mode(host, "\"fail_command\"");
     }
+    if(mode(host,"\"skills\"")) {
+        return host->call(host->context,"skills.register","{\"id\":\"combat\",\"title\":\"Combat\",\"description\":\"Training\",\"nodes\":[{\"id\":\"focus\",\"title\":\"Focus\",\"description\":\"Focus training\",\"max_rank\":2}]}",&result) &&
+               host->call(host->context,"skills.unlock","{\"tree\":\"combat\",\"id\":\"focus\"}",&result) &&
+               host->call(host->context,"skills.get","{\"tree\":\"combat\",\"id\":\"focus\"}",&result) && strstr(result,"\"rank\":1") &&
+               host->state_set(host->context,"skill_read","true",&result);
+    }
     if (mode(host, "\"quests\"")) {
         return host->call(host->context, "quests.list", "{}", &result) && strstr(result, "\"visit\"") &&
                host->call(host->context, "quests.get", "{\"id\":\"visit\"}", &result) && strstr(result, "\"goal\":2") &&

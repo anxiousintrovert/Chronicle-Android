@@ -42,6 +42,7 @@ UI::ListView             action_list({
 });
 
 std::string quest_owner;
+bool skills_page=false;
 int quest_selected=0,quest_detail=0,quest_filter=0;
 UI::ListView quest_list({
     .bounds={42,150,226,189}, .row_height=24, .row_stride=27,
@@ -159,24 +160,27 @@ std::string SelectedActionOwner() {
     return {};
 }
 
-std::string SelectedQuestOwner() {
+std::string SelectedQuestOwner(bool skills=false) {
     const auto &packages=Shared().Preview().Packages();
     if(selected<0||selected>=static_cast<int>(packages.size()))return {};
     const auto &p=packages[selected];
     for(const auto &active:Shared().Active().Packages())
         if(active.root==p.root&&active.id==p.id&&active.Active())
-            for(const auto &quest:Scripts().Quests())if(quest.owner==p.id)return p.id;
+            if(skills){for(const auto &node:Scripts().Skills())if(node.owner==p.id)return p.id;}
+            else {for(const auto &quest:Scripts().Quests())if(quest.owner==p.id)return p.id;}
     return {};
 }
 
 std::vector<QuestStatus> JournalQuests() {
-    auto entries=Scripts().Quests();
+    std::vector<QuestStatus> entries;
+    if(skills_page)for(const auto &node:Scripts().Skills())entries.push_back({node.owner,node.tree+" / "+node.id,node.title,node.description,node.rank,node.maximum,node.available?"available":"locked"});
+    else entries=Scripts().Quests();
     std::erase_if(entries,[](const auto &q){return q.owner!=quest_owner||(quest_filter==1&&q.progress>=q.goal)||(quest_filter==2&&q.progress<q.goal);});
     return entries;
 }
 
-void OpenQuests() {
-    quest_owner=SelectedQuestOwner();quest_selected=quest_detail=quest_filter=0;quest_list.Reset();
+void OpenQuests(bool skills=false) {
+    skills_page=skills;quest_owner=SelectedQuestOwner(skills);quest_selected=quest_detail=quest_filter=0;quest_list.Reset();
 }
 
 void RunQuests(std::uint16_t pressed) {
@@ -202,16 +206,16 @@ void RunQuests(std::uint16_t pressed) {
 
 void DrawQuests() {
     UI::Divider::DrawVertical(282,148,348);
-    Text(0,"Mod Quests",42,94,540,true);
-    const char *filters[]={"All","In progress","Completed"};
+    Text(0,skills_page?"Mod Skills":"Mod Quests",42,94,540,true);
+    const char *filters[]={"All",skills_page?"Below maximum":"In progress",skills_page?"Maximum rank":"Completed"};
     Text(1,Literal(quest_owner)+" - "+filters[quest_filter],42,120,550);
     const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());
     quest_selected=std::clamp(quest_selected,0,std::max(0,count-1));quest_list.SetSelectedIndex(quest_selected,count);
     quest_list.Draw(count,[&](int i,const UI::Rect &rect,bool selected_row,int){
         Text(10+i-quest_list.FirstRow(),std::string(entries[i].progress>=entries[i].goal?"[+] ":"[ ] ")+Literal(entries[i].title),rect.x,rect.y,rect.w,selected_row);
     });
-    std::string body="No quests match this filter.";
-    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":"In progress")+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
+    std::string body=skills_page?"No skills match this filter.":"No quests match this filter.";
+    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(skills_page?(q.progress>=q.goal?"Maximum rank":q.status=="available"?"Available":"Prerequisites unmet"):(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":"In progress"))+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
     const auto lines=Lines(body,298);const int pages=std::max(1,(static_cast<int>(lines.size())+8)/9);
     quest_detail=std::clamp(quest_detail,0,pages-1);
     for(int i=0;i<9&&quest_detail*9+i<static_cast<int>(lines.size());++i)Text(40+i,Literal(lines[quest_detail*9+i]),295,150+i*21,300);
@@ -409,7 +413,8 @@ void Run(std::uint16_t pressed) {
     if (pressed & PAD_TRIANGLE) {
         ReviewTrust();
     }
-    if (pressed & PAD_L1) { OpenQuests(); }
+    if (pressed & PAD_L2) { OpenQuests(true); }
+    else if (pressed & PAD_L1) { OpenQuests(); }
     else if (pressed & PAD_R1) {
         OpenActions();
     }
@@ -434,7 +439,9 @@ void Run(std::uint16_t pressed) {
     }
     if (clicked & 1) {
         const int hit = list.HitTest(px, py, static_cast<int>(Shared().Preview().Packages().size()));
-        if (hit >= 0) {
+        if (Inside(445,90,155,30)&&!SelectedQuestOwner(true).empty()) {
+            OpenQuests(true);
+        } else if (hit >= 0) {
             selected = hit;
             detail = 0;
         } else if (Inside(40, 393, 135, 28)) {
@@ -484,7 +491,8 @@ void Draw() {
         return;
     }
     UI::Divider::DrawVertical(282, 148, 348);
-    Text(0, "Chronicle Mod Manager", 42, 94, 540, true);
+    Text(0, "Chronicle Mod Manager", 42, 94, 390, true);
+    if(!SelectedQuestOwner(true).empty())Text(65,"{l2} Skills",445,94,155);
     Text(1, Shared().Pending() ? "Changes saved. Restart to apply." : "Select a mod. Changes apply after restart.", 42, 120, 550);
     const auto &packages = Shared().Preview().Packages();
     if (packages.empty()) {

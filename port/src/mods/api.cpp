@@ -2,6 +2,7 @@
 #include "combat_rules.hpp"
 #include "atla.hpp"
 #include "quests.hpp"
+#include "skills.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -37,6 +38,11 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"skills.register", "game.write", "Register an immutable owned skill tree.", true},
+    {"skills.list", "game.read", "List owned trees, ranks and prerequisites.", false},
+    {"skills.get", "game.read", "Read an owned skill node.", false},
+    {"skills.unlock", "game.write", "Increase one owned skill rank after prerequisite checks.", true},
+    {"skills.set_rank", "game.write", "Set or reset an owned skill rank.", true},
     {"quests.register", "game.write", "Register a persistent objective owned by this package.", true},
     {"quests.start", "game.write", "Start an owned registered quest; completed quests cannot restart.", true},
     {"quests.advance", "game.write", "Advance this package's objective progress transactionally.", true},
@@ -330,6 +336,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
         return "arguments must be an object";
     }
     if (name.starts_with("quests.")) return ValidateQuestOperation(name,a);
+    if (name.starts_with("skills.")) return ValidateSkillOperation(name,a);
     if (name == "services.command" || name == "services.query") {
         if (a.size() != 3 || !a.contains("provider") || !a["provider"].is_string() ||
             !a.contains("name") || !a["name"].is_string() || !a.contains("arguments") || !a["arguments"].is_object()) {

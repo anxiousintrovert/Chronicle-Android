@@ -21,6 +21,11 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `skills.register` | `id`, `title`, `description`, `nodes` | `game.write` | Register immutable owned tree |
+| `skills.list` | none | `game.read` | Owned trees and node status |
+| `skills.get` | `tree`, `id` | `game.read` | Node rank and missing prerequisites |
+| `skills.unlock` | `tree`, `id` | `game.write` | Increase rank by one |
+| `skills.set_rank` | `tree`, `id`, `rank` | `game.write` | Set/reset rank within bounds |
 | `quests.register` | `id`, `title`, `description`, `goal` or `objectives`, optional `explicit_start`, `rewards` | `game.write` | Register an owned saved objective; returns its status |
 | `quests.start` | `id` | `game.write` | Activate an owned registered quest; completed quests cannot restart |
 | `quests.advance` | `id`, `amount`, optional `objective` | `game.write` | Transactionally advance an owned objective; returns its status |
@@ -112,7 +117,7 @@ status object to be active; an explicit benched character is rejected.
 Weapon slots are 0–10. Amount and HP arguments are integers 0–32767. Water values
 may be fractional, finite and 0–32767. Lua arguments use a root object with string keys. Values can be finite numbers,
 booleans, UTF-8 strings, nested objects, or consecutive 1-based arrays. Empty Lua
-tables represent objects. Limits: depth 8, 128 nodes (object keys count too),
+tables represent objects. Default limits: depth 8, 128 nodes (object keys count too),
 128-byte keys without NUL, and 16 KiB encoded JSON. Cycles, mixed/sparse arrays,
 functions and userdata are rejected without invoking metamethods. Each operation
 still validates its own documented argument types and fields. Flag queries return `{value = number}`. Empty read arguments may be omitted. Native numeric IDs and slots do
@@ -2549,3 +2554,58 @@ or floor counts again; uninterrupted frames on the same floor do not.
 Automatic pickup, Georama and dialogue event bindings are not implemented yet.
 These bindings add no default quests, change no native enemy rewards, and keep
 all capture disabled when no mod needs it.
+
+
+## Owned skill trees
+
+Require skills.trees.v1. Shared Lua/native calls are skills.register (game.write),
+skills.list/get (game.read), and skills.unlock/set_rank (game.write). These are
+owned progression services; declaring or ranking a node does not change native
+stats, spend currency or grant a combat bonus. Effect declarations are rejected.
+Authors can combine rank changes with existing transactional writes in one
+callback. Passive native skill effects and training-request events remain future
+work; this API does not reserve a custom item, weapon or cutscene registry.
+
+```lua
+assert(chronicle.call("skills.register", {
+    id = "combat", title = "Combat", description = "Training", nodes = {
+        {id = "focus", title = "Focus", description = "Build focus", max_rank = 2},
+        {id = "power", title = "Power", description = "Build power", max_rank = 3,
+         prerequisites = {{id = "focus", rank = 2}}}
+    }
+}))
+assert(chronicle.call("skills.unlock", {tree = "combat", id = "focus"}))
+local focus = assert(chronicle.call("skills.get", {tree = "combat", id = "focus"}))
+local trees = assert(chronicle.call("skills.list", {})).trees
+```
+
+An owner can register 32 trees with 1..128 nodes each. IDs follow package-style
+ASCII rules (1..96 bytes); titles and required descriptions are 1..256 bytes,
+without control characters. max_rank is an integer 1..99. Optional prerequisites
+are a list of unique {id, rank} references within that same tree, at most 128;
+targets must exist, ranks must fit the target maximum, and cycles are rejected.
+Definitions are immutable: identical registration is idempotent, changed content
+fails. Unknown fields, including effects, fail validation.
+
+get returns node metadata, tree, rank, available and missing prerequisites. list
+returns trees in lexical ID order and nodes in authored order. unlock increases
+one rank after prerequisite checks; set_rank accepts tree, id and rank 0..99,
+bounded by the node maximum. Increases require prerequisites; lowering/resetting
+is allowed. A reset preserves dependent ranks but can make their next increase
+unavailable. There are no inferred respec refunds or automatic dependent resets.
+
+State lives in owned skill_trees and skill_ranks, participates in callback/native
+commit rollback, and is validated before loading. Missing trees/nodes and invalid
+ranks reject the load without replacing live state. Tree-definition migrations
+are not implemented; package-version requirements still apply.
+
+The shared manager exposes L2 Skills for the selected active package (also a
+clickable header button). Its read-only page shows node rank, maximum, tree,
+description and missing prerequisites; controller/mouse navigation and filters
+reuse the shared progression page. Opening it never trains nodes. Authors can
+provide explicit training actions through the existing mod-action service.
+
+Tree registration alone uses an expanded transport budget: 65536 JSON nodes and
+2 MiB encoded request, retaining depth eight and 128-byte keys. Other host calls
+keep the default 128-node/16-KiB budget. The Lua memory/instruction limits and
+overall saved-state limits still apply; this is not an unrestricted serializer.

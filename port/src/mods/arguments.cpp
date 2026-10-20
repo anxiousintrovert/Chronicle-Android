@@ -11,15 +11,16 @@ extern "C" {
 namespace mods {
 namespace {
 using Json = nlohmann::json;
-constexpr unsigned max_depth = 8, max_nodes = 128, max_bytes = 16384;
+constexpr unsigned max_depth = 8;
 
 struct Budget {
+    ArgumentLimits limits;
     unsigned                                nodes = 0, bytes = 0;
     std::array<const void *, max_depth + 1> ancestors{};
 };
 
 void Check(unsigned depth, Budget &budget, unsigned bytes = 0) {
-    if (depth > max_depth || ++budget.nodes > max_nodes || bytes > max_bytes - budget.bytes) {
+    if (depth > max_depth || ++budget.nodes > budget.limits.nodes || bytes > budget.limits.bytes - budget.bytes) {
         throw std::runtime_error("host arguments exceed depth, node or byte limit");
     }
     budget.bytes += bytes;
@@ -41,7 +42,7 @@ void CheckJson(const Json &value, unsigned depth, Budget &budget) {
         }
     } else if (value.is_string()) {
         const auto &s = value.get_ref<const std::string &>();
-        if (s.size() > max_bytes - budget.bytes) {
+        if (s.size() > budget.limits.bytes - budget.bytes) {
             throw std::runtime_error("host argument string too large");
         }
         budget.bytes += static_cast<unsigned>(s.size());
@@ -73,7 +74,7 @@ void Read(lua_State *L, int index, Json &out, unsigned depth, Budget &budget) {
         case LUA_TSTRING: {
             size_t      length;
             const char *s = lua_tolstring(L, index, &length);
-            if (length > max_bytes - budget.bytes) {
+            if (length > budget.limits.bytes - budget.bytes) {
                 throw std::runtime_error("host argument string too large");
             }
             budget.bytes += static_cast<unsigned>(length);
@@ -117,7 +118,7 @@ void Read(lua_State *L, int index, Json &out, unsigned depth, Budget &budget) {
             Read(L, -1, out[std::string(key, length)], depth + 1, budget);
         } else if (lua_isinteger(L, -2)) {
             const auto key = lua_tointeger(L, -2);
-            if (object || key < 1 || key > max_nodes) {
+            if (object || key < 1 || key > budget.limits.nodes) {
                 throw std::runtime_error("array keys must be consecutive positive integers");
             }
             if (!array) {
@@ -138,15 +139,19 @@ void Read(lua_State *L, int index, Json &out, unsigned depth, Budget &budget) {
 }
 } // namespace
 
-std::string ValidateArguments(const nlohmann::json &value) {
+ArgumentLimits OperationArgumentLimits(std::string_view operation) {
+    return operation=="skills.register"?ArgumentLimits{65536,2*1024*1024}:ArgumentLimits{};
+}
+
+std::string ValidateArguments(const nlohmann::json &value, ArgumentLimits limits) {
     try {
         if (!value.is_object()) {
             return "host arguments must be an object";
         }
-        Budget budget;
+        Budget budget{limits};
         CheckJson(value, 0, budget);
-        if (value.dump().size() > max_bytes) {
-            return "encoded host arguments exceed 16 KiB";
+        if (value.dump().size() > budget.limits.bytes) {
+            return limits.bytes==16384?"encoded host arguments exceed 16 KiB":"encoded host arguments exceed operation byte limit";
         }
     } catch (const std::exception &e) {
         return e.what();
@@ -154,16 +159,16 @@ std::string ValidateArguments(const nlohmann::json &value) {
     return {};
 }
 
-bool ReadArguments(lua_State *L, int index, nlohmann::json &value, std::string &error) {
+bool ReadArguments(lua_State *L, int index, nlohmann::json &value, std::string &error, ArgumentLimits limits) {
     const int top = lua_gettop(L);
     try {
-        Budget budget;
+        Budget budget{limits};
         if (lua_isnoneornil(L, index)) {
             value = Json::object();
         } else {
             Read(L, index, value, 0, budget);
         }
-        error = ValidateArguments(value);
+        error = ValidateArguments(value,limits);
     } catch (const std::exception &e) {
         error = e.what();
     }
