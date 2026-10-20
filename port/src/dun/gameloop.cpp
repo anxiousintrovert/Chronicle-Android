@@ -1101,7 +1101,7 @@ PORT_OVERRIDE void motionDrive() {
     // Every hit that is still in the air counts down and drifts.
     CCollisionData *collision = NowColData;
 
-    for (i = 0; i < 96; i++) {
+    for (i = 0; i < collision->HitLimit(); i++) {
         if (collision->active[i] == 0) {
             continue;
         }

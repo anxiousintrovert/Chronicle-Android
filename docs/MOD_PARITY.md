@@ -2241,3 +2241,32 @@ on front/back floors and native terrain comparisons. This validates capacity
 calculations, not 256 populated actors in play. Both 3,840-case seed exports
 retain prior hashes, differing from pinned upstream only in map storage size.
 PS2 unchanged; other platforms unverified.
+
+
+### Expanded hit-record storage and resource audit (2026-10-20)
+
+CCollisionData now reserves 8,288 records, with an active limit of 96 by
+default. Explicit PrepareForMonsterSlots requests above sixteen enable
+96 + slots*32 records (sixteen attack spheres over two ticks plus shared
+headroom). Native Set, player/monster queries and hit lifetime iteration
+obey that active limit. Floor preparation clears retiring records before
+shrinking. Expanded exhaustion throws before overwriting a record; the
+retail allocation path remains unchanged. This internal pool preparation
+is not yet connected to public higher populations.
+
+Tests fill the full pool, verify slot-255 owner 1475 survives, query the last
+record, reject exhaustion without overwrite and clear back to 96. Source
+audit found no hardcoded byte-copy consumers of CCollisionData.
+
+The audio audit identified an additional blocker: current_monster*2 reaches
+256 at slot 128, but CSound's queued effect messages narrow voice to uint8_t,
+aliasing slot 0. The native sequence pool also has only 32 records. These
+need an expanded-only allocation/routing solution using official Kazarov;
+no private renderer/audio fork or PS2 edits are introduced. Exhaustion
+reporting, floor integration and high-population combat validation remain.
+
+Clang 23.1.2 Windows game/test builds pass; 814 tests passed, 59 skipped,
+1 disabled; 29 Python checks and three fresh PAL replays (retail Cave,
+managed Cave/Forest) pass. Both 3,840-case no-mod/disabled-mod seed exports
+retain prior hashes and differ from pinned upstream only in map storage
+size. PS2 unchanged; other platforms and high-population play unverified.
