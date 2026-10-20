@@ -2,6 +2,7 @@
 """Inspect original texture captures and export lossless RGBA PNGs; no external dependencies."""
 import argparse
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -59,14 +60,54 @@ def export_png(snapshot, output):
     return {'name':info['name'],'original_sha256':info['original_sha256'],'source':output.name}
 
 
+def create_package(snapshot, image, package_id, output):
+    spec=importlib.util.spec_from_file_location('chronicle_mod',Path(__file__).with_name('chronicle_mod.py'))
+    author=importlib.util.module_from_spec(spec);spec.loader.exec_module(author)
+    if not author.identity(package_id):raise ValueError("invalid package ID")
+    info,_=read_snapshot(snapshot)
+    output=Path(output)
+    if any(part.lower()=='ps2' for part in output.absolute().parts):raise ValueError("PS2 output is forbidden")
+    parent=output.parent.resolve(strict=True)
+    if any(part.lower()=='ps2' for part in parent.parts):raise ValueError("PS2 output is forbidden")
+    output=parent/output.name
+    image=Path(image)
+    if not image.is_file():raise ValueError("replacement image must be a regular file")
+    with image.open('rb') as stream:png=stream.read(32*1024*1024+1)
+    width,height=author.validate_png_header(png[:33],len(png))
+    manifest={'schema_version':1,'api_version':1,'id':package_id,'name':package_id,
+              'version':'1.0.0','game':'chronicle','files':{},
+              'requires_capabilities':['assets.textures.v1'],
+              'textures':[{'name':info['name'],'original_sha256':info['original_sha256'],'source':'replacement.png'}]}
+    output.mkdir(exist_ok=False)
+    (output/'replacement.png').write_bytes(png)
+    (output/'README.md').write_text(
+        '# '+package_id+'\n\nTexture replacement for '+info['name']+'.\n\n'
+        'Install this folder under your test save mods directory. Enable in the shared\n'
+        'mod manager and restart. New packages are disabled by default. Conflicting\n'
+        'target replacements are blocked; load order does not choose a winner.\n\n'
+        'Original logical size: '+str(info['width'])+'x'+str(info['height'])+'.\n'
+        'Replacement pixel size: '+str(width)+'x'+str(height)+'.\n'
+        'The PNG is copied unchanged. This tool checks its header and limits; runtime\n'
+        'activation fully decodes it. Test rendering and disable/restart in-game.\n',encoding='utf-8')
+    # Publish the manifest last so an interrupted write cannot activate a partial package.
+    (output/'mod.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
+    return {'package':str(output),'id':package_id,'target':manifest['textures'][0],
+            'pixel_width':width,'pixel_height':height,'profile_unchanged':True,
+            'validation':'PNG header only; runtime decoding and gameplay validation still required'}
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     commands=parser.add_subparsers(dest='command',required=True)
     inspect=commands.add_parser('inspect');inspect.add_argument('snapshot')
     export=commands.add_parser('export');export.add_argument('snapshot');export.add_argument('output')
+    package=commands.add_parser('package',help='create a disabled texture package from a capture and replacement PNG')
+    package.add_argument('snapshot');package.add_argument('--image',required=True)
+    package.add_argument('--id',required=True);package.add_argument('--output',required=True)
     args=parser.parse_args()
     try:
-        value=read_snapshot(args.snapshot)[0] if args.command=='inspect' else export_png(args.snapshot,args.output)
+        if args.command=='package':value=create_package(args.snapshot,args.image,args.id,args.output)
+        else:value=read_snapshot(args.snapshot)[0] if args.command=='inspect' else export_png(args.snapshot,args.output)
         print(json.dumps(value,indent=2))
     except (ValueError,OSError) as error: parser.exit(1,str(error)+'\n')
 

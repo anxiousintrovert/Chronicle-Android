@@ -74,3 +74,30 @@ earlier 4K capture differed by at most 15 levels around the replaced body parts.
 Disabled and conflicting packages matched the baseline screenshot exactly.
 These observations apply to this captured scene, not every palette animation,
 texture, renderer setting or platform.
+
+## Create a package from a discovered target
+
+After exporting/editing a texture, generate its manifest without manually copying
+its original content hash. Choose a new package directory under an existing parent:
+
+```text
+python tools/chronicle_texture.py package captures/target.texture --image artwork/upscaled.png --id author.my-texture --output mod-work/my-texture
+python tools/chronicle_mod.py check mod-work/my-texture
+python tools/chronicle_mod.py pack mod-work/my-texture --output my-texture.zip
+python tools/chronicle_mod.py install my-texture.zip --mods "C:/Games/Chronicle/mod-test-save/mods"
+```
+
+Use actual capture/image paths and your own package ID. The snapshot is verified
+against its pixel hash; its name and original identity become the replacement
+target. The selected PNG is copied byte-for-byte as replacement.png, without
+resizing or color conversion. The generated README records logical and physical
+sizes. No Lua script, gameplay permission or enable profile is created. Enable
+through the shared mod manager and restart when ready to test.
+
+The command rejects existing outputs and PS2 destinations. Snapshot validation
+and PNG header/size checks happen before creating the output directory. The
+parent must exist. The offline PNG checks share the author validator and do not
+fully decode the image; runtime activation still performs bounded decoding.
+Generated packages follow the same conflicts, fallback and static-image limits
+as manually authored texture manifests. The retail smoke runner uses this
+command's package-building function for its replacement scenarios, including 4K.

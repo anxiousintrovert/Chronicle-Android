@@ -10,7 +10,7 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 import zlib
-from chronicle_texture import read_snapshot
+from chronicle_texture import read_snapshot, create_package
 
 TEST='ModTextureRetail.LoadedPlayerTexturePreservesCoordinatesAndFullPixels'
 
@@ -33,22 +33,20 @@ def run(build,data,output):
     executable=build/('darkcloud_tests.exe' if os.name=='nt' else 'darkcloud_tests')
     env={k:v for k,v in os.environ.items() if not k.upper().startswith(('DC_','GTEST_'))}
     env['DC_DATA']=str(data)
-    results=[];target=None;original_pixels=None
+    results=[];target=None;original_pixels=None;target_snapshot=None
     for name in ['baseline','roundtrip','replacement','upscaled4k','disabled','conflict']:
         folder=output/name;folder.mkdir()
         if target:
             ids=['audit.texture']+(['audit.conflict'] if name=='conflict' else [])
             for id in ids:
-                package=folder/'mods'/id;package.mkdir(parents=True)
+                package=folder/'mods'/id;package.parent.mkdir(exist_ok=True)
                 if name=='roundtrip':image=encode_png(256,256,original_pixels)
                 elif name=='upscaled4k':
                     pixels=upscale_4k(original_pixels);image=encode_png(4096,4096,pixels)
                     (folder/'expected-rgba.sha256').write_text(hashlib.sha256(pixels).hexdigest())
                 else:image=encode_png(512,512,bytes([255,0,255,255])*512*512)
-                (package/'image.png').write_bytes(image)
-                manifest={'schema_version':1,'id':id,'name':id,'version':'1','game':'chronicle','files':{},'requires_capabilities':['assets.textures.v1'],
-                          'textures':[dict(target,source='image.png')]}
-                (package/'mod.json').write_text(json.dumps(manifest))
+                replacement=folder/'replacement-source.png';replacement.write_bytes(image)
+                create_package(target_snapshot,replacement,id,package)
             (folder/'mods-profile.json').write_text(json.dumps({'schema_version':1,'enabled':{id:name!='disabled' for id in ids}}))
         env['DC_TEXTURE_AUDIT']=str(folder);env['DC_TEXTURE_EXPECT']='4096' if name=='upscaled4k' else '512' if name=='replacement' else '256'
         xml=folder/'tests.xml'
@@ -61,10 +59,10 @@ def run(build,data,output):
         if result['active_targets'] != (1 if name in ['roundtrip','replacement','upscaled4k'] else 0):raise ValueError(f'{name} activated unexpected texture targets')
         result['case']=name;results.append(result)
         if name=='baseline':
-            matches=[read_snapshot(path) for path in (folder/'captures').glob('*.texture')]
-            matches=[item for item in matches if item[0]['name']=='c01d03' and item[0]['width']==256 and item[0]['height']==256]
+            matches=[(path,read_snapshot(path)) for path in (folder/'captures').glob('*.texture')]
+            matches=[item for item in matches if item[1][0]['name']=='c01d03' and item[1][0]['width']==256 and item[1][0]['height']==256]
             if len(matches)!=1:raise ValueError('player texture discovery was ambiguous')
-            target={key:matches[0][0][key] for key in ['name','original_sha256']};original_pixels=matches[0][1]
+            target_snapshot,(target,original_pixels)=matches[0]
         print('passed: '+name,flush=True)
     (output/'summary.json').write_text(json.dumps(results,indent=2))
     return results

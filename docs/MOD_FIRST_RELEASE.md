@@ -137,3 +137,19 @@ demand. Completed quests cannot fail or resume. The shared quest page adds a
 Failed filter and reason details. No automatic native failure policy is enabled.
 Clang game/test builds, full regression and PAL menu review passed; see the host
 API and coverage ledger for contracts, counts and platform limits.
+
+## Texture package author command (2026-10-20)
+
+chronicle_texture.py package builds a disabled texture-only package from a
+verified discovery snapshot and a replacement PNG. It retains the original target
+identity and copies PNG bytes unchanged, with logical/pixel sizes in its README.
+PNG header limits are shared with the offline package validator; runtime decoding
+remains mandatory. Tests cover generated manifests, exact image preservation,
+pack/install, no enable profile, existing-output refusal and rejected PS2/invalid
+inputs before output creation. All 74 Python tests passed.
+
+The retail smoke runner now creates packages through this helper. All six PAL
+cases passed: native baseline, unchanged PNG, diagnostic replacement, full 4K
+upscale, disabled and conflict. The 4K GPU pixel hash still matched the complete
+source. The existing Clang-built test binary was used. No native engine, PS2 or
+Kazarov sources changed in this tooling update.

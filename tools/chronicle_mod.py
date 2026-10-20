@@ -213,12 +213,9 @@ def validate(root, data=None):
         require(target not in texture_targets, "duplicate texture target")
         texture_targets.add(target)
         path = contained(root, texture['source'])
-        require(33 <= path.stat().st_size <= 32 * 1024 * 1024, "PNG encoded size exceeds limits or is truncated")
         with path.open('rb') as stream:
             header = stream.read(33)
-        require(header[:16] == b'\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR', "replacement must be PNG")
-        w, h = int.from_bytes(header[16:20], 'big'), int.from_bytes(header[20:24], 'big')
-        require(0 < w <= 8192 and 0 < h <= 8192 and w*h <= 16*1024*1024, "PNG dimensions exceed limits")
+        validate_png_header(header, path.stat().st_size)
     # Runtime activation additionally decodes the PNG pixels; offline checks above inspect headers.
     meshes = mod.get("meshes", [])
     require(isinstance(meshes, list) and len(meshes) <= 16, "meshes must be an array of at most 16 replacements")
@@ -254,6 +251,15 @@ def validate(root, data=None):
             original = contained(Path(data).resolve(strict=True), target)
             require(original.stat().st_size == replacement.stat().st_size, f"asset size mismatch: {target}")
     return mod
+
+
+def validate_png_header(header, encoded_size):
+    """Bound encoded bytes and dimensions; runtime activation still fully decodes."""
+    require(33 <= encoded_size <= 32 * 1024 * 1024, "PNG encoded size exceeds limits or is truncated")
+    require(header[:16] == b'\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR', "replacement must be PNG")
+    w, h = int.from_bytes(header[16:20], 'big'), int.from_bytes(header[20:24], 'big')
+    require(0 < w <= 8192 and 0 < h <= 8192 and w*h <= 16*1024*1024, "PNG dimensions exceed limits")
+    return w, h
 
 
 def create(package_id, output, template="basic"):
