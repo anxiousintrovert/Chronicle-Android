@@ -30,7 +30,7 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 | Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Staged Windows PNG-package rehearsal passed through scripted controller input in the shared manager; conflict/disabled scenes matched the no-mod baseline |
 | Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
 | Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
-| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Allowlisted staging, dependency notice collection, file hashes and initial clean startup passed; final notice review, approved archive and full install rehearsal remain pending |
+| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Clean-source candidate 111f55ce archived and extracted startup passed; dependency notices and hashes included. Notice review and release approval remain pending |
 | Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | [Tester procedure](MOD_BETA_TESTING.md) documents setup and acceptance; candidate-specific results and limitations remain pending |
 
 Do not label a candidate release-ready solely because unit tests pass. Record
@@ -150,6 +150,27 @@ remains locked by the normal mayor introduction. A separate debug-dungeon melee
 probe ended against a wall and did not establish a quest kill. Neither result
 closes floor/combat/reward acceptance. No story flags, HP values or native events
 were changed to manufacture a pass.
+
+## Clean-source Windows candidate 111f55ce (2026-10-20)
+
+The documented Windows helper reran the RelWithDebInfo build with llvm-mingw
+Clang 23.1.2 before staging the clean checkout
+`111f55ce8bafda9cf2efcff5481d27a3e51b30c0`. The generated manifest records
+`checkout_dirty: false` and upstream Kazarov
+`04bd301efd8486c033caf46faf52f179a6022d7c`.
+
+- Local archive: `chronicle-mod-framework-111f55ce-windows-x64.zip`
+- ZIP SHA-256: `68aa0a1f0e8ef08773a5877a4b1fd3a0dbb7cdf078a3011406e548615ec86ff7`
+- Executable SHA-256: `5dfb287aaacf9314ca476ceb900ae6cf29d271a86663ee7d2e8e21a8e4cdb0b2`
+- Contents: 61 selected files plus the manifest, with no preinstalled mods,
+  saves, extracted game assets or local test captures.
+
+The archive passed full entry readback, was extracted into a new directory, and
+completed a three-frame offscreen PAL startup using a new external save directory
+and PATH restricted to Windows directories. The binary hash matches the earlier
+staged installation/quest-menu evidence. This candidate is local and has not been
+published as an approved release. Quest floor/combat/completed-reward acceptance
+and notice review remain open. PS2 baseline and renderer pin checks passed.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 
