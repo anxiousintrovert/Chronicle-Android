@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 
+#include "chronicle/dungeon_build.hpp"
 #include "dungeonmap.hpp"
 
 namespace chronicle::dungeon {
@@ -31,5 +32,16 @@ inline int RetailDummyPart(const CDungeonMap &map, int x, int z) {
     int part;
     std::memcpy(&part, reinterpret_cast<const void *>(address), sizeof(part));
     return part;
+}
+
+// Generation has not published the map extent yet; use the scoped request.
+inline int BuildDummyPart(const CDungeonMap &map, int x, int z) {
+    if (!CustomBuild()) {
+        return RetailDummyPart(map, x, z);
+    }
+    if (x < 0 || z < 0 || x >= GridStride - 1 || z >= GridStride) {
+        return 0; // Bounds and the future transport-road column are not scenery space.
+    }
+    return map.cells[x + z * GridStride].parts_no;
 }
 } // namespace chronicle::dungeon

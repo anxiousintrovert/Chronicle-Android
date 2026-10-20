@@ -68,3 +68,47 @@ TEST(ModDungeonCapacity, RetailSceneryPreservesRowWrappingAndAdjacentFieldReads)
     std::memcpy(&map->events[383].unk_30[16], &expanded_tail, sizeof(expanded_tail));
     EXPECT_EQ(chronicle::dungeon::RetailDummyPart(*map, -1, 0), marker);
 }
+
+TEST(ModDungeonCapacity, ExpandedSceneryStaysInsideGridAndAvoidsFarEntrance) {
+    using namespace chronicle::dungeon;
+    auto       map = std::make_unique<CDungeonMap>();
+    BuildScope scope({64, 46, 3, 6});
+    for (auto &cell : map->cells) {
+        cell.parts_no = MAP_PARTS_NONE;
+    }
+    EXPECT_NE(BuildDummyPart(*map, -1, 0), MAP_PARTS_NONE);
+    EXPECT_NE(BuildDummyPart(*map, 48, 0), MAP_PARTS_NONE);
+    EXPECT_NE(BuildDummyPart(*map, 0, -1), MAP_PARTS_NONE);
+    EXPECT_NE(BuildDummyPart(*map, 0, 48), MAP_PARTS_NONE);
+    EXPECT_NE(BuildDummyPart(*map, 47, 47), MAP_PARTS_NONE);
+    EXPECT_EQ(BuildDummyPart(*map, 46, 47), MAP_PARTS_NONE);
+    map->cells[42 + 42 * GridStride].parts_no = MAP_PARTS_URA_ENTRANCE_NORTH;
+    bool far = false;
+    for (int seed = 1; seed <= 64; ++seed) {
+        srand(seed);
+        map->buildDummyModel();
+        ASSERT_EQ(map->dummy_num, 8);
+        for (int n = 0; n < map->dummy_num; ++n) {
+            const int   kind = map->dummy_model[n];
+            const float offset = kind == 0 ? 80.0f : kind == 1 ? 160.0f
+                                                               : 240.0f;
+            const int   x = static_cast<int>((map->dummy_pos[n][0] - offset) / 160.0f);
+            const int   z = static_cast<int>((map->dummy_pos[n][2] - offset) / 160.0f);
+            const int   side = kind == 2 ? 3 : 2;
+            EXPECT_GE(x, 0);
+            EXPECT_GE(z, 0);
+            EXPECT_LE(x + side, GridStride - 1);
+            EXPECT_LE(z + side, GridStride);
+            const float dx = map->dummy_pos[n][0] - (80 + 160 * 42);
+            const float dz = map->dummy_pos[n][2] - (80 + 160 * 42);
+            EXPECT_GE(dx * dx + dz * dz, 160.0f * 160.0f * (kind + 2) * (kind + 2));
+            far |= x >= 20 || z >= 20;
+        }
+    }
+    EXPECT_TRUE(far);
+    for (auto &cell : map->cells) {
+        cell.parts_no = 0;
+    }
+    map->buildDummyModel();
+    EXPECT_EQ(map->dummy_num, 0);
+}

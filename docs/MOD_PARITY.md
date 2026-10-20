@@ -1852,3 +1852,25 @@ Validation: Clang 23.1.2 Windows game/test builds pass; the full suite has
 Both 3,840-case empty/disabled exports differ from pinned upstream only in
 map memory size. Other platforms and complete expanded-floor gameplay remain
 unverified.
+
+
+### Expanded Moon Sea scenery
+
+Explicit custom generation now samples the full 48-cell grid for Moon Sea
+scenery. Footprints outside the grid or touching the reserved transport-road
+column are rejected. Entrance clearance scans the full custom grid; placement
+still uses the native eight-object limit and bounded retry count. Without a
+custom build scope, the original coordinate range, legacy layout reader and
+20-cell entrance scan remain in use.
+
+A native placement test covers 64 seeds, far-side placement and entrance
+clearance, footprint bounds, the reserved road, and an entirely occupied map
+that terminates with no scenery. Existing 192-case custom generation checks
+also pass. This is placement evidence, not a complete custom-floor playthrough.
+Transport scripts, population/resources and the public owned layout API with
+failure recovery remain outstanding.
+
+Validation: Clang 23.1.2 Windows game/test builds and the full suite pass
+(788 passed, 34 skipped, 1 disabled). All 29 Python checks pass. Empty and
+disabled 3,840-case seed exports retain their previous hashes and match pinned
+upstream except for map memory size. No PS2 originals changed.
