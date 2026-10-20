@@ -237,3 +237,24 @@ A dependency that was not selected is reported at its requiring package; include
 it with another `--enable` to check its own requirements too. This command only
 previews a selection; it never enables packages or approves native plugins.
 Actual script execution, assets and native trust still require runtime checks.
+
+## Inspect a save before changing a package set
+
+```sh
+python tools/chronicle_mod.py inspect-save path/to/save-file
+```
+
+The read-only JSON report includes the file hash, saved `required` package/version
+map, and `state_owners` (which can include retained state from older packages).
+For modded saves it verifies the existing CRC over the native image and metadata.
+A valid CRC establishes byte integrity, not trust or gameplay compatibility.
+The command never loads a plugin, executes Lua/migrations, enables packages or
+rewrites the save. Private owned values are not included in the report.
+
+The inspector uses Chronicle's native image boundary, not a search for marker
+text within arbitrary files. It rejects oversized, truncated, corrupt and
+malformed metadata. For a plain native save, `checksum: not_checked` means only
+that its size matches the expected image size; the game must validate the native
+version/checksum. For every save, owned-state semantics, installed dependency
+compatibility and migration availability still require game validation. Keep a
+backup before changing the packages used by an existing save.

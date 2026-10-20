@@ -60,6 +60,52 @@ class AuthorTools(unittest.TestCase):
             {'path': ['test.root', 'test.provider'], 'reason': 'declared conflict: test.other'},
             {'path': ['test.root', 'test.provider', 'test.absent'], 'reason': 'missing or duplicate package ID'}])
 
+    def test_save_inspection_boundary_matches_native_writer(self):
+        import re
+        source = Path(tool.__file__).resolve().parents[1] / 'port/src/memorycardaccess.cpp'
+        match = re.search(r'constexpr int kImageSize = (0x[0-9A-Fa-f]+);', source.read_text())
+        self.assertIsNotNone(match)
+        self.assertEqual(tool.SAVE_NATIVE_SIZE, int(match.group(1), 16))
+
+    def test_inspect_save_verifies_entire_image_and_reports_required_versions(self):
+        import zlib
+        path = self.root / 'save.bin'
+        native = bytes(tool.SAVE_NATIVE_SIZE)
+        metadata = {'schema_version': 1, 'required': {'test.quest': '1.2.3'},
+                    'mods': {'test.quest': {'values': {'secret': 'not in report'}}, 'test.retained': {}}}
+        raw = native + tool.SAVE_MARKER + json.dumps(metadata).encode()
+        image = raw + zlib.crc32(raw).to_bytes(4, 'little')
+        path.write_bytes(image)
+        result = tool.inspect_save(path)
+        self.assertEqual(result['required'], {'test.quest': '1.2.3'})
+        self.assertEqual(result['state_owners'], ['test.quest', 'test.retained'])
+        self.assertEqual(result['checksum'], 'verified')
+        self.assertNotIn('secret', json.dumps(result))
+        self.assertEqual(path.read_bytes(), image)
+        for index in [0, tool.SAVE_NATIVE_SIZE + len(tool.SAVE_MARKER), len(image)-1]:
+            broken = bytearray(image); broken[index] ^= 1; path.write_bytes(broken)
+            with self.assertRaisesRegex(ValueError, 'checksum'): tool.inspect_save(path)
+        path.write_bytes(native)
+        self.assertEqual(tool.inspect_save(path)['format'], 'native')
+        self.assertEqual(tool.inspect_save(path)['checksum'], 'not_checked')
+
+    def test_inspect_save_rejects_bad_boundaries_json_and_oversized_input(self):
+        import zlib
+        path = self.root / 'save.bin'
+        for data in [b'', bytes(tool.SAVE_NATIVE_SIZE-1), bytes(tool.SAVE_NATIVE_SIZE)+b'unknown',
+                     bytes(tool.SAVE_NATIVE_SIZE+len(tool.SAVE_MARKER)+tool.SAVE_METADATA_LIMIT+5)]:
+            path.write_bytes(data)
+            with self.assertRaises(ValueError): tool.inspect_save(path)
+        for payload in [b'{}', b'{"schema_version":1,"schema_version":1}',
+                        b'{"schema_version":true,"mods":{},"required":{}}',
+                        b'{"schema_version":1,"mods":{},"required":{"test.mod":42}}',
+                        b'{"schema_version":1,"mods":{"test.mod":[]},"required":{}}',
+                        b'{"schema_version":1,"mods":{},"required":{},"bad":NaN}',
+                        b'['*2000+b']'*2000]:
+            raw=bytes(tool.SAVE_NATIVE_SIZE)+tool.SAVE_MARKER+payload
+            path.write_bytes(raw+zlib.crc32(raw).to_bytes(4,'little'))
+            with self.assertRaises(ValueError): tool.inspect_save(path)
+
     def test_quest_template_pack_install_preserves_script_and_stays_disabled(self):
         folder = self.root / "authored"
         self.assertEqual(tool.main(["new", "test.hunt", "--template", "quest", "--output", str(folder)]), 0)

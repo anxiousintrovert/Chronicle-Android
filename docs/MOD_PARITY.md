@@ -4223,3 +4223,14 @@ passed without skipping. Local evidence is under
 `issue-evidence/framework-expansion-20261019/skill-defense-retail-20261020`.
 This is a running-game native-hook probe, not a controller-driven combat
 playthrough or an owner-failure scenario. Those broader limits remain explicit.
+
+## Read-only save requirement inspection (2026-10-20)
+
+`chronicle_mod.py inspect-save` reports saved package versions and retained state
+owners without loading the save or exposing owned values. Modded files must pass
+the native writer's whole-image CRC, trailer boundary and bounded metadata
+checks. Native-only files are explicitly marked as not checksum-validated.
+This does not implement save branching, migration execution or semantic/native
+save validation. Tests cover corruption in native and metadata bytes, malformed
+JSON, duplicates, excessive nesting, size limits and native image-boundary drift.
+All 79 Python author-tool tests passed. No engine changes were needed.

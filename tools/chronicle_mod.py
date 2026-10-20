@@ -12,6 +12,7 @@ import stat
 import tempfile
 import uuid
 import zipfile
+import zlib
 
 CAPABILITIES = {
     "quests.custom_events.v1", "quests.failure.v1", "quests.ordering.v1", "assets.textures.v1", "skills.training.v1", "skills.defense.v1", "skills.effects.v1", "skills.trees.v1", "quests.events.v1", "quests.rewards.v1", "quests.lifecycle.v1", "quests.objectives.v1", "quests.dynamic.v1", "quests.read.v1", "save.migrations.v1", "assets.mesh_replace.v1", "combat.rules.v1", "entities.spawn_tuning.v1",
@@ -524,6 +525,49 @@ def compare_seeds(baseline, candidates, allow_map_size_change=False):
     return result
 
 
+# Native image boundary from port/src/memorycardaccess.cpp (kImageSize).
+SAVE_NATIVE_SIZE = 0x136A7
+SAVE_MARKER = b"\nCHRONICLE_MODS_V1\n"
+SAVE_METADATA_LIMIT = 4 * 1024 * 1024
+
+
+def inspect_save(path):
+    """Read requirements only; never load game state or execute migrations."""
+    maximum = SAVE_NATIVE_SIZE + len(SAVE_MARKER) + SAVE_METADATA_LIMIT + 4
+    with Path(path).open('rb') as source:
+        image = source.read(maximum + 1)
+    require(SAVE_NATIVE_SIZE <= len(image) <= maximum, 'invalid mod save length')
+    report = {'path': str(path), 'bytes': len(image),
+              'sha256': hashlib.sha256(image).hexdigest(),
+              'native_bytes': SAVE_NATIVE_SIZE,
+              'scope': 'metadata inspection only; native save validity, owned state semantics, installed packages and migrations require game validation'}
+    if len(image) == SAVE_NATIVE_SIZE:
+        return dict(report, format='native', checksum='not_checked', required={}, state_owners=[])
+    require(len(image) >= SAVE_NATIVE_SIZE + len(SAVE_MARKER) + 4
+            and image[SAVE_NATIVE_SIZE:SAVE_NATIVE_SIZE + len(SAVE_MARKER)] == SAVE_MARKER,
+            'unknown or damaged mod save extension')
+    require(int.from_bytes(image[-4:], 'little') == zlib.crc32(image[:-4]),
+            'mod save checksum mismatch')
+    def reject_constant(value):
+        raise ValueError('nonfinite JSON number in save metadata')
+    try:
+        metadata = json.loads(image[SAVE_NATIVE_SIZE + len(SAVE_MARKER):-4].decode('utf-8'),
+                              object_pairs_hook=unique, parse_constant=reject_constant)
+    except RecursionError as error:
+        raise ValueError('save metadata nesting is too deep') from error
+    require(isinstance(metadata, dict) and type(metadata.get('schema_version')) is int
+            and metadata['schema_version'] == 1, 'invalid mod state format')
+    owners, required = metadata.get('mods'), metadata.get('required')
+    require(isinstance(owners, dict) and len(owners) <= 1024
+            and all(identity(key) and isinstance(value, dict) for key, value in owners.items()),
+            'invalid mod state owners')
+    require(isinstance(required, dict) and len(required) <= 1024
+            and all(identity(key) and isinstance(value, str) and value for key, value in required.items()),
+            'invalid gameplay mod requirements')
+    return dict(report, format='chronicle_mods_v1', checksum='verified',
+                required=dict(sorted(required.items())), state_owners=sorted(owners))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -539,6 +583,8 @@ def main(argv=None):
     installer = commands.add_parser("install", help="install a package ZIP offline; optional backed-up replacement")
     installer.add_argument("archive"); installer.add_argument("--mods", required=True)
     installer.add_argument("--replace", action="store_true"); installer.add_argument("--data")
+    saved = commands.add_parser("inspect-save", help="read save requirements without loading or modifying the save")
+    saved.add_argument("save")
     commands.add_parser("capabilities")
     commands.add_parser("apis", help="print implemented host operations and permissions")
     doctor = commands.add_parser("check-set", help="preview selected package conflicts without enabling anything")
@@ -550,6 +596,9 @@ def main(argv=None):
                        help="also compare all parsed fields except map_bytes; retain raw hashes and mismatch results")
     args = parser.parse_args(argv)
     try:
+        if args.command == "inspect-save":
+            print(json.dumps(inspect_save(args.save), indent=2))
+            return 0
         if args.command == "compare-seeds":
             report = compare_seeds(args.baseline, args.candidates, args.allow_map_size_change)
             print(json.dumps(report, indent=2))
