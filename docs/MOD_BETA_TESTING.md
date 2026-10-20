@@ -81,6 +81,10 @@ Keep the package at its recorded version when loading these saves. The shipped
 example README documents the supported migration. Controlled native-event and
 disk-save tests already exist; report this normal-controls playthrough separately.
 
+For the validated controller-driven start, save/load and abandon/restart subset,
+see [the PAL quest menu fixtures](../tools/fixtures/beta-quest-menu/README.md).
+They use a disposable early-game save and do not complete the floor/combat gates.
+
 ## Texture acceptance
 
 Use a package matching the original texture identity in your own data. Follow

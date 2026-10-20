@@ -26,7 +26,7 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 
 | Gate | Evidence required before beta delivery | Current boundary |
 |---|---|---|
-| Quest playthrough | Start the shipped contract through the shared menu, enter a floor, defeat enemies through normal controls, receive exactly one reward, save/reload, and verify cancellation/restart | Runtime, disk-save and controlled native poison-death tests exist; normal-controls end-to-end acceptance is pending |
+| Quest playthrough | Start the shipped contract through the shared menu, enter a floor, defeat enemies through normal controls, receive exactly one reward, save/reload, and verify cancellation/restart | Scripted controller start, native menu save/load and abandon/restart passed for an unadvanced contract; normal-controls floor/combat/completed-reward acceptance remains pending |
 | Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Staged Windows PNG-package rehearsal passed through scripted controller input in the shared manager; conflict/disabled scenes matched the no-mod baseline |
 | Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
 | Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
@@ -129,6 +129,27 @@ This is an archive-tool rehearsal using the earlier staged build, not the approv
 release candidate. It contains no test save or retail capture. Final clean-source
 staging, notice review and normal-controls quest acceptance remain open; archive
 creation alone must not be treated as approval to publish.
+
+## Controller-driven quest start/save/load and cancellation (2026-10-20)
+
+The staged Windows game installed and enabled the exact shipped Dungeon Contract
+1.1.0, started a normal new game from the title, and reached Norune through its
+opening. Scripted pad input navigated town Options > Mods > Actions to start the
+contract, then the native Save/Load menu saved slot 1. The saved trailer checksum
+verified, required version 1.1.0 and contained the owned started flag.
+
+Separate game processes loaded that slot through the title Load option. Reviewed
+quest-page screenshots showed In progress 0/3 after load, Not started 0/3 after
+Abandon, and In progress 0/3 after Start again. The input sequences are preserved
+in [the quest menu fixtures](../tools/fixtures/beta-quest-menu/README.md); retail
+screenshots and saves remain local. This uses the existing staged Clang binary;
+no engine, PS2 or renderer source changed.
+
+The contract had no completed objectives. Dungeon travel from this early save
+remains locked by the normal mayor introduction. A separate debug-dungeon melee
+probe ended against a wall and did not establish a quest kill. Neither result
+closes floor/combat/reward acceptance. No story flags, HP values or native events
+were changed to manufacture a pass.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 
