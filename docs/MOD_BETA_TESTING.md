@@ -139,3 +139,28 @@ The manifest itself is not signed and does not certify a release. Acceptance
 checks and notice review remain required, including the supplied glyph artwork's
 missing attribution noted in `notices/Glyph-provenance.md`. Keep test saves and
 logs outside this bundle, then archive and hash the approved candidate separately.
+
+### Repeat the staged installation rehearsal
+
+Use an original player-body discovery snapshot and a visibly different replacement
+PNG made from your own PAL data. The runner creates two default-disabled texture
+packages, packs and installs them through the author CLI, then uses scripted pad
+input to navigate the title Options screen and shared mod manager. It never writes
+an enable profile itself. All generated assets, profiles and screenshots stay local.
+
+```powershell
+python tools/chronicle_beta_install_smoke.py --bundle "C:\Candidates\chronicle-beta" --data "C:\ChronicleData" --snapshot "C:\Captures\body.texture" --image "C:\Captures\diagnostic.png" --output "C:\Audits\new-install-run"
+```
+
+The runner verifies bundle hashes first and uses a new external test save directory.
+On Windows it removes development-tool directories from the child game's PATH.
+It records startup reports separately from next-launch selections, checking actual
+activation only across separate processes. Every phase saves the controller input,
+log, screenshot and report; changed profiles are copied as evidence, never edited.
+The final profile must disable both packages. `result.json` records checked phases.
+
+Review the scene screenshots separately: enabled replacement must be visible;
+conflict and disabled scenes should recover the original. Successful report checks
+alone do not establish rendering correctness. This uses startup jumps to the title
+and a fixed town scene; it does not certify normal quest combat, new-game progression
+or save/load. The controller timing is a PAL Windows fixture, not a general UI bot.

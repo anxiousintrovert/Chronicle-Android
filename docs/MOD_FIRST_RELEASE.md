@@ -27,7 +27,7 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 | Gate | Evidence required before beta delivery | Current boundary |
 |---|---|---|
 | Quest playthrough | Start the shipped contract through the shared menu, enter a floor, defeat enemies through normal controls, receive exactly one reward, save/reload, and verify cancellation/restart | Runtime, disk-save and controlled native poison-death tests exist; normal-controls end-to-end acceptance is pending |
-| Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Component/isolated texture evidence exists; distribution-level rehearsal is pending |
+| Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Staged Windows PNG-package rehearsal passed through scripted controller input in the shared manager; conflict/disabled scenes matched the no-mod baseline |
 | Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
 | Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
 | Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Allowlisted staging, dependency notice collection, file hashes and initial clean startup passed; final notice review, approved archive and full install rehearsal remain pending |
@@ -87,6 +87,32 @@ disabled and conflicting cases against the rebuilt test binary. All 85 Python
 tests passed after adding the bundle checks. PS2 baseline and upstream Kazarov
 remain unchanged. Normal-controls quest acceptance and the complete staged
 install/enable/conflict/disable/restart workflow are still outstanding.
+
+## Staged install and shared-menu restart rehearsal (2026-10-20)
+
+The new `chronicle_beta_install_smoke.py` ran the staged Windows executable from
+the previous clean Clang build, with a fresh external save directory and a Windows
+system-only PATH. It verified the bundle's hashes, packed/installed two generated
+texture packages using the author CLI, and used the game's scripted controller
+input to open title Options > Mods > Mod Manager. No enable profile was written
+by the runner. Fourteen phases passed: baseline, disabled installation, enable
+preview, enabled restart/scene, second disabled installation, conflict preview,
+blocked restart/scene, conflict disable preview, recovered restart, original
+disable preview, disabled restart/scene.
+
+Screenshots confirmed the current-session/next-launch distinction. The conflict
+screen named the texture and competing owner; both packages were blocked after
+restart. The enabled town scene visibly applied the magenta diagnostic to the
+intended body texture. Full-image RGB comparisons found the conflict and disabled
+scenes pixel-identical to the no-mod baseline; the enabled image differed only
+within the character's replacement region. Both final profile selections were
+false. Startup reports stayed unchanged during preview edits as designed.
+
+The fixture uses startup jumps and scripted normal pad input, not direct calls to
+the manager or runtime toggle functions. This closes the representative staged
+texture installation/restart gate; it does not close the normal-controls quest
+playthrough gate or certify every asset/platform. No native engine, PS2 or Kazarov
+sources changed. Final notice review and release archive remain pending.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 
