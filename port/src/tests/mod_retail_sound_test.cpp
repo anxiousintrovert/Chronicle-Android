@@ -89,7 +89,11 @@ TEST(ModRetailSound, ExplicitDispatchWaitsForNativeStepAndRejectsMissingProgram)
     EXPECT_TRUE(std::ranges::any_of(output, [](float sample) { return sample != 0; }));
     auto missing = row; missing.bank = 100;
     EXPECT_FALSE(mods::QueueRetailEffect(missing, 127, error));
-    sound.SE_Stop(10, 0, 0, 0); sound.Step();
+    const auto saved_effect = se_info[1000];
+    se_info[1000] = row; // synthetic actor sequence uses the fixture bank/program
+    EXPECT_TRUE(mods::RetireActorSoundSequence(1000, 0, -1, -1, -1, error)) << error;
+    se_info[1000] = saved_effect;
+    sound.Step();
     for (int i = 0; i < 10; ++i) mixer.Render(output.data(), 4096);
     EXPECT_EQ(mixer.ActiveVoices(), 0);
     mixer.Reset();

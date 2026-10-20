@@ -26,6 +26,7 @@
 #include "platform/config.hpp"
 
 extern int now_bgm_no, now_bgm_play, bgm_off, load_bgm_no;
+extern SND_SE_SEQ se_seq[chronicle::monsters::SoundSequenceCapacity];
 
 // The IOP's MIDI player is the port's audio::Mixer. Banks and sequences are copied into it rather
 // than into IOP and SPU memory, so the SPU address bookkeeping below survives only to keep
@@ -445,6 +446,21 @@ bool StopRetailBgm(const std::vector<GameCommand> &commands, int money, std::str
     }
     if (load_bgm_no >= 0) { error = "a native music load is pending"; return false; }
     SndBgmStop();
+    error.clear(); return true;
+}
+bool RetireActorSoundSequence(int effect, unsigned slot, int basic, int chapter, int voice_table, std::string &error) {
+    if (slot >= chronicle::monsters::SlotCapacity) { error = "invalid actor sound slot"; return false; }
+    if (effect == -1) { error.clear(); return true; }
+    const auto row = ResolveRetailEffect(effect, basic, chapter, voice_table, error);
+    if (!row) return false;
+    if (g_effect_queue.size() > 4096 - 2) { error = "retail effect queue capacity reached"; return false; }
+    // SE_Stop emits at most a program selection and key-off; it never creates
+    // an expanded voice lease. Reserve before publishing any retirement.
+    g_effect_queue.reserve(g_effect_queue.size() + 2);
+    const int voice = static_cast<int>(slot) * 2;
+    CSnd.SE_Stop(row->port >= 0 ? row->port : MIDI_PORT_SE_DEFAULT, row->bank, row->prog, voice);
+    for (unsigned i = 0; i < chronicle::monsters::SoundSequenceLimit(); ++i)
+        if (se_seq[i].se_no == effect && se_seq[i].voice == voice) se_seq[i].se_no = -1;
     error.clear(); return true;
 }
 bool QueueRetailEffect(const SND_SE_INFO &row, int volume, std::string &error) {

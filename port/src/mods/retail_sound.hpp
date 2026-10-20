@@ -18,6 +18,8 @@ bool RetailEffectHasSamples(const audio::Bank *bank, int program, int effect);
 // Checks the actual loaded port bank and resolves native default volume.
 bool RetailEffectReady(const SND_SE_INFO &row, int volume, std::string &error);
 // Explicit commit-only dispatch; uses the normal driver Step queue.
+// Commit-only retirement of the matching native sound/voice sequence identity.
+bool RetireActorSoundSequence(int effect, unsigned slot, int basic, int chapter, int voice_table, std::string &error);
 bool QueueRetailEffect(const SND_SE_INFO &row, int volume, std::string &error);
 std::string ValidateRetailEffect(const nlohmann::json &arguments);
 bool ApplyRetailEffect(const std::vector<GameCommand> &commands, int money, int basic, int chapter, int voice, std::string &error);

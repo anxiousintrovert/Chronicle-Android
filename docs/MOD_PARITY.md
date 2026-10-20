@@ -3214,3 +3214,23 @@ cleanup. Public operation count remains 135; no claim of completed despawn.
 Validation: Clang 23.1.2 game/test builds and ten focused actor/event tests
 passed, including expanded-slot and array-tail cleanup, unrelated references,
 idempotence and unit/generation isolation. PS2 diff remains empty.
+
+
+### Actor sound-sequence retirement prerequisite (2026-10-20)
+
+Added an internal commit-only sound retirement helper. It resolves the native
+sound row through the bounded lookup, reserves queue capacity before mutation,
+queues the native bank/program/slot-derived voice key-off, then retires matching
+sound-plus-voice sequence entries within the active sequence limit. It does not
+clear other effects on the same voice, another actor's voice, or dormant expanded
+storage. No loop can replay from the matching sequence after it is retired.
+
+The native sequence queue is shared with non-monster sounds, so voice-only
+cleanup would be too broad. This helper preserves native identity semantics;
+callers must still establish live actor ownership and current table selection.
+It has no production caller until full owned actor retirement is connected.
+Spawn/despawn integration, floor placement and gameplay replay remain pending.
+
+Validation: Clang 23.1.2 game/test builds and 13 retail-audio/sequence tests
+passed, including rendered voice release after Step, exact identity matching,
+invalid requests, dormant storage and expanded slot 255. PS2 diff is empty.
