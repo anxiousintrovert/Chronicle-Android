@@ -34,7 +34,7 @@ class AuthorTools(unittest.TestCase):
         operations={entry['name']:entry for entry in tool.apis()}
         for name in names:
             self.assertEqual(operations[name]['writes'],name not in ['skills.list','skills.get'])
-        folder=self.package('test.skills',requires_capabilities=['skills.trees.v1'],requires_operations=names,permissions=['game.read','game.write'])
+        folder=self.package('test.skills',requires_capabilities=['skills.trees.v1','skills.effects.v1'],requires_operations=names,permissions=['game.read','game.write'])
         self.assertEqual(tool.validate(folder)['requires_operations'],names)
 
     def test_dynamic_quest_operations_are_explicit_writes(self):

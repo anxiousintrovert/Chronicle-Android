@@ -24,6 +24,8 @@ extern "C" {
 #include <iterator>
 #include <limits>
 #include <map>
+#include <sstream>
+#include <tuple>
 #include <optional>
 #include <utility>
 
@@ -81,6 +83,7 @@ struct Module {
     std::vector<GameCommand>                                                                             commands;
     std::vector<Emission>                                                                                emissions;
     Module                                                                                              *transaction = nullptr;
+    bool *skill_effects_dirty=nullptr;
     std::map<Module *, Json>                                                                             command_states;
     std::string                                                                                          command_error, service_caller;
     std::unique_ptr<NativeLibrary>                                                                       native;
@@ -103,6 +106,7 @@ struct Module {
 Module &Transaction(Module &m) { return m.transaction ? *m.transaction : m; }
 
 void FinishCommands(Module &m, bool accepted) {
+    if(m.skill_effects_dirty)*m.skill_effects_dirty=true;
     if (!accepted) {
         for (auto &[provider, before] : m.command_states) {
             provider->state->swap(before);
@@ -484,7 +488,7 @@ int ApiCall(lua_State *L) {
     }
     if (op->name.starts_with("skills.")) {
         if(m.read_only&&op->writes)return Failure(L,"query exports cannot write skill state");
-        try {m.snapshot=CallOwnedSkill(*m.state,op->name,m.arguments);}
+        try {m.snapshot=CallOwnedSkill(*m.state,op->name,m.arguments);if(op->writes&&m.skill_effects_dirty)*m.skill_effects_dirty=true;}
         catch(const std::exception &error){m.call_error=error.what();return Failure(L,m.call_error.c_str());}
         PushJson(L,m.snapshot);return 1;
     }
@@ -601,7 +605,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             *result=m.native_result.c_str();return 1;
         }
         if(op->name.starts_with("skills.")) {
-            m.native_result=CallOwnedSkill(*m.state,op->name,args).dump();*result=m.native_result.c_str();return 1;
+            m.native_result=CallOwnedSkill(*m.state,op->name,args).dump();if(op->writes&&m.skill_effects_dirty)*m.skill_effects_dirty=true;*result=m.native_result.c_str();return 1;
         }
         if (op->name == "services.query") {
             Json        value;
@@ -1015,6 +1019,8 @@ struct Runtime::Impl {
     MeshPackages meshes;
     std::vector<std::pair<std::string, std::string>> pending_actions;
     std::vector<CustomEvent>                         pending_events;
+    mutable bool skill_effects_dirty=true;
+    mutable std::vector<double> skill_effects;
 
     // Prepare all allocations before publishing native writes. Swap after commit
     // cannot fail, so failed native/managed transactions never leak notifications.
@@ -1318,6 +1324,7 @@ Runtime::~Runtime() = default;
 
 void Runtime::Start(const Manager &manager) {
     ++epoch_;
+    impl_->skill_effects.clear();impl_->skill_effects_dirty=true;
     impl_->meshes.Clear();
     impl_->plan = manager;
     impl_->modules.clear();
@@ -1341,6 +1348,7 @@ void Runtime::Start(const Manager &manager) {
         auto  module = std::make_unique<Module>();
         auto &m = *module;
         m.package = *found;
+        m.skill_effects_dirty=&impl_->skill_effects_dirty;
         m.invoke = [host = impl_.get()](Module &caller, const char *provider, const char *name, const Json &args, Json &result, std::string &error, bool command) { return host->Invoke(caller, provider, name, args, result, error, command); };
         m.logs = &impl_->logs;
         if (!impl_->state.contains(id)) {
@@ -1495,6 +1503,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
     if (dropped_deaths) {
         impl_->diagnostics.push_back("Enemy event queue overflow: " + std::to_string(dropped_deaths) + " deaths dropped.");
     }
+    impl_->skill_effects_dirty=true;
     // UI requests are consumed exactly once, never carried into another session.
     const auto actions = std::exchange(impl_->pending_actions, {});
     const auto events = std::exchange(impl_->pending_events, {});
@@ -1815,12 +1824,35 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
     }
 }
 
+bool Runtime::HasSkillDamageEffects() const noexcept {
+    if(impl_->skill_effects_dirty) {
+        try {
+            std::map<std::tuple<std::string,std::string,std::string>,double> ordered;
+            for(const auto &m:impl_->modules)if(!m->failed&&Permitted(*m,"game.write"))
+                for(const auto &[id,factor]:SkillDamageFactors(*m->state))ordered.emplace(std::tuple{m->package.id,id.first,id.second},factor);
+            std::vector<double> next;next.reserve(ordered.size());for(const auto &[id,factor]:ordered)next.push_back(factor);
+            impl_->skill_effects.swap(next);
+        } catch(...) {impl_->skill_effects.clear();}
+        impl_->skill_effects_dirty=false;
+    }
+    return !impl_->skill_effects.empty();
+}
+float Runtime::ApplySkillDamage(float damage) const noexcept {
+    if(!std::isfinite(damage)||damage<=0||!HasSkillDamageEffects())return damage;
+    double result=damage;for(double factor:impl_->skill_effects)result=std::min(1000000.0,result*factor);
+    return static_cast<float>(result);
+}
+
 std::vector<SkillStatus> Runtime::Skills() const {
     std::vector<SkillStatus> result;
     for(const auto &m:impl_->modules)if(!m->failed) {
         const auto trees=CallOwnedSkill(*m->state,"skills.list",Json::object());
         for(const auto &tree:trees["trees"])for(const auto &node:tree["nodes"]) {
             auto description=tree["title"].get<std::string>()+"\n\n"+node["description"].get<std::string>();
+            if(node.contains("effects")) {
+                const double rate=node["effects"]["enemy_damage_per_rank"].get<double>();std::ostringstream summary;
+                summary<<"\nEnemy damage: +"<<rate*100<<"% per rank\nCurrent bonus: +"<<rate*100*node["rank"].get<int>()<<"%";description+=summary.str();
+            }
             for(const auto &missing:node["missing"])description+="\nRequires "+missing["id"].get<std::string>()+" rank "+std::to_string(missing["rank"].get<int>());
             result.push_back({m->package.id,tree["id"].get<std::string>(),node["id"].get<std::string>(),node["title"].get<std::string>(),description,node["rank"].get<int>(),node["max_rank"].get<int>(),node["available"].get<bool>()});
         }

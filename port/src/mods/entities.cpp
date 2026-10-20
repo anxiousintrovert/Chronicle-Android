@@ -388,7 +388,9 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
                 error = "pending native damage reaction capacity is exhausted";
                 return false;
             }
-            value.damage = std::min(hp, command.arguments.at("amount").get<int>());
+            const int requested=command.arguments.at("amount").get<int>();
+            const int adjusted=Scripts().HasSkillDamageEffects()?static_cast<int>(std::lround(Scripts().ApplySkillDamage(static_cast<float>(requested)))):requested;
+            value.damage = std::min(hp,adjusted);
             hp -= value.damage;
             value.reaction = hp == 0 ? MONSTER_DMG_KILLED : MONSTER_DMG_HIT;
             continue;

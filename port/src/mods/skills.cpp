@@ -1,6 +1,7 @@
 #include "skills.hpp"
 #include <algorithm>
 #include <functional>
+#include <cmath>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -24,11 +25,17 @@ std::string Definition(const Json &a) {
         return "tree requires id, title, description and 1..128 nodes";
     std::map<std::string,const Json *> nodes;
     for(const auto &node:a["nodes"]) {
-        if(!node.is_object()||node.size()!=4u+unsigned(node.contains("prerequisites"))||
+        if(!node.is_object()||node.size()!=4u+unsigned(node.contains("prerequisites"))+unsigned(node.contains("effects"))||
            !node.contains("id")||!Id(node["id"])||!node.contains("title")||!Text(node["title"])||
            !node.contains("description")||!Text(node["description"])||!node.contains("max_rank")||
            !node["max_rank"].is_number_integer()||node["max_rank"]<1||node["max_rank"]>99||
            !nodes.emplace(node["id"].get<std::string>(),&node).second)return "invalid or duplicate skill node";
+        if(node.contains("effects")) {
+            const auto &effects=node["effects"];
+            if(!effects.is_object()||effects.size()!=1||!effects.contains("enemy_damage_per_rank")||!effects["enemy_damage_per_rank"].is_number())return "supported effect is enemy_damage_per_rank";
+            const auto rate=effects["enemy_damage_per_rank"].get<double>();
+            if(!std::isfinite(rate)||rate<0||rate>1)return "enemy damage per rank must be finite in 0..1";
+        }
         if(node.contains("prerequisites")&&(!node["prerequisites"].is_array()||node["prerequisites"].size()>128))return "invalid prerequisites";
     }
     for(const auto &[id,node]:nodes)if(node->contains("prerequisites")) {
@@ -90,6 +97,17 @@ void ValidateSkillsState(const Json &state) {
             }
         }
     }
+}
+std::map<std::pair<std::string,std::string>,double> SkillDamageFactors(const Json &state) {
+    std::map<std::pair<std::string,std::string>,double> factors;
+    if(!state.contains("skill_trees"))return factors;
+    for(const auto &[tree,definition]:state["skill_trees"].items())for(const auto &node:definition["nodes"]) {
+        if(!node.contains("effects"))continue;
+        const auto id=node["id"].get<std::string>();const int rank=Rank(state,tree,id);
+        const double rate=node["effects"]["enemy_damage_per_rank"].get<double>();
+        if(rank>0&&rate>0)factors.emplace(std::pair{tree,id},1.0+rate*rank);
+    }
+    return factors;
 }
 Json CallOwnedSkill(Json &state,std::string_view operation,const Json &a) {
     const auto error=ValidateSkillOperation(operation,a);if(!error.empty())throw std::runtime_error(error);

@@ -30,15 +30,17 @@ void RetainCombatDamageOwners(bool advance_frame) {
     if (advance_frame && mode == GAME_MODE_DUNGEON && combat.frame != std::numeric_limits<std::uint64_t>::max()) ++combat.frame;
 }
 float ModifyOutgoingDamage(const CMonstorUnit *unit, int actor, int character, float damage) noexcept {
-    if (!Active(combat.outgoing) || !unit || actor < 0 || actor >= unit->SlotLimit()) return damage;
+    const bool rules=Active(combat.outgoing);
+    if(mode!=GAME_MODE_DUNGEON||(!rules&&!Scripts().HasSkillDamageEffects())||!unit||actor<0||actor>=unit->SlotLimit())return damage;
     const auto &target = unit->monster[actor];
     if (target.state == -1) return damage;
+    if(!rules)return Scripts().ApplySkillDamage(damage);
     DamageContext context;
     context.weapon = Weapon(UserStatus, character);
     context.character = character >= 0 && character < 6 ? character : -1;
     context.model = NativeActorModelId(unit, actor);
     context.hp = target.hp; context.max_hp = target.max_hp; context.frame = combat.frame;
-    return combat.outgoing.Apply(damage, context);
+    return Scripts().ApplySkillDamage(rules?combat.outgoing.Apply(damage,context):damage);
 }
 bool ModifyIncomingDamage(const CUserStatus *status, int character, short &amount) noexcept {
     if (!Active(combat.incoming) || !status || status != UserStatus || character < 0 || character >= 6 || amount >= 0) return false;

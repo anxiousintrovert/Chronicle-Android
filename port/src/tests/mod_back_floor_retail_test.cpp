@@ -127,7 +127,7 @@ void BackPump() {
             UserStatus->hp[character] = hp; UserStatus->next_hp[character] = next; UserStatus->life_step[character] = step;
             bool found = false;
             for (unsigned i = 0; i < NowMonstorUnit->SlotLimit(); ++i) if (NowMonstorUnit->monster[i].state != -1) {
-                EXPECT_EQ(mods::ModifyOutgoingDamage(NowMonstorUnit, i, character, 10), 20);
+                EXPECT_EQ(mods::ModifyOutgoingDamage(NowMonstorUnit, i, character, 10), 30);
                 found = true; break;
             }
             EXPECT_TRUE(found); combat_probed = true;
@@ -421,6 +421,8 @@ end}
         source.insert(where, R"(
  local phase=chronicle.get('combat_phase') or 0
  if phase==0 then
+  assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Retail probe',nodes={{id='focus',title='Focus',description='Outgoing bonus',max_rank=2,effects={enemy_damage_per_rank=0.25}}}}))
+  assert(chronicle.call('skills.set_rank',{tree='combat',id='focus',rank=2}))
   assert(chronicle.call('combat.rule_set',{direction='outgoing',rule={id='boost',operation='multiply',value=2}}))
   assert(chronicle.call('combat.rule_set',{direction='incoming',rule={id='guard',operation='multiply',value=0.5}}))
   chronicle.set('combat_phase',1)
@@ -431,6 +433,7 @@ end}
   assert(rules.outgoing[1].owner=='audit.back' and rules.incoming[1].value==0.5)
   local hold=chronicle.get('combat_hold') or 0
   if hold<3 then chronicle.set('combat_hold',hold+1); return end
+  assert(chronicle.call('skills.set_rank',{tree='combat',id='focus',rank=0}))
   assert(chronicle.call('combat.rule_remove',{direction='outgoing',id='boost'}))
   assert(chronicle.call('combat.rule_remove',{direction='incoming',id='guard'}))
   chronicle.set('combat_phase',2)
@@ -444,6 +447,7 @@ end}
         const auto manifest_path = root / "mods/audit.back/mod.json";
         std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
         manifest["requires_capabilities"].push_back("combat.rules.v1");
+        manifest["requires_capabilities"].push_back("skills.effects.v1");
         for (const auto *op : {"combat.rule_set", "combat.rule_remove", "combat.rules_get"}) manifest["requires_operations"].push_back(op);
         std::ofstream(manifest_path) << manifest.dump();
     }
@@ -908,6 +912,7 @@ end}
     }
     if (combat_rules) {
         EXPECT_TRUE(combat_probed);
+        EXPECT_FALSE(mods::Scripts().HasSkillDamageEffects());
         EXPECT_TRUE(mods::OwnedCombatDamage().Empty());
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("combat_verified"), true);

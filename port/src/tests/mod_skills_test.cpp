@@ -3,6 +3,15 @@
 #include "mods/arguments.hpp"
 #include "mods/runtime.hpp"
 #include <chrono>
+#include <bit>
+#include <limits>
+#include "mods/combat_damage.hpp"
+#include "mods/entities.hpp"
+#include "mods/entity_tracking.hpp"
+#include "mods/entity_reactions.hpp"
+#include "monstorunit.hpp"
+#include "main.hpp"
+extern s32 mode;
 #include <filesystem>
 #include <fstream>
 
@@ -50,6 +59,17 @@ TEST(ModSkills, LargerTransportBudgetIsLimitedToTreeRegistration) {
     EXPECT_FALSE(mods::ValidateArguments(tree).empty());EXPECT_TRUE(mods::ValidateArguments(tree,mods::OperationArgumentLimits("skills.register")).empty());
     EXPECT_EQ(mods::OperationArgumentLimits("economy.add").nodes,128u);EXPECT_EQ(mods::OperationArgumentLimits("skills.set_rank").bytes,16384u);
 }
+TEST(ModSkills, EffectValidationAndOnlyTrainedPositiveFactors) {
+    auto tree=Tree();tree["nodes"][0]["effects"]={{"enemy_damage_per_rank",0.25}};
+    EXPECT_TRUE(mods::ValidateSkillOperation("skills.register",tree).empty());
+    for(const Json &value:std::vector<Json>{-0.1,1.1,true,"0.1",std::numeric_limits<double>::infinity()}) {
+        auto bad=tree;bad["nodes"][0]["effects"]["enemy_damage_per_rank"]=value;EXPECT_FALSE(mods::ValidateSkillOperation("skills.register",bad).empty());
+    }
+    Json state=Json::object();mods::CallOwnedSkill(state,"skills.register",tree);EXPECT_TRUE(mods::SkillDamageFactors(state).empty());
+    mods::CallOwnedSkill(state,"skills.set_rank",{{"tree","combat"},{"id","focus"},{"rank",2}});
+    EXPECT_DOUBLE_EQ(mods::SkillDamageFactors(state).at({"combat","focus"}),1.5);
+    mods::CallOwnedSkill(state,"skills.set_rank",{{"tree","combat"},{"id","focus"},{"rank",0}});EXPECT_TRUE(mods::SkillDamageFactors(state).empty());
+}
 class ModSkillsRuntime:public testing::Test {
 protected:
     std::filesystem::path root=std::filesystem::temp_directory_path()/("chronicle-skills-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -89,6 +109,47 @@ TEST_F(ModSkillsRuntime, FullTreeCanBeRegisteredThroughLuaTransport) {
         assert(chronicle.call('skills.register',{id='full',title='Full tree',description='All nodes',nodes=nodes}))
         assert(#chronicle.call('skills.list',{}).trees[1].nodes==128)
     end})");Start();runtime.Tick({1,2,0,true});EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(runtime.Skills().size(),128u);
+}
+
+TEST_F(ModSkillsRuntime, DamageEffectsStackPreserveNonHitsRestoreAndDisable) {
+    for(const auto id:{"test.beta","test.alpha"})Add(id,R"(return {on_tick=function()
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes={
+          {id='focus',title='Focus',description='Focus',max_rank=2,effects={enemy_damage_per_rank=0.25}}}}))
+        assert(chronicle.call('skills.set_rank',{tree='combat',id='focus',rank=2}))
+    end})");Start();EXPECT_FALSE(runtime.HasSkillDamageEffects());runtime.Tick({1,2,0,true});ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_TRUE(runtime.HasSkillDamageEffects());EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),225);
+    for(float value:{0.0f,-0.0f,-5.0f,std::numeric_limits<float>::infinity()})EXPECT_EQ(std::bit_cast<unsigned>(runtime.ApplySkillDamage(value)),std::bit_cast<unsigned>(value));
+    EXPECT_EQ(runtime.ApplySkillDamage(900000),1000000);const auto saved=runtime.SaveState();runtime.ResetState();EXPECT_FALSE(runtime.HasSkillDamageEffects());
+    std::string error;ASSERT_TRUE(runtime.LoadState(saved,error))<<error;EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),225);
+    runtime.Start(mods::Manager{});EXPECT_FALSE(runtime.HasSkillDamageEffects());EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),100);
+}
+TEST_F(ModSkillsRuntime, StagedRankAffectsCommitButFailedOwnerLeavesNoCachedBonus) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes={
+          {id='focus',title='Focus',description='Focus',max_rank=2,effects={enemy_damage_per_rank=1}}}}))
+        assert(chronicle.call('skills.unlock',{tree='combat',id='focus'}))
+        assert(chronicle.call('economy.add',{amount=1}))
+    end})");Start();runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &error){EXPECT_EQ(runtime.ApplySkillDamage(10),20);error="reject";return false;});
+    EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_EQ(runtime.ApplySkillDamage(10),10);EXPECT_FALSE(runtime.HasSkillDamageEffects());
+}
+TEST_F(ModSkillsRuntime, NativeAndScriptedEnemyDamageUseBonusesWithoutChangingStoredStats) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes={
+          {id='focus',title='Focus',description='Focus',max_rank=2,effects={enemy_damage_per_rank=0.25}}}}))
+        assert(chronicle.call('skills.set_rank',{tree='combat',id='focus',rank=2}))
+    end})");Start();const int previousMode=mode;auto unit=std::make_unique<CMonstorUnit>();
+    struct Cleanup{int old;~Cleanup(){mods::Scripts().Start(mods::Manager{});mods::Scripts().ResetState();mods::OwnedCombatDamage()={};mods::StopTrackingEntities();mode=old;}}cleanup{previousMode};
+    mode=GAME_MODE_DUNGEON;mods::Scripts().Start(manager);mods::Scripts().Tick({2,0,0,true,0,1});ASSERT_TRUE(mods::Scripts().Diagnostics().empty());
+    unit->CleanViewMonstor(0);auto &actor=unit->monster[0];actor.state=2;actor.hp=actor.max_hp=50;actor.revealed=-1;
+    EXPECT_FLOAT_EQ(mods::ModifyOutgoingDamage(unit.get(),0,0,10),15);EXPECT_EQ(actor.hp,50);
+    mods::OwnedCombatDamage().epoch=mods::Scripts().Epoch();std::string error;
+    ASSERT_TRUE(mods::OwnedCombatDamage().outgoing.Set("test.mod",{{"id","double"},{"operation","multiply"},{"value",2}},error));
+    EXPECT_FLOAT_EQ(mods::ModifyOutgoingDamage(unit.get(),0,0,10),30);
+    const auto id=std::to_string(mods::TrackEntities(*unit).Get(0));mods::EntityTransaction transaction;
+    ASSERT_TRUE(transaction.Stage(unit.get(),{{"combat.damage",{{"entity",id},{"amount",10}},"test.mod"}},error))<<error;EXPECT_EQ(actor.hp,50);
+    transaction.Commit();EXPECT_EQ(actor.hp,35);EXPECT_EQ(actor.last_hit_damage,15);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(),0),MONSTER_DMG_HIT);EXPECT_EQ(actor.max_hp,50);
+    mode=GAME_MODE_EDIT;EXPECT_FLOAT_EQ(mods::ModifyOutgoingDamage(unit.get(),0,0,10),10);
 }
 
 }

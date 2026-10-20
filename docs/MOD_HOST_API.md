@@ -2561,10 +2561,9 @@ all capture disabled when no mod needs it.
 Require skills.trees.v1. Shared Lua/native calls are skills.register (game.write),
 skills.list/get (game.read), and skills.unlock/set_rank (game.write). These are
 owned progression services; declaring or ranking a node does not change native
-stats, spend currency or grant a combat bonus. Effect declarations are rejected.
+stats or spend currency. Optional explicit effects are described below.
 Authors can combine rank changes with existing transactional writes in one
-callback. Passive native skill effects and training-request events remain future
-work; this API does not reserve a custom item, weapon or cutscene registry.
+callback. Training-request events remain future work; this API does not reserve a custom item, weapon or cutscene registry.
 
 ```lua
 assert(chronicle.call("skills.register", {
@@ -2585,7 +2584,7 @@ without control characters. max_rank is an integer 1..99. Optional prerequisites
 are a list of unique {id, rank} references within that same tree, at most 128;
 targets must exist, ranks must fit the target maximum, and cycles are rejected.
 Definitions are immutable: identical registration is idempotent, changed content
-fails. Unknown fields, including effects, fail validation.
+fails. Unknown fields and unsupported effect names fail validation.
 
 get returns node metadata, tree, rank, available and missing prerequisites. list
 returns trees in lexical ID order and nodes in authored order. unlock increases
@@ -2609,3 +2608,34 @@ Tree registration alone uses an expanded transport budget: 65536 JSON nodes and
 2 MiB encoded request, retaining depth eight and 128-byte keys. Other host calls
 keep the default 128-node/16-KiB budget. The Lua memory/instruction limits and
 overall saved-state limits still apply; this is not an unrestricted serializer.
+
+
+## Opt-in skill damage effects
+
+Require skills.effects.v1 and game.write. A node may add exactly
+`effects = {enemy_damage_per_rank = 0.25}`. The rate must be finite and within
+0..1. A trained rank contributes factor `1 + rate * rank`; rank zero, rate zero
+and nodes without effects contribute nothing. A tree declaration alone does not
+train a node. Definitions, including effects, remain immutable and saved.
+
+Positive native outgoing enemy damage applies these factors after the existing
+combat rules. Scripted combat.damage applies the same skill factors to its requested
+amount before HP clamping and native reaction/death processing; its existing
+scripted path does not run the separate native-hit formula registry. Owner, tree
+and node IDs determine stable lexical order, with multiplicative stacking. Modified
+damage saturates at 1000000; scripted integer damage rounds to the nearest integer.
+Nonpositive/nonfinite native inputs are preserved, so a blocked or zero hit cannot
+become damage. These bonuses do not change incoming damage, healing or saved stats.
+
+Bonuses derive from active owners with game.write and their owned ranks. Failed
+modules, disabled/restarted packages and reset state remove their contributions.
+Save loading reconstructs them from validated definitions and ranks. The cache is
+invalidated at callback/transaction boundaries; queued native commits can observe
+staged rank changes, but a rejected commit restores owned state and removes the
+failed owner's cached contribution. No native stat array is patched or compounded.
+
+Explicit rank resets leave dependent ranks intact, as documented above; their
+effects follow those retained ranks. Authors implementing a full respec must
+reset those nodes too. The shared skill page describes the per-rank and current
+bonus. There are no preinstalled trees or bonuses, and the no-effect path returns
+the original damage without applying a clamp or consuming RNG.

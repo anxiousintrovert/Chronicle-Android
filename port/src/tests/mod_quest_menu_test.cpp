@@ -44,7 +44,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",50}}}}};
     auto &skillTree=state["mods"]["test.quests"]["skill_trees"]["combat"];
     skillTree={{"title","Combat"},{"description","Training"},{"nodes",Json::array()}};
-    skillTree["nodes"].push_back({{"id","focus"},{"title","Focus"},{"description","Build focus before learning Power."},{"max_rank",2}});
+    skillTree["nodes"].push_back({{"id","focus"},{"title","Focus"},{"description","Build focus before learning Power."},{"max_rank",2},{"effects",{{"enemy_damage_per_rank",0.25}}}});
     skillTree["nodes"].push_back({{"id","power"},{"title","Power"},{"description","Improve your power."},{"max_rank",3},{"prerequisites",{{{"id","focus"},{"rank",2}}}}});
     state["mods"]["test.quests"]["skill_ranks"]["combat"]["focus"]=1;
     std::string error;ASSERT_TRUE(mods::Scripts().LoadState(state.dump(),error))<<error;
@@ -55,9 +55,9 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     const auto draw=[&](const char *name){graphics.Frame({0,0,0,128},[]{mods::menu::Draw();});
         if(const char *folder=std::getenv("DC_QUEST_MENU_AUDIT")){fs::create_directories(folder);EXPECT_TRUE(gfx::WritePng(fs::path(folder)/name,graphics.pixels.data(),graphics.width,graphics.height));}
         return graphics.pixels;};
-    // Selection brackets pulse with the native UI clock (including x=267); compare text/pane content.
+    // Selection brackets pulse with the native UI clock (including x=42 and x=267); compare text/pane content.
     const auto same_content=[](const auto &a,const auto &b){
-        for(int y=90;y<345;++y)for(int x=42;x<595;++x)if(x<267||x>=295)
+        for(int y=90;y<345;++y)for(int x=43;x<595;++x)if(x<267||x>=295)
             for(int c=0;c<4;++c)if(a[(y*640+x)*4+c]!=b[(y*640+x)*4+c])return false;
         return true;
     };
@@ -73,6 +73,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     for(int i=0;i<9;++i)mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("scrolled.png")!=all);
     mods::menu::Run(PAD_CIRCLE);EXPECT_TRUE(mods::menu::IsOpen());EXPECT_TRUE(same_content(draw("returned.png"),manager));
     mods::menu::Run(PAD_L2);const auto skills=draw("skills.png");EXPECT_TRUE(skills!=manager);
+    mods::menu::Run(PAD_RIGHT);EXPECT_TRUE(draw("skill-effects.png")!=skills);mods::menu::Run(PAD_LEFT);
     mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("skill-locked.png")!=skills);
     mods::menu::Run(PAD_CIRCLE);EXPECT_TRUE(same_content(draw("skills-returned.png"),manager));
     // Pointer starts at 320,240; click the new Quests entry at 80,374.
