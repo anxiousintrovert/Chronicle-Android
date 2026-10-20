@@ -3605,3 +3605,25 @@ The binding must preserve source geometry and animation correspondence before
 activation is exposed. Package target matching, conflicts, native animation
 binding, renderer publication and retail visual evidence therefore remain open;
 this decoder alone does not complete runtime model replacement.
+
+
+## Deterministic native skin-binding preparation (2026-10-20)
+
+Read-only inspection located exact native bone influences in MotionProc2 and its
+existing port SkinVertex helper. Added detached MeshSkinBinding preparation:
+nearest undeformed source vertices through a balanced spatial tree, stable
+lowest-index ties, packed reverse mappings, 100000-point limits and a cumulative
+25000000-node search budget. Replacement vertices inherit source influences while
+using their own rest positions. Pose reset and bone application allocate nothing.
+The arithmetic matches the unchanged port SkinVertex kernel verbatim, guarded by
+a Python source test. Invalid or overflowing influences publish no partial pose.
+
+Clang 23.1.2 game/test builds passed, 11 focused mesh decoder/binding tests passed,
+and all 51 Python checks passed. Coverage includes a brute-force nearest oracle,
+rotations and inverse transforms, weight accumulation/reset, owner-independent
+copies, invalid/overflow rollback, RNG preservation and pathological work-budget
+rejection. PS2 and the native motion helper remain unchanged.
+
+No runtime caller or package capability is added in this step. Native lifetime
+binding, skin notifications, morph/color/material updates, visual publication,
+package targets/conflicts and retail animation evidence remain outstanding.

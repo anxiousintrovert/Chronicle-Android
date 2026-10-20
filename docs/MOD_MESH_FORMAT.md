@@ -90,3 +90,26 @@ ignored. Material libraries are never opened, so absolute/relative paths in an
 `mtllib` line cannot make the converter read another file. This is deliberate:
 use explicit normals for smooth surfaces and numbered material strips for the
 future native material mapping.
+
+
+## Native skin-binding preparation
+
+`MeshSkinBinding` prepares a correspondence from each replacement point to the
+nearest undeformed source point in model coordinates. Equal-distance ties choose
+the lowest source index. A balanced spatial tree accelerates matching; a binding
+allows at most 100000 points on each side and 25000000 search-node visits total.
+Pathological inputs fail preparation rather than spending unbounded time there.
+
+Each replacement vertex then inherits that source vertex's native bone influences
+in native order. The calculation uses the replacement's own rest position and
+the same arithmetic as the unchanged `gameutil_motion.cpp` skin helper, including
+bind translation, accumulated weighted motion and the inverse owner transform.
+Pose reset and bone application allocate no memory. Invalid/nonfinite weights,
+matrices or overflowing results reject an influence without partially changing
+its affected vertices. Preparation does not write source points or consume RNG.
+
+This is a detached internal adapter, not an exposed package feature yet. It must
+still be bound to the native model lifetime and animation notifications. Native
+morph/color/material updates, visual rebuilding, conflict resolution and retail
+rendering tests remain required before package mesh replacement is advertised.
+No custom skeleton, motion, item, weapon or cutscene registry is introduced.
