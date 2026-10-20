@@ -1481,3 +1481,52 @@ The PAL scenario passed separately. All 18 Python checks and all 3,840
 empty/disabled generator comparisons passed. CLI discovery lists the three new
 operations. Protected PS2 files remain unchanged; no gameplay package is shipped.
 
+### Expanded dungeon layout dependency audit
+
+Layout implementation remains open. Pinned MoonMod `SetDungeonLayout` requests
+2-64 rooms, area 8-46 and room sides 3-6. Room counts are placement targets, not
+a guarantee that packing succeeds. Its empty request releases that owner's
+configuration; its owner list uses the most recently submitted configuration.
+Our implementation needs explicit ownership/conflict reporting instead of
+silently replacing another package's layout. A retail-capacity-only setter
+would not close this coverage gap.
+
+Source inspection identifies coupled capacities and consumers:
+
+- `ps2/include/dungeonmap.hpp`: 400 cells and mask entries, 16 rooms and
+  room-discovery entries, 48 events, 24 boxes and a fixed class-size assertion.
+- `ps2/src/dungeonmap.cpp`: `BUILD_MAP_INFO::link[16]`, two 400-cell work arrays,
+  `roomStack[16]`, and a distinct 256-entry room-link scan. Grid addressing uses
+  stride 20, while room-link scanning uses stride 16. Neither can be changed
+  by replacing every occurrence of one numeric constant globally.
+- `buildRandomMap`: native placement consumes RNG for room sides 3-4 in a
+  16-cell build area, attempts initial rooms before joining them, and copies
+  exactly 0x100 bytes of room data. Capacity, copy size, retry behavior and RNG
+  order must be considered together. Stair/back-floor placement and room-link
+  generation follow the room-building phase.
+- `port/src/dungeonmap.cpp`, `ps2/src/dungeoneventman.cpp` and
+  `ps2/src/dungeonparts.cpp`: character doors, event positioning and collision
+  lookup also address the grid directly. Rendering/minimap code has separate
+  cell loops, tile geometry and object-coordinate calculations.
+
+The reference expands the grid to 48, rooms to 64, events to 384 and boxes to 64
+through generated source/header patches. It also adds a separate optional exit
+room; that is gameplay behavior, not a prerequisite for larger storage, and
+must remain opt-in. Layout, population and exit-room ownership must stay distinct.
+
+Our current CMake pipeline strips overridden functions into build-directory
+source copies and compiles against original native headers. A consistent port
+header/source overlay or another complete storage abstraction is required for
+expanded layouts; a single replacement function is insufficient. Any generated
+overlay must remain outside protected PS2 directories and fail clearly when
+upstream source assumptions change. All translation units must see the same
+class definition, including transitive quoted includes.
+
+Acceptance must retain the pinned empty/disabled-mod seed matrix and native RNG
+results, add requested-layout connectivity/bounds/door/stair tests, and exercise
+collision, minimap, back-floor travel and resource limits in retail scenes.
+If storage dimensions change, retain the raw audit output and separately compare
+semantic coordinates; do not drop extra occupied cells or room/link differences
+to make the comparison pass. This audit changes no engine behavior and does not
+claim that expanded generation or its no-mod invariants have been validated.
+
