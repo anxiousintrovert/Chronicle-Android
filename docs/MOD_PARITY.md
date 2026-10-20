@@ -3656,3 +3656,25 @@ The package loader still creates no bindings, and the renderer does not yet draw
 replacement geometry. Public operations remain 143; no mesh capability is
 advertised. Package declarations/conflicts, morph/color/material adaptation,
 visual publication and actual replacement animation screenshots remain open.
+
+
+## Detached replacement visual adapter (2026-10-20)
+
+Added CPU-side PrepareMeshVisual and allocation-free RefreshMeshVisual. New
+geometry keeps source materials, texture identity/registers and vertex-color
+mode while rebuilding per-strip index ranges with stable authored winding/order.
+A retained nearest-source map transfers colors and morph-only displacements;
+an optional complete native-skin pose supplies animated replacement positions.
+Normals/UVs remain authored, matching native remake behavior. Refresh validates
+before publication and keeps replacement topology when native materials change.
+
+Clang game/test builds and 19 focused mesh tests passed; all 52 Python checks
+passed. Tests cover detached material/range construction, ordered grouping,
+color/morph/pose refresh without drift, invalid-update rollback and rejection of
+missing strips, degenerate geometry, oversized components and immediate visuals.
+PS2 remains unchanged. No GPU or native source geometry is modified by these
+helpers, and no package capability is added yet.
+
+The visual-construction/remake caller, package target/conflict handling, combined
+skin/morph residual handling, GPU publication and actual replacement rendering
+still need integration and validation. Full capability parity is not complete.

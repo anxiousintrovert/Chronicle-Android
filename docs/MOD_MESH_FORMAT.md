@@ -117,3 +117,27 @@ morph/color/material updates, replacement visual publication, package conflict
 resolution and retail replacement-rendering tests remain required before package
 mesh replacement is advertised.
 No custom skeleton, motion, item, weapon or cutscene registry is introduced.
+
+
+## Detached visual preparation
+
+`PrepareMeshVisual` builds CPU-side replacement geometry with the source visual's
+material/texture state. Authored triangles are grouped by source strip, preserving
+winding and order within each strip. Missing material strips, invalid typed
+geometry and immediate per-frame visuals are rejected. The result has no GPU
+handle and does not change the source visual.
+
+A retained nearest-source-vertex map supplies vertex colors and morph-only
+position deltas. `RefreshMeshVisual` instead accepts a complete replacement skin
+pose when one is available; callers must combine any additional native morph
+residuals before supplying that pose. Replacement normals and UVs stay as
+exported, matching the native remake path's treatment of built normals/UVs.
+Material refresh preserves replacement index ranges. It validates all updates
+before publishing and allocates nothing, so malformed updates cannot leave a
+partially refreshed visual.
+
+These helpers remain internal preparation. The game does not yet select a mesh
+package, call this adapter on native visual construction/remake, or publish its
+GPU mesh. Native animation tests alone are not retail replacement-rendering
+validation. Package conflict handling, activation and visual evidence are still
+required.
