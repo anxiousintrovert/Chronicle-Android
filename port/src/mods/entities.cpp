@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "api.hpp"
+#include "actor_spawn.hpp"
 #include "entity_reactions.hpp"
 #include "entity_tracking.hpp"
 #include "monstorunit.hpp"
@@ -454,8 +455,8 @@ std::string ValidateEntityQuery(std::string_view operation, const nlohmann::json
     if (!a.is_object()) {
         return "entity arguments must be an object";
     }
-    if (operation == "entities.list") {
-        return a.empty() ? "" : "entities.list takes no arguments";
+    if (operation == "entities.list" || operation == "entities.models") {
+        return a.empty() ? "" : "entity list/model queries take no arguments";
     }
     if (operation == "physics.query") {
         if (a.size() != 2 || !a.contains("center") || !Vector3(a["center"], 1000000) ||
@@ -481,6 +482,7 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
+    if (operation == "entities.models") return ReadLoadedActorModels(unit);
     if (!unit) {
         StopTrackingEntities();
         if (operation == "entities.get") {

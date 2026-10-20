@@ -89,6 +89,7 @@ constexpr Operation operations[] = {
     {"combat.damage",             "game.write",    "Apply bounded scripted enemy damage and queue native hit/death processing.",   true },
     {"combat.heal",               "game.write",    "Restore bounded HP to an active live enemy without exceeding native maximum.", true },
     {"combat.status_add",         "game.write",    "Extend an active live enemy's native slow or stop timer.",                     true },
+    {"entities.models", "game.read", "Inspect loaded floor monster models, free slots and creation resource readiness.", false},
     {"entities.list",             "game.read",     "List live revealed dungeon enemies with session-local handles.",               false},
     {"entities.get",              "game.read",     "Resolve a live enemy handle or report expiration.",                            false},
     {"player.get",                "game.read",     "Active or joined character stats.",                                            false},

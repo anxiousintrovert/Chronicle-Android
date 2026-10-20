@@ -72,3 +72,30 @@ std::optional<EntityHandles::Handle> CreateLoadedActor(
     error.clear(); return handle;
 }
 }
+
+namespace mods {
+nlohmann::json ReadLoadedActorModels(const CMonstorUnit *unit) {
+    using Json = nlohmann::json;
+    Json result = {{"available", false}, {"reason", "dungeon monster unit unavailable"},
+                   {"slot_limit", 0}, {"free_slots", 0}, {"models", Json::array()}};
+    if (!unit) return result;
+    if (unit->model_count < 0 || unit->model_count > static_cast<int>(std::size(unit->model))) {
+        result["reason"] = "invalid loaded monster model count"; return result;
+    }
+    result["available"] = true; result["reason"] = ""; result["slot_limit"] = unit->SlotLimit();
+    int free = 0;
+    for (int slot = 0; slot < unit->SlotLimit(); ++slot) free += unit->monster[slot].state == -1;
+    result["free_slots"] = free;
+    for (int index = 0; index < unit->model_count; ++index) {
+        const auto &model = unit->model[index];
+        std::string reason;
+        const auto plan = PlanLoadedActorSpawn(unit, index, {}, reason);
+        const bool radius_valid = std::isfinite(model.collision_radius) && model.collision_radius >= 0 && model.collision_radius <= 1000;
+        if (reason.empty() && (model.max_hp <= 0 || !radius_valid)) reason = "invalid loaded model health or radius";
+        result["models"].push_back({{"model", index}, {"kind", model.kind}, {"name", model.name_no},
+            {"max_hp", model.max_hp}, {"radius", radius_valid ? Json(model.collision_radius) : Json(nullptr)},
+            {"resources_ready", plan.has_value() && reason.empty()}, {"reason", reason}});
+    }
+    return result;
+}
+}

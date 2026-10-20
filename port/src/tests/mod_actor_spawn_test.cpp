@@ -129,3 +129,46 @@ TEST(ModActorSpawn, NativeCreationOwnershipRetirementAndReuseUseFreshIdentities)
     ASSERT_TRUE(mods::RetireOwnedActor(unit.get(), owners, *second, "alpha", nullptr, nullptr, -1, -1, -1, error)) << error;
     unit->script[0] = nullptr; unit->base_chara[0][0].frame = nullptr;
 }
+
+#include "mods/api.hpp"
+#include "mods/entities.hpp"
+
+TEST(ModActorSpawn, ModelQueryReportsReadinessWithoutTrackingOrNativeWrites) {
+    auto unit = std::make_unique<CMonstorUnit>(); unit->CleanViewMonstor(0);
+    unit->model_count = 2;
+    for (int i = 0; i < 2; ++i) {
+        unit->model[i] = {}; unit->model[i].max_hp = 12; unit->model[i].collision_radius = 13;
+        unit->script_data[i] = nullptr;
+    }
+    CFrame frame; RS_PROG_HEADER program{};
+    unit->base_chara[0][0].frame = &frame; unit->script_data[0] = reinterpret_cast<char *>(&program);
+    CDataAlloc2<1> arena(448); alignas(16) unsigned char storage[448 * 16]{};
+    arena.base = storage; unit->script[0] = &arena;
+    mods::StopTrackingEntities();
+    std::vector<unsigned char> before(sizeof(*unit)); std::memcpy(before.data(), unit.get(), before.size());
+    srand(71); const int expected = rand(); srand(71);
+    auto result = mods::ReadEntities(unit.get(), "entities.models", nlohmann::json::object());
+    EXPECT_TRUE(result["available"]); EXPECT_EQ(result["free_slots"], 16); EXPECT_EQ(result["models"].size(), 2);
+    EXPECT_TRUE(result["models"][0]["resources_ready"]);
+    EXPECT_FALSE(result["models"][1]["resources_ready"]);
+    EXPECT_EQ(result["models"][1]["reason"], "loaded monster script unavailable");
+    EXPECT_EQ(mods::TrackedEntities(unit.get()), nullptr);
+    EXPECT_EQ(std::memcmp(before.data(), static_cast<const void *>(unit.get()), before.size()), 0);
+    EXPECT_EQ(rand(), expected);
+    result["models"][0]["max_hp"] = 99;
+    EXPECT_EQ(mods::ReadLoadedActorModels(unit.get())["models"][0]["max_hp"], 12);
+    unit->model[0].collision_radius = std::numeric_limits<float>::quiet_NaN();
+    const auto invalid = mods::ReadLoadedActorModels(unit.get())["models"][0];
+    EXPECT_FALSE(invalid["resources_ready"]); EXPECT_TRUE(invalid["radius"].is_null());
+    unit->model_count = 10;
+    EXPECT_FALSE(mods::ReadLoadedActorModels(unit.get())["available"]);
+    // Missing native context must not deactivate an unrelated live registry.
+    auto &handles = mods::TrackEntities(*unit);
+    EXPECT_FALSE(mods::ReadEntities(nullptr, "entities.models", nlohmann::json::object())["available"]);
+    EXPECT_TRUE(handles.Active());
+    EXPECT_TRUE(mods::ValidateOperation("entities.models", nlohmann::json::object()).empty());
+    EXPECT_FALSE(mods::ValidateOperation("entities.models", {{"extra", 1}}).empty());
+    const auto *op = mods::FindOperation("entities.models"); ASSERT_NE(op, nullptr);
+    EXPECT_FALSE(op->writes); EXPECT_EQ(op->permission, "game.read");
+    mods::StopTrackingEntities(); unit->script[0] = nullptr; unit->base_chara[0][0].frame = nullptr;
+}

@@ -2083,3 +2083,35 @@ which selected this owner's sequence replacement at their last start. This is
 binding information, not a playing/audibility flag. Updating an existing mapping
 changes its registered `id` for the next start; an already bound stream can still
 be the previous asset until restarted or cleared. Scene cleanup clears bindings.
+
+
+### Loaded monster model inspection
+
+`entities.models {}` requires `game.read`. It returns `available`, `reason`,
+`slot_limit`, `free_slots` and a `models` array for the current dungeon unit.
+Outside a dungeon or with an invalid model count, `available` is false and the
+array is empty. Each entry contains the floor-local integer `model` index, native
+`kind` and numeric `name` ID, `max_hp`, `radius`, `resources_ready` and `reason`.
+An invalid native radius is returned as null with a rejection reason.
+
+`resources_ready` checks the loaded script, main/attachment frames, first free
+slot's script arena, model health and radius. It is not permission to spawn: it
+does not validate the game phase, a requested position, dynamic obstructions,
+boss-specific initialization or owner lifetime. Spawn/despawn are not public APIs
+yet. Model indices are valid only for the current floor's loaded model set; do
+not save them as persistent content IDs. This query does not load assets, change
+monster limits, activate entity tracking, consume RNG or register custom content.
+
+```lua
+local state = assert(chronicle.call('entities.models'))
+if state.available then
+  for _, model in ipairs(state.models) do
+    chronicle.log('info', 'Model '..model.model..': '..
+      (model.resources_ready and 'resources ready' or model.reason))
+  end
+end
+```
+
+The `actors` suite in `tools/chronicle_mod_smoke.py` exercises this query through
+a shared-manager action during retail dungeon play and then takes native
+back-floor transport.

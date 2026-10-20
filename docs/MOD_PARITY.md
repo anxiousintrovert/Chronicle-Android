@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 135 implemented operations, native plugins and author
+a real host-call boundary, 136 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -3320,3 +3320,30 @@ context guard: 899 passed, 98 skipped and one disabled. All 31 focused
 actor/ownership/identity tests passed after that guard. PS2 diff is empty.
 Public operations remain 135: public dispatch, automatic owner/floor lifecycle
 integration and shared-menu PAL spawning/despawning remain outstanding.
+
+
+### Loaded actor model API and author replay (2026-10-20)
+
+Added entities.models, a game.read operation available through the shared Lua
+and native host boundary. It reports floor-local model indices, native kind/name
+IDs, health/radius, active/free slots and per-model resource readiness with
+rejection reasons. Invalid counts reject without indexing native arrays;
+nonfinite radii produce null with a reason. No entity registry is activated or
+cleared, no native memory is changed and no random value is consumed. Resource
+readiness deliberately does not promise position, transition or owner readiness.
+Public operations now total 136.
+
+Clang 23.1.2 game/test builds and 24 focused actor/API tests passed; all 38 Python
+author-tool tests passed. A new actors smoke suite passed with PAL data: a
+shared-manager action inspected actual loaded models, required at least one
+resource-ready model, checked detached snapshots, and completed native back-floor
+travel. Evidence is actor-models-91ad771cc40d45e48dd603edd23eeae1/report.json in the
+local framework-expansion evidence directory. The default runner now contains 39
+scenarios. PS2 diff remains empty.
+
+Public spawn/despawn and automatic owner/floor cleanup remain pending. In
+particular, cleanup must precede global entity tracking invalidation so ownership
+cannot disappear while an actor remains alive. The existing internal creation
+and retirement helpers are not yet exposed to packages. Registered custom
+models/characters and contributor-owned item/weapon/cutscene registries remain
+separate outstanding work.

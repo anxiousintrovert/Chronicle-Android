@@ -3,11 +3,13 @@
 #include <optional>
 #include <string>
 #include <span>
+#include <nlohmann/json.hpp>
 #include "owned_actors.hpp"
 class CDungeonMap;
 struct ITEM_FREE_AREA;
 class CMonstorUnit;
 namespace mods {
+nlohmann::json ReadLoadedActorModels(const CMonstorUnit *unit);
 std::span<const ITEM_FREE_AREA> LoadedActorPlacementAreas(int dungeon);
 bool ValidateActorPlacement(const CDungeonMap &map, std::span<const ITEM_FREE_AREA> areas,
                             std::array<float, 3> position, float radius, std::string &error);

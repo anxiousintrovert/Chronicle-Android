@@ -346,7 +346,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false) {
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
@@ -388,6 +388,35 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (actor_models) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input(script_path); std::string source((std::istreambuf_iterator<char>(input)), {}); input.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local models=assert(chronicle.call('entities.models'))
+ assert(models.available and models.slot_limit==16 and models.free_slots>0)
+ assert(#models.models>0 and #models.models<=9)
+ local ready=0
+ for _,model in ipairs(models.models) do
+  assert(model.model>=0 and model.model<9 and type(model.reason)=='string')
+  if model.resources_ready then
+   assert(model.max_hp>0 and model.radius>=0)
+   ready=ready+1
+  end
+ end
+ assert(ready>0,'no loaded monster model passes resource preflight')
+ local original=models.models[1].max_hp
+ models.models[1].max_hp=-1
+ assert(chronicle.call('entities.models').models[1].max_hp==original)
+ chronicle.set('actor_models_verified',true)
+)");
+        std::ofstream(script_path) << source;
+        const auto manifest_path = root / "mods/audit.back/mod.json";
+        std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
+        manifest["requires_operations"].push_back("entities.models");
+        std::ofstream(manifest_path) << manifest.dump();
+    }
     if (music_replace) {
         const auto manifest_path = root / "mods/audit.back/mod.json";
         std::ifstream input(manifest_path); auto manifest = nlohmann::json::parse(input); input.close();
@@ -703,6 +732,10 @@ end}
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
+    if (actor_models) {
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("actor_models_verified"), true);
+    }
     if (retail_sound) {
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         const auto values = state.at("mods").at("audit.back").at("values");
@@ -838,3 +871,5 @@ TEST(ModBackFloorRetail, BgmPlayThroughSharedActionPreservesBackTransition) { Ru
 TEST(ModBackFloorRetail, BgmLoadThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, true); }
 
 TEST(ModBackFloorRetail, MusicReplacementThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, ActorModelsThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
