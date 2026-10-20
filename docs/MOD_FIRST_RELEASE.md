@@ -79,3 +79,19 @@ writes. The optional PAL-data run loads retail font assets for screenshot review
 the action and completed reward pages were visually inspected. Floor/death events
 are injected here: actual combat-to-quest delivery remains a separate retail gate.
 Clang 23.1.2 build and the PAL-backed menu test passed.
+
+## Native death-to-quest retail integration (2026-10-20)
+
+A PAL-backed test loads two real dungeon enemies and prepares lethal poison ticks
+in test-only code. Native CheckDmg emits two non-scripted death records; the normal
+game tick drains the queue, completes the event objective and commits 50 Gilda.
+The test verifies deferred delivery, the saved reward receipt, unchanged money
+after further frames, and death capture turning off after completion. It neither
+pushes event records nor calls the scripted damage API. The run passed at frame
+6533, with money changing from 0 to 50.
+
+This validates native poison damage through quest rewards with retail resources.
+It is a controlled native-path probe, not a controller-driven melee playthrough,
+and does not complete the separate floor-transition or disk save/reload gates.
+Run the test alone with DC_DATA and a new DC_QUEST_RETAIL_AUDIT directory. Clang
+23.1.2 was used; no production engine, PS2 or Kazarov files changed.
