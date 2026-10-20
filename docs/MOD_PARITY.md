@@ -1683,3 +1683,40 @@ only difference from pinned upstream. PS2 originals remain read-only.
 The full suite again has 777 passes, 34 skips and one disabled test; all 28
 Python checks pass. No new public operation or gameplay package is added.
 
+### Explicit generation context (internal)
+
+`chronicle/dungeon_build.hpp` supplies a scoped, validated internal layout
+context: 2-64 target rooms, area 8-46 and room sides 3-6. Without that context,
+native room counts, area 16, sides 3-4 and retail scan limits remain in effect.
+Checked build-copy transformations consume the context for placement, part
+filtering, stair/back-floor candidate collection, special-door flood fill and
+character-door candidate scans. Candidate arrays can hold the full grid.
+
+Custom builds reject failed initial room packing before joining nonexistent
+rooms and reject missing stair/entrance candidates. Exception unwinding restores
+the previous context. These checks do not make the partially generated map
+transactional: a future host adapter must discard it and handle failure before
+publishing a floor. No public layout operation or manager action is exposed yet.
+
+The native back-floor road overwrote column 19 even in a larger layout; a test
+caught it deleting the upper stair. Custom builds place that road at column 47,
+while retail builds retain column 19. Live transport script coordinates and
+per-map collision/render/minimap bounds still need integration. Moon Sea's custom
+scenery placement also needs a separately bounded sampling path.
+
+Two native generation tests cover impossible initial packing with context
+restoration, and 192 expanded builds across six dungeon types. Each expanded
+case targets 64 rooms with sides 3-6 in area 46, creates more than 16 rooms,
+occupies space beyond the retail grid, retains both stairs, and connects all
+room centers and the upper stair to the lower stair in the occupied-cell graph.
+This establishes structural connectivity, not physical collision traversal,
+locked-door/key accessibility or valid native resource allocation.
+
+The empty/disabled 3,840-case exports keep the previous hashes and differ from
+pinned upstream only in map size. PS2 originals remain unchanged. Public
+ownership/transaction APIs, failed-build recovery, live large-floor scenarios,
+remaining dimension combinations and other platforms remain outstanding.
+Clang 23.1.2 Windows game/test builds pass. The full suite has 779 passes,
+34 skips and one disabled test; all 28 Python checks and all seven separate
+PAL first-floor retail back-floor scenarios pass.
+
