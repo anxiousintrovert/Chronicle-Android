@@ -4177,3 +4177,13 @@ and payload filtering, deferred progression before independent listeners, single
 reward receipt through save restoration and rolled-back emission suppression.
 No PS2 or Kazarov edits. Native pickup/dialogue sources and other-platform
 execution remain unverified; no such hooks are claimed by this capability.
+
+## Offline dependency cause tracing (2026-10-20)
+
+The author checker now includes structured `dependency_diagnostics` alongside
+its existing conflict report. Each selected package receives shortest dependency
+paths to every reachable direct reason. Shared dependencies are visited once per
+root and cycles terminate. Tests cover transitive conflicts, absent packages,
+diamond graphs, cycles, stable output and empty selections. All 76 Python author
+tool tests passed. This is offline inspection only; it adds no engine hooks,
+profile writes or plugin trust changes.

@@ -20,6 +20,46 @@ class AuthorTools(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_dependency_diagnostics_trace_all_causes_without_cycle_duplicates(self):
+        mods = self.root / 'mods'
+        for name, dependencies in [('root', ['test.left', 'test.right']),
+                                   ('left', ['test.leaf']), ('right', ['test.leaf']),
+                                   ('leaf', ['test.root', 'test.missing'])]:
+            folder = mods / name
+            tool.create('test.' + name, folder)
+            path = folder / 'mod.json'
+            manifest = json.loads(path.read_text())
+            manifest['requires'] = dependencies
+            path.write_text(json.dumps(manifest))
+        selected = ['test.root', 'test.left', 'test.right', 'test.leaf']
+        report = tool.check_set(mods, selected)
+        diagnostics = report['dependency_diagnostics']['test.root']
+        missing = [item for item in diagnostics if 'not enabled' in item['reason']]
+        self.assertEqual(missing, [{'path': ['test.root', 'test.left', 'test.leaf'],
+                                   'reason': 'dependency not enabled: test.missing'}])
+        self.assertEqual(len({tuple(item['path']) for item in diagnostics}),
+                         len({item['path'][-1] for item in diagnostics}))
+        self.assertEqual(report, tool.check_set(mods, reversed(selected)))
+        self.assertFalse((mods / 'mods-profile.json').exists())
+        self.assertEqual(tool.check_set(mods, [])['dependency_diagnostics'], {})
+
+    def test_dependency_diagnostics_preserve_multiple_transitive_conflict_causes(self):
+        mods = self.root / 'mods'
+        for name, extra in [('root', {'requires': ['test.provider']}),
+                            ('provider', {'requires': ['test.absent'], 'conflicts': ['test.other']}),
+                            ('other', {})]:
+            folder = mods / name
+            tool.create('test.' + name, folder)
+            path = folder / 'mod.json'
+            manifest = json.loads(path.read_text())
+            manifest.update(extra)
+            path.write_text(json.dumps(manifest))
+        report = tool.check_set(mods, ['test.root', 'test.provider', 'test.other', 'test.absent'])
+        self.assertEqual(report['problems']['test.root'], ['blocked dependency: test.provider'])
+        self.assertEqual(report['dependency_diagnostics']['test.root'], [
+            {'path': ['test.root', 'test.provider'], 'reason': 'declared conflict: test.other'},
+            {'path': ['test.root', 'test.provider', 'test.absent'], 'reason': 'missing or duplicate package ID'}])
+
     def test_quest_template_pack_install_preserves_script_and_stays_disabled(self):
         folder = self.root / "authored"
         self.assertEqual(tool.main(["new", "test.hunt", "--template", "quest", "--output", str(folder)]), 0)

@@ -391,6 +391,7 @@ def check_set(root, enabled, data=None):
         visited.add(key)
     for key in sorted(selected):
         visit(key)
+    direct_problems = {key: list(value) for key, value in problems.items()}
     changed = True
     while changed:
         changed = False
@@ -402,7 +403,23 @@ def check_set(root, enabled, data=None):
                     problems[key].append(f'blocked dependency: {dependency}')
                     changed = True
                     break
+    # One shortest, deterministic dependency path per reachable root cause.
+    # Visit each package once per selected root, including in cyclic graphs.
+    dependency_diagnostics = {}
+    for key in sorted(selected):
+        pending, seen, diagnostics = [(key, [key])], {key}, []
+        for current, path in pending:
+            for reason in direct_problems[current]:
+                diagnostics.append({'path': path, 'reason': reason})
+            if len(packages.get(current, [])) != 1:
+                continue
+            for dependency in sorted(packages[current][0].get('requires', [])):
+                if dependency in selected and dependency not in seen:
+                    seen.add(dependency)
+                    pending.append((dependency, path + [dependency]))
+        dependency_diagnostics[key] = diagnostics
     return {'enabled': sorted(selected), 'problems': problems, 'invalid_packages': errors,
+            'dependency_diagnostics': dependency_diagnostics,
             'scope': 'offline format/conflict check; actual assets, scripts and native trust require in-game validation'}
 
 

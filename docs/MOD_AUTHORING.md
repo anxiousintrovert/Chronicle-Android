@@ -223,3 +223,17 @@ both explicitly, then use the shared menu action to publish a signal. The quest
 filters by provider ID, event name and payload, and saves its completion. This
 pattern lets future content extensions integrate without sharing private state
 or requiring the loader to define their content formats.
+
+## Trace blocked dependencies offline
+
+`python tools/chronicle_mod.py check-set path/to/mods --enable author.quest --enable author.provider`
+returns the existing per-package `problems` plus `dependency_diagnostics`. Each
+diagnostic contains a `path` of package IDs and its underlying `reason`. For
+example, a path of `author.quest`, `author.provider`, `author.assets` identifies
+a transitive dependency whose own reason prevents the quest from loading.
+All reachable reasons are included, with one shortest deterministic path per
+package, even when several dependency routes reach it. Cycles terminate safely.
+A dependency that was not selected is reported at its requiring package; include
+it with another `--enable` to check its own requirements too. This command only
+previews a selection; it never enables packages or approves native plugins.
+Actual script execution, assets and native trust still require runtime checks.
