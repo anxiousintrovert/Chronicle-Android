@@ -2781,3 +2781,27 @@ separate sequence replacement map for music. No private audio backend is implied
 by these capabilities. Registration/decode budgets, asset ownership, callback
 transactions, audio-thread lifetime and disable cleanup still need implementation
 and verification; this audit does not expose audio operations.
+
+
+### Owned audio stream foundation (2026-10-20)
+
+AudioStreams owns immutable copies of decoded stereo PCM and registers channels
+with the pinned official Kazarov mixer only on explicit playback. Local sound
+IDs and handles are owner-scoped. Registration enforces 16 sounds per owner,
+64 globally, 32 MiB per track, 64 MiB per owner and 128 MiB globally. Playback
+enforces 16 voices per owner and 64 globally, finite volume/pan, whole-track
+looping and equal-power pan. Stopping, owner retirement, pruning and destruction
+remove channels under the mixer lock before freeing them. Clear does not reuse
+old voice handles. Construction alone does not register a channel.
+
+Six Clang tests verify rendered PCM after caller mutation, pan and end-of-track
+pruning, owner isolation, validation/count limits, stale handles, unchanged
+existing-stream samples with a dormant owner, and concurrent rendering during
+100 stop/retire/destruction cycles. This is a local mixer test, not a device
+listening test or a race-detector run.
+
+This foundation is not yet connected to package loading, Lua/native host calls
+or menu actions. Public operation count remains 125. Bounded compressed decoding,
+callback transactions, live lifecycle cleanup, music replacement and public audio
+services remain outstanding; post-decode registration limits alone do not bound
+decoder allocations. No global mixer or retail playback hooks were changed.
