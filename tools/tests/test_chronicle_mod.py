@@ -40,6 +40,26 @@ class AuthorTools(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             tool.pack(folder, archive)
 
+    def test_audio_assets_pack_and_validate_separately_from_script_resources(self):
+        folder = self.package('test.audio', audio={'tone': 'tone.WAV'})
+        (folder / 'tone.WAV').write_bytes(b'x' * 70000)
+        self.assertNotIn('enabled', tool.validate(folder))
+        archive = self.root / 'audio.zip'
+        tool.pack(folder, archive)
+        with zipfile.ZipFile(archive) as packed:
+            self.assertIn('test.audio/tone.WAV', packed.namelist())
+        destination = self.root / 'installed-audio'
+        tool.install(archive, destination)
+        self.assertEqual((destination / 'test.audio/tone.WAV').read_bytes(), b'x' * 70000)
+        (folder / 'tone.WAV').write_bytes(b'')
+        with self.assertRaises(ValueError):
+            tool.validate(folder)
+        manifest = json.loads((folder / 'mod.json').read_text())
+        manifest['audio'] = {'tone': '../escape.wav'}
+        (folder / 'mod.json').write_text(json.dumps(manifest))
+        with self.assertRaises(ValueError):
+            tool.validate(folder)
+
     def test_path_escape_and_duplicate_json_rejected(self):
         folder = self.package('test.one', resources={'bad': '../outside.txt'})
         with self.assertRaises(ValueError):

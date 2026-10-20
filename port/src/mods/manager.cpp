@@ -143,7 +143,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -290,6 +290,22 @@ void Read(Package &package, const FileIndex &base) {
                 throw std::runtime_error("resource exceeds 64 KiB: " + id);
             }
             package.resources.emplace(id, std::move(path));
+        }
+    }
+    if (json.contains("audio")) {
+        const auto &assets = json["audio"];
+        if (!assets.is_object() || assets.size() > 16) throw std::runtime_error("audio must contain at most 16 named files");
+        std::uintmax_t total = 0;
+        for (const auto &[id, source] : assets.items()) {
+            if (!ValidId(id) || id.size() > 64 || !source.is_string()) throw std::runtime_error("audio requires local IDs up to 64 characters and relative paths");
+            auto path = Contained(package.root, package.root / Path(Relative(source.get<std::string>())));
+            const auto type = Fold(path.extension().string());
+            if (type != ".wav" && type != ".flac" && type != ".ogg") throw std::runtime_error("audio requires WAV, FLAC or Ogg Vorbis files");
+            const auto bytes = fs::file_size(path);
+            if (!bytes || bytes > 32 * 1024 * 1024 || bytes > 64 * 1024 * 1024 - total)
+                throw std::runtime_error("audio exceeds 32 MiB per file or 64 MiB per package, or is empty");
+            total += bytes;
+            package.audio.emplace(id, std::move(path));
         }
     }
     const auto &files = json.at("files");

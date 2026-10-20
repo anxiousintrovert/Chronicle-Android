@@ -13,6 +13,8 @@ public:
     ~AudioStreams();
     AudioStreams(const AudioStreams &) = delete;
     AudioStreams &operator=(const AudioStreams &) = delete;
+    // Startup-only: atomic decoded asset snapshot; inactive packages do no I/O.
+    bool LoadPackage(const Package &package, std::string &error);
     bool Register(std::string owner, std::string id, const audio::PcmTrack &track, std::string &error);
     std::string Play(std::string_view owner, std::string_view id, bool loop, double volume, double pan, std::string &error);
     bool Stop(std::string_view owner, std::string_view handle, std::string &error);

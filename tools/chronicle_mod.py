@@ -19,7 +19,7 @@ CAPABILITIES = {
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}
 FIELDS = REQUIRED | {"api_version", "enabled", "requires", "conflicts", "exclusive",
-                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library"}
+                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio"}
 
 
 def require(condition, message):
@@ -157,6 +157,16 @@ def validate(root, data=None):
     for key, source in resources.items():
         require(identity(key), "invalid resource ID")
         require(contained(root, source).stat().st_size <= 65536, "resource exceeds 64 KiB")
+    audio = mod.get("audio", {})
+    require(isinstance(audio, dict) and len(audio) <= 16, "audio must contain at most 16 named files")
+    audio_bytes = 0
+    for key, source in audio.items():
+        require(identity(key) and len(key) <= 64, "invalid audio ID")
+        path = contained(root, source)
+        require(path.suffix.lower() in {".wav", ".flac", ".ogg"}, "audio requires WAV, FLAC or Ogg Vorbis")
+        size = path.stat().st_size
+        audio_bytes += size
+        require(0 < size <= 32 * 1024 * 1024 and audio_bytes <= 64 * 1024 * 1024, "audio exceeds file/package size limits or is empty")
     files = mod["files"]
     require(isinstance(files, dict) and len(files) <= 4096, "files must contain at most 4096 mappings")
     targets = set()
@@ -193,7 +203,7 @@ def pack(root, output):
     output = Path(output).resolve()
     require(not output.is_relative_to(root), "archive must be outside the package")
     # Do not accidentally ship saves, credentials, git metadata, or arbitrary files.
-    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values())
+    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values()) | set(mod.get("audio", {}).values())
     if "script" in mod:
         names.add(mod["script"])
     if "native_library" in mod:
@@ -329,7 +339,7 @@ def install(archive, mods_root, replace=False, data=None):
         package_root = stage / next(iter(roots))
         mod = validate(package_root, data)
         require(package_root.name == mod['id'], 'archive folder must match package ID')
-        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values())
+        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values()) | set(mod.get('audio', {}).values())
         declared |= {mod[key] for key in ('script', 'native_library') if key in mod}
         allowed = {mod['id'] + '/' + relative(name) for name in declared}
         require(set(files) <= allowed, 'archive contains undeclared files; use the pack command')

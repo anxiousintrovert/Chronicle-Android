@@ -36,6 +36,7 @@ struct Package {
     std::string                                  native_fingerprint;
     bool                                         native_trusted = false;
     std::map<std::string, std::filesystem::path> resources;
+    std::map<std::string, std::filesystem::path> audio;
     std::map<std::string, std::filesystem::path> files;
     std::vector<std::string>                     problems;
 

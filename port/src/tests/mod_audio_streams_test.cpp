@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <array>
+#include <fstream>
+#include <chrono>
+#include "mod_audio_decode_fixture.hpp"
 #include <atomic>
 #include <thread>
 #include <cmath>
@@ -152,4 +155,33 @@ TEST(ModAudioStreams, ConcurrentRenderingSurvivesRepeatedChannelRetirement) {
     done = true;
     renderer.join();
     for (float sample : Render(mixer)) EXPECT_EQ(sample, 0);
+}
+
+TEST(ModAudioStreams, PackageSnapshotIsAtomicAndDoesNotReadInactiveAssets) {
+    const auto root = std::filesystem::temp_directory_path() / ("mod-audio-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(root);
+    struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); } } cleanup{root};
+    auto write = [&](const char *name, auto bytes) {
+        std::ofstream out(root / name, std::ios::binary);
+        out.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    };
+    write("tone.flac", std::span(kAudioFlac));
+    audio::Mixer mixer(48000);
+    mods::AudioStreams streams(mixer);
+    mods::Package package;
+    package.root = root; package.id = "test.audio";
+    package.audio = {{"a", root / "tone.flac"}, {"b", root / "missing.ogg"}};
+    std::string error;
+    EXPECT_TRUE(streams.LoadPackage(package, error));
+    EXPECT_TRUE(streams.State(package.id)["sounds"].empty());
+    package.enabled = true;
+    EXPECT_FALSE(streams.LoadPackage(package, error));
+    EXPECT_TRUE(streams.State(package.id)["sounds"].empty()); // first decoded asset rolled back
+    write("missing.ogg", std::span(kAudioOgg));
+    ASSERT_TRUE(streams.LoadPackage(package, error)) << error;
+    EXPECT_EQ(streams.State(package.id)["sounds"].size(), 2);
+    EXPECT_FALSE(streams.LoadPackage(package, error));
+    std::filesystem::remove(root / "tone.flac");
+    ASSERT_FALSE(streams.Play(package.id, "a", true, 1, 0, error).empty());
+    EXPECT_NEAR(Render(mixer)[0], 0.25f, 0.001f); // independent decoded snapshot
 }

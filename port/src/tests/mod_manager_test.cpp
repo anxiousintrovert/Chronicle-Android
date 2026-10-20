@@ -319,3 +319,24 @@ TEST_F(ModManager, InvalidOrUndeclaredVersionConstraintFailsDiscovery) {
 }
 
 } // namespace
+
+TEST_F(ModManager, AudioDeclarationsAreContainedBoundedAndDisabledByDefault) {
+    auto manifest = Manifest("test.audio");
+    manifest["audio"] = {{"tone", "sound.WAV"}};
+    Add("audio", manifest);
+    Write(root / "mods/audio/sound.WAV", std::string(70000, 'x'));
+    enabled.clear();
+    Scan();
+    ASSERT_EQ(manager.Packages().size(), 1);
+    EXPECT_TRUE(manager.Packages()[0].problems.empty());
+    EXPECT_FALSE(manager.Packages()[0].Active());
+    EXPECT_EQ(manager.Packages()[0].audio.size(), 1);
+    manifest["audio"]["tone"] = "../../data/asset.bin";
+    Add("audio", manifest);
+    Scan();
+    EXPECT_FALSE(manager.Packages()[0].problems.empty());
+    manifest["audio"] = {{"tone", "replacement.bin"}};
+    Add("audio", manifest);
+    Scan();
+    EXPECT_FALSE(manager.Packages()[0].problems.empty());
+}

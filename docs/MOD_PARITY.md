@@ -2833,3 +2833,27 @@ actions and live cleanup still need integration. Public operation count stays
 Clang 23.1.2 builds passed; 856 native tests passed, 92 skipped and one
 disabled. PS2 diff remains empty. Device playback and non-Windows verification
 remain outstanding.
+
+
+### Package audio admission and tooling (2026-10-20)
+
+The optional audio manifest map declares up to 16 contained WAV/FLAC/Ogg files,
+32 MiB each and 64 MiB encoded per package. IDs are at most 64 ASCII characters
+with the existing lowercase package-ID syntax. Manager and author validation
+agree; packing and installation retain declared audio files. Existing ordinary
+resources keep their 64 KiB limit. Packages remain default-disabled.
+
+AudioStreams::LoadPackage stages a complete decoded snapshot and publishes only
+after every asset succeeds. It rechecks containment/current file size, rejects
+read failures or growth, enforces remaining global/owner PCM and count budgets
+before decoding, and skips inactive packages without file access. Existing owner
+registration is rejected rather than replaced. Failed loading leaves other
+registered assets untouched. Snapshot playback survives source removal.
+
+The loader is not yet called from live startup, and no public audio host calls
+are advertised. Those integrations, transactions and lifecycle retirement are
+still required. Public operation count remains 125.
+
+Clang 23.1.2 builds and 858 native tests passed, with 92 skipped and one
+disabled. All 37 Python tests passed, including packing/installing declared
+audio. No PS2 changes.

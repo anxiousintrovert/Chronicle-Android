@@ -1,4 +1,6 @@
 #include "audio_streams.hpp"
+#include "audio_decode.hpp"
+#include <fstream>
 #include "audio/mixer.hpp"
 #include <algorithm>
 #include <cmath>
@@ -15,6 +17,54 @@ bool Id(std::string_view id) {
 }
 }
 AudioStreams::~AudioStreams() { Clear(); }
+bool AudioStreams::LoadPackage(const Package &package, std::string &error) {
+    error.clear();
+    if (!package.Active() || package.audio.empty()) return true;
+    if (package.id.empty() || package.audio.size() > 16 || package.audio.size() > 64 - sounds_.size()) {
+        error = "audio package registration count limit reached"; return false;
+    }
+    std::size_t global_bytes = 0, owner_bytes = 0, input_bytes = 0;
+    for (const auto &[name, sound] : sounds_) {
+        if (name.first == package.id) { error = "audio package is already loaded"; return false; }
+        global_bytes += sound.bytes;
+    }
+    decltype(sounds_) staged;
+    try {
+        const auto root = std::filesystem::canonical(package.root);
+        for (const auto &[id, declared] : package.audio) {
+            if (!Id(id)) throw std::runtime_error("invalid local audio ID");
+            const auto budget = std::min({TrackBytes, OwnerBytes - owner_bytes, GlobalBytes - global_bytes});
+            if (budget < 4) throw std::runtime_error("audio decoded memory limit reached before loading " + id);
+            const auto path = std::filesystem::canonical(declared);
+            const auto relative = path.lexically_relative(root);
+            if (relative.empty() || relative.is_absolute() || *relative.begin() == ".." || !std::filesystem::is_regular_file(path))
+                throw std::runtime_error("audio no longer contained in package: " + id);
+            const auto size = std::filesystem::file_size(path);
+            if (!size || size > TrackBytes || size > OwnerBytes - input_bytes)
+                throw std::runtime_error("audio encoded memory limit reached: " + id);
+            std::ifstream input(path, std::ios::binary);
+            std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            if (!input || input.peek() != std::char_traits<char>::eof() || input.bad())
+                throw std::runtime_error("audio changed size or could not be read: " + id);
+            std::string detail;
+            auto decoded = DecodeAudio(bytes, path.extension().string(), budget, detail);
+            if (!decoded) throw std::runtime_error(id + ": " + detail);
+            // Normalize metadata and release the decoder's reserved output capacity.
+            auto track = std::make_shared<audio::PcmTrack>();
+            track->rate = decoded->rate;
+            track->samples.assign(decoded->samples.begin(), decoded->samples.end());
+            const auto pcm_bytes = track->samples.size() * sizeof(std::int16_t);
+            staged.emplace(std::pair{package.id, id}, Sound{std::move(track), pcm_bytes});
+            owner_bytes += pcm_bytes; global_bytes += pcm_bytes; input_bytes += size;
+        }
+    } catch (const std::exception &failure) {
+        error = failure.what(); return false;
+    }
+    sounds_.merge(staged);
+    return true;
+}
+
 bool AudioStreams::Register(std::string owner, std::string id, const audio::PcmTrack &track, std::string &error) {
     if (owner.empty() || !Id(id)) { error = "audio registration requires an owner and local ID"; return false; }
     if (track.rate < 8000 || track.rate > 192000 || track.samples.empty() || track.samples.size() % 2 ||
