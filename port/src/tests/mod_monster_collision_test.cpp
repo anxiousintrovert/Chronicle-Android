@@ -2,9 +2,105 @@
 #include <array>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 #include "chronicle/monster_collision.hpp"
+#include "dun/gameloop.hpp"
+#include "dungeonmap.hpp"
 #include "frame.hpp"
 #include "monstorunit.hpp"
+
+namespace {
+struct TerrainFixture {
+    CFrame frame;
+    CFrame player;
+    CFrame *previous_player = CharaMain.frame;
+    CCollisionMDT collision;
+    std::vector<CCPolyBox> mesh;
+    std::unique_ptr<CDungeonMap> map = std::make_unique<CDungeonMap>();
+    explicit TerrainFixture(unsigned count = 1) : mesh(count) {
+        CharaMain.frame = &player;
+        player.SetPosition(0, 0, 0);
+        for (auto &m : mesh) {
+            m.poly.vertex[0][0] = -1;
+            m.poly.vertex[1][0] = 1;
+            m.poly.vertex[2][2] = 1;
+            for (auto &v : m.poly.vertex) v[3] = 1;
+            m.poly.attr.ground_kind = 17;
+            for (int j = 0; j < 3; ++j) {
+                m.box.min[j] = collision.min[j] = -1;
+                m.box.max[j] = collision.max[j] = 1;
+            }
+        }
+        collision.mesh = mesh.data();
+        collision.mesh_count = int(mesh.size());
+        frame.flags = 1;
+        frame.collision = &collision;
+        map->map_type = 1;
+        for (auto &cell : map->cells) cell.parts_no = -1;
+        for (auto &chest : map->boxes) chest.used = 0;
+        map->atra_num = 0;
+        map->box_collision_model = &frame;
+        map->collision_model = &frame;
+        map->parts[0].collision = &frame;
+        map->parts[0].collision_turn = 0;
+    }
+    ~TerrainFixture() { CharaMain.frame = previous_player; }
+};
+}
+
+TEST(ModMonsterCollision, TerrainMatchesNativeGeometryOrderAtRetailAndExpandedCoordinates) {
+    TerrainFixture fixture;
+    auto &map = *fixture.map;
+    for (int extent : {20, 48}) {
+        map.port_grid_extent = extent;
+        const int cell = extent - 2;
+        const float coord = 160.0f * cell;
+        float position[4] = {coord, 0, coord, 1};
+        fixture.player.SetPosition(position);
+        map.cells[cell + cell * chronicle::dungeon::GridStride].parts_no = 0;
+        map.cells[cell + cell * chronicle::dungeon::GridStride].direction = 1;
+        map.boxes[0].used = 1;
+        map.atra_num = 2;
+        for (int i = 0; i < 3; ++i) {
+            map.boxes[0].pos[i] = position[i];
+            map.atra[0].pos[i] = position[i];
+            map.atra[1].pos[i] = position[i] + 1000;
+        }
+        map.atra[0].used = map.atra[1].used = 1;
+        std::array<CCPoly, 64> native{};
+        const auto count = setCollisionData(&map, native.data(), position, 30, 5);
+        ASSERT_EQ(count, 3);
+        auto bounded = chronicle::monsters::ExpandedTerrainCollision(map, position, fixture.player.position);
+        ASSERT_EQ(bounded.size(), unsigned(count));
+        for (unsigned i = 0; i < bounded.size(); ++i) {
+            for (int axis = 0; axis < 4; ++axis) {
+                EXPECT_FLOAT_EQ(bounded[i].normal[axis], native[i].normal[axis]);
+                for (int v = 0; v < 3; ++v) EXPECT_FLOAT_EQ(bounded[i].vertex[v][axis], native[i].vertex[v][axis]);
+            }
+            EXPECT_EQ(bounded[i].attr.ground_kind, native[i].attr.ground_kind);
+        }
+    }
+}
+
+TEST(ModMonsterCollision, TerrainExceedsRetailBufferAndRejectsInvalidPartsBeforeTransforming) {
+    TerrainFixture fixture(500);
+    auto &map = *fixture.map;
+    map.cells[0].parts_no = 0;
+    map.cells[0].direction = 0;
+    float position[4] = {0, 0, 0, 1};
+    auto polys = chronicle::monsters::ExpandedTerrainCollision(map, position, position);
+    EXPECT_EQ(polys.size(), 500);
+    fixture.frame.SetPosition(123, 0, 0);
+    map.cells[1].parts_no = 72;
+    EXPECT_THROW(chronicle::monsters::ExpandedTerrainCollision(map, position, position), std::runtime_error);
+    EXPECT_FLOAT_EQ(fixture.frame.position[0], 123);
+    map.cells[1].parts_no = -1;
+    fixture.collision.mesh_count = 65537;
+    EXPECT_THROW(chronicle::monsters::ExpandedTerrainCollision(map, position, position), std::runtime_error);
+    EXPECT_FLOAT_EQ(fixture.frame.position[0], 123);
+    map.atra_num = 9;
+    EXPECT_THROW(chronicle::monsters::ExpandedTerrainCollision(map, position, position), std::invalid_argument);
+}
 
 TEST(ModMonsterCollision, DensePopulationPreservesTerrainAndExceedsOldBufferSafely) {
     auto unit = std::make_unique<CMonstorUnit>();

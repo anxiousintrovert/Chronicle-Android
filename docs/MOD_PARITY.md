@@ -2188,3 +2188,29 @@ Validation: Clang 23.1.2 Windows game/test builds pass; full suite 808 passed,
 59 skipped, 1 disabled; 29 Python checks pass. Fresh retail and managed Cave
 PAL back-floor replays pass. Both 3,840-case seed exports retain their prior
 hashes and differ from pinned upstream only by map storage size. PS2 unchanged.
+
+
+### Bounded procedural terrain for expanded units (2026-10-20)
+
+Expanded monster stepping now bypasses the fixed terrain work buffer as well
+as the actor append buffer. The terrain collector validates every selected
+frame/mesh and the total polygon budget before native writes. It preserves
+the native nine-neighbor order, rotation arithmetic, chest order and the
+player-distance filter for Atla collision. Bounds cover both retail and
+expanded map coordinates. This helper currently accepts procedural floors;
+expanded populations on fixed/custom maps remain unsupported. Retail units
+continue through the original terrain collector and work-buffer allocation.
+
+Tests compare native geometry ordering/coordinates at both grid sizes, collect
+500 terrain polygons and reject invalid indices/geometry before transforms.
+All seven managed PAL dungeon replays plus retail Cave compare loaded native
+terrain output at player and active monster positions on front/back floors.
+These eight fresh replays pass; full Windows suite: 810 passed, 59 skipped,
+1 disabled. Clang 23.1.2 game/test builds and 29 Python checks pass. Both
+3,840-case no-mod/disabled-mod exports retain prior hashes and differ from
+pinned upstream only in map storage size. PS2 remains unchanged.
+
+Next: load-time collision/resource preflight and failure reporting, activation
+and reset at floor boundaries, then high-population combat/playthrough tests.
+No public population limit was raised in this change; cross-platform validation
+and the other coverage-ledger gaps remain outstanding.

@@ -11,6 +11,7 @@
 #include "chronicle/dungeon_build.hpp"
 #include "chronicle/dungeon_prepare.hpp"
 #include "chronicle/random_state.hpp"
+#include "chronicle/monster_collision.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
@@ -45,6 +46,26 @@ std::string        last_state;
 ITEM_PACK          inventory_before{};
 std::array<s8, 50> flags_before{};
 
+void AuditMonsterTerrain() {
+    std::vector<CCPoly> native(65536);
+    for (unsigned slot = 0; slot <= NowMonstorUnit->SlotLimit(); ++slot) {
+        if (slot < NowMonstorUnit->SlotLimit() && NowMonstorUnit->monster[slot].state != 2) continue;
+        float position[4]{};
+        if (slot == NowMonstorUnit->SlotLimit()) CharaMain.GetPosition(position);
+        else NowMonstorUnit->chara[slot][0].GetPosition(position);
+        auto bounded = chronicle::monsters::ExpandedTerrainCollision(*NowDngMap, position, CharaMain.frame->position);
+        const auto count = setCollisionData(NowDngMap, native.data(), position, 30, 5);
+        ASSERT_EQ(bounded.size(), unsigned(count)) << "monster slot " << slot;
+        for (unsigned i = 0; i < bounded.size(); ++i) {
+            for (int axis = 0; axis < 3; ++axis) {
+                EXPECT_FLOAT_EQ(bounded[i].normal[axis], native[i].normal[axis]);
+                for (int v = 0; v < 3; ++v) EXPECT_FLOAT_EQ(bounded[i].vertex[v][axis], native[i].vertex[v][axis]);
+            }
+            EXPECT_EQ(std::memcmp(&bounded[i].info, &native[i].info, sizeof(CCPolyInfo)), 0);
+        }
+    }
+}
+
 template <typename T>
 std::vector<unsigned char> ObjectBytes(const T &value) {
     std::vector<unsigned char> bytes(sizeof(value));
@@ -75,6 +96,7 @@ void BackPump() {
     if (!queued && state.value("ready", false)) {
         for (const auto &action : mods::Scripts().Actions("audit.back")) {
             if (action.id == "enter" && action.available) {
+                ASSERT_NO_THROW(AuditMonsterTerrain());
                 if (managed_layout) {
                     const auto state = mods::ReadLayout({
                         {"dungeon", selectMapNo}
@@ -164,6 +186,7 @@ void BackPump() {
         ++stable;
         maximum_stable = std::max(maximum_stable, stable);
         if (stable >= 90) {
+            ASSERT_NO_THROW(AuditMonsterTerrain());
             if (managed_layout && expected_expanded) {
                 EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
             }

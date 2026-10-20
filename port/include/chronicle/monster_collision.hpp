@@ -4,8 +4,14 @@
 #include "collision.hpp"
 
 class CMonstorUnit;
+class CDungeonMap;
 
 namespace chronicle::monsters {
+// Procedural-floor terrain, in native neighbor/chest/Atla order. Every writer's
+// upper bound is checked before allocating and publishing scratch storage.
+// Explicit expanded-unit caller only; storage lasts until the next terrain call.
+std::span<CCPoly> ExpandedTerrainCollision(CDungeonMap &map, const float *position, const float *player_position);
+
 // Explicit expanded-unit path only. Includes terrain first, then other active
 // actors in slot order. Returned storage lasts until the next call.
 // Rejects unsupported geometry/budgets before invoking native geometry writers.
