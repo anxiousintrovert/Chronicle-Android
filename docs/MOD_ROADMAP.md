@@ -60,3 +60,7 @@ permissions, saves and the shared menu framework.
 - Document ownership, conflicts, failure/cleanup behavior and save compatibility.
 - Ship APIs with relevant regression and gameplay evidence, clearly stating what
   was tested and which platforms or scenarios remain unverified.
+
+The [actor lifecycle event plan](MOD_ACTOR_EVENTS_PLAN.md) records audited native
+capture boundaries and acceptance tests for planned spawn/removal notifications.
+These subscriptions are not yet implemented.

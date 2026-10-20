@@ -4320,3 +4320,13 @@ capabilities. An author-tool regression compares all 43 capabilities in the
 native loader, offline CLI and guide. All 82 Python tests passed. This verifies
 inventory agreement, not implementation completeness or full gameplay coverage;
 remaining domains in the coverage matrix still apply. No engine sources changed.
+
+## Actor lifecycle capture audit (2026-10-20)
+
+The actor event plan now records source-verified boundaries for future spawn and
+removal notifications. Existing construction notifications precede native actor
+initialization and owned metadata publication, so they cannot be exposed directly
+as completed-spawn callbacks. Cleanup and unit-clear paths also require distinct
+semantics and stale-context cancellation. See MOD_ACTOR_EVENTS_PLAN.md for the
+implementation sequence and acceptance evidence. No new capability is advertised,
+no engine behavior changed, and this audit does not close the lifecycle gap.
