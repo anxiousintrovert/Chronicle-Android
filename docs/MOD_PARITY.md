@@ -1749,3 +1749,32 @@ actual per-map extent; all exported fields except map size match upstream.
 The Windows map size is 115,632 bytes versus the baseline's 76,576. No protected
 PS2 file changed; other platforms remain unverified.
 
+### Expanded-floor minimap
+
+Maps carrying the explicit 48-cell extent now use a separate minimap projection:
+five pixels per tile, fitting the complete grid in a 240x240 region at the
+existing origin. Tiles and player/trap/chest/Atla markers share that projection.
+Player and object symbols retain readable native sizes, and the native atlas,
+rotation, opacity modes, discovery masks and separate map/crystal reveal rules
+remain in use. Invalid/nonfinite object coordinates cannot index the map arrays.
+The retail branch retains its previous statements and arithmetic; a source
+identity check permits only the explicit expanded-map dispatch and existing
+owned reveal hook.
+
+Three tests cover all 2,304 tiles, far-edge alignment, discovery/reveal
+independence, inactive/open objects, malformed coordinates/part IDs, hidden UI,
+and unchanged map bytes/input/RNG during draw-list construction. A Vulkan
+readback test calls native `DrawMiniMap` with synthetic atlases and verifies the
+far tile, marker overlay and unchanged reveal flags. Its optional
+`DC_MINIMAP_AUDIT` image was visually inspected: the full synthetic grid and
+far-edge markers fit onscreen. This is projection/renderer evidence, not a
+retail-atlas large-floor playthrough or proof of every display configuration.
+
+Public layout ownership and failure recovery, expanded native event capacity,
+transport script coordinates, spawn placement, custom scenery and resource
+validation remain outstanding. The operation catalog remains at 106.
+Validation: Clang 23.1.2 Windows game/test builds pass. The full suite has 784
+passes, 32 skips and one disabled test; all 28 Python checks pass. Both
+3,840-case empty/disabled seed exports retain their prior hashes and match
+pinned upstream except for map size. PS2 sources remain unchanged.
+

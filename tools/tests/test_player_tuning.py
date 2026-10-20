@@ -25,6 +25,10 @@ class PlayerTuningSource(unittest.TestCase):
                  ('        mods::ScalePlayerValue(mods::PlayerTuning::GaugeRefill, gain);\n', '')]),
             ('ps2/src/dungeonmap.cpp', 'port/src/dungeonmap.cpp',
              'void CDungeonMap::DrawMiniMap(', [
+                 ('    if (this->GridExtent() == chronicle::dungeon::GridStride) {\n'
+                  '        DrawExpandedMiniMap(*this, pos, angle);\n'
+                  '        return;\n'
+                  '    }\n', ''),
                  ('    mods::ApplyPlayerMapReveal(BtEquipMap, BtEquipMasuisyou);\n', '')]),
         ]
         for native, port, signature, replacements in cases:

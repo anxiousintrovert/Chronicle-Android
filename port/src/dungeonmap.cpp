@@ -611,8 +611,37 @@ PORT_OVERRIDE void CDungeonMap::DrawAtraBoll(float *pos) {
 }
 
 #include "mods/player_tuning_native.hpp"
+#include "dungeon_minimap.hpp"
+
+static void DrawExpandedMiniMap(const CDungeonMap &map, float *pos, float angle) {
+    const int status = UserStatus->minimap_status;
+    if (status < 0 || status >= 3) return;
+    int reveal_map = BtEquipMap, reveal_items = BtEquipMasuisyou;
+    if (DebugStatus[3]) reveal_map = reveal_items = 1;
+    mods::ApplyPlayerMapReveal(reveal_map, reveal_items);
+    auto sprites = ExpandedDungeonMiniMap(map, pos, status, reveal_map != 0, reveal_items == 1);
+    char tile_name[] = "minimap1", symbol_name[] = "itempack";
+    auto *tiles = TexManager.GetTexture(tile_name, -1);
+    auto *symbols = TexManager.GetTexture(symbol_name, -1);
+    for (const auto &sprite : sprites) {
+        if (sprite.kind == DungeonMiniMapKind::Player) {
+            set2DSprite(Vif1Packet, symbols, sprite.screen, sprite.atlas, 7, 7, angle);
+        } else if (sprite.kind == DungeonMiniMapKind::Tile) {
+            set2DSprite(Vif1Packet, tiles, sprite.screen, sprite.atlas,
+                        sprite.tone, sprite.tone, sprite.tone, sprite.alpha);
+        } else {
+            set2DSprite(Vif1Packet, symbols, sprite.screen, sprite.atlas, sprite.alpha);
+        }
+    }
+    pos[0] *= 0.1f;
+    pos[2] *= 0.1f;
+}
 
 PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
+    if (this->GridExtent() == chronicle::dungeon::GridStride) {
+        DrawExpandedMiniMap(*this, pos, angle);
+        return;
+    }
     int           status;
     unsigned char red;
     int           saved_map;
