@@ -3152,3 +3152,25 @@ Validation: Clang 23.1.2 builds, all five PAL audio scenarios, 12 focused
 runtime/audio tests and all 38 Python checks passed. PAL evidence is
 music-replace-2f9f8ffa1afa404e96d5a76aafae83b0/report.json in the local framework
 expansion evidence folder. PS2 diff remains empty. Public operations stay 135.
+
+
+### Actor ownership prerequisite (2026-10-20)
+
+Audited the native monster setup path and pinned reference despawn path. Native
+setup runs an initialization script; removing an actor must also retire attack
+and projectile references and avoid kill rewards/mimic chest triggers. Calling
+setup or clearing monster.state alone is insufficient for a safe public API.
+
+Added internal generation-checked actor ownership metadata. Claims bind to an
+identity registry, cannot be stolen by another owner, cannot transfer across
+slot reuse/floor reset, and retain cleanup records while owner retirement work
+is enumerated. Invalid/stale claims reject and storage is bounded by supported
+slot capacity. The record stores a definition name without allocating custom
+item/weapon/cutscene IDs or prescribing those contributor registries.
+
+This is metadata only with no production caller or native state writes. Public
+spawn/despawn still require resource preflight, native cleanup and gameplay
+replays. Public operation count remains 135; the entity lifecycle gap is open.
+
+Validation: Clang 23.1.2 game/test builds and all 20 ownership/entity-handle
+tests passed. PS2 diff against the baseline remains empty.
