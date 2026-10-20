@@ -2165,3 +2165,26 @@ prove high-population gameplay or other-platform behavior.
 
 Next gates remain load-boundary activation/reset, bounded collision/resource
 storage and high-population gameplay validation before exposing higher counts.
+
+
+### Expanded monster collision append budget (2026-10-20)
+
+Expanded units now copy the existing terrain results into a separate, lazily
+allocated polygon buffer before appending actor collision. The helper validates
+the complete shared frame graph and MDT mesh bounds, then reserves the worst-case
+space for every active other actor before calling native writers. The budget is
+65,536 polygons, 4,096 frame visits and 64 child levels. Unsupported geometry,
+cycles and excess budgets throw before native actor writes. Retail units keep
+the original work-buffer append path; no public API enables expanded units yet.
+
+Focused tests build 511 polygons from 256 slots, preserve terrain ordering,
+exclude the current/dormant actors and reject invalid geometry/graphs/budgets.
+This addresses actor appends only: terrain generation still writes into the
+original buffer first. Terrain bounds and load-boundary preflight/error handling
+must be completed before exposing higher populations. High-population native
+combat/playthrough coverage and other platforms remain outstanding.
+
+Validation: Clang 23.1.2 Windows game/test builds pass; full suite 808 passed,
+59 skipped, 1 disabled; 29 Python checks pass. Fresh retail and managed Cave
+PAL back-floor replays pass. Both 3,840-case seed exports retain their prior
+hashes and differ from pinned upstream only by map storage size. PS2 unchanged.
