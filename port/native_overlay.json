@@ -1750,6 +1750,26 @@
           "count": 1
         }
       ]
+    },
+    "src/snd.cpp": {
+      "sha256": "f666c33bf472576e26dfab64900651a02e90a19fe6ec0dbf0ac8eadc55257de2",
+      "replacements": [
+        {
+          "old": "#include \"snd.hpp\"",
+          "new": "#include \"snd.hpp\"\n#include \"chronicle/monster_audio.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "SND_SE_SEQ se_seq[32];",
+          "new": "SND_SE_SEQ se_seq[chronicle::monsters::SoundSequenceCapacity];",
+          "count": 1
+        },
+        {
+          "old": "static SND_SE_SEQ *GetSeSeq(int *found, int se_no, int voice) {\n    int         i;\n    SND_SE_SEQ *slot = 0;\n\n    *found = 0;\n\n    for (i = 0; i < 32; i++) {\n        if (se_seq[i].se_no < 0) {\n            slot = &se_seq[i];\n            break;\n        }\n    }\n\n    if (se_no >= 0) {\n        for (i = 0; i < 32; i++) {\n            if (se_seq[i].se_no == se_no && se_seq[i].voice == voice) {\n                *found = 1;\n                return &se_seq[i];\n            }\n        }\n    }\n\n    return slot;\n}\n\nvoid SndSeSeqInit() {\n    int i;\n\n    for (i = 0; i < 32; i++) {\n        InitSeSeq(&se_seq[i]);\n    }\n}\n\nint SndSeSeqPlayStop(int se_no, int length, int voice) {\n    int         found;\n    SND_SE_SEQ *slot = GetSeSeq(&found, se_no, voice);\n\n    if (slot == 0) {\n        return 0;\n    }\n\n    slot->se_no = se_no;\n    slot->length = length;\n\n    if (found) {\n        slot->step = 1;\n    } else {\n        slot->step = 0;\n    }\n\n    slot->voice = voice;\n    return 1;\n}\n\nstatic void SndSeSeqStep() {\n    int i;\n\n    for (i = 0; i < 32; i++) {\n        SND_SE_SEQ *seq = &se_seq[i];\n\n        if (seq->se_no >= 0) {\n            if (seq->step == 0) {\n                SndSePlay(seq->se_no, -1, seq->voice);\n            }\n\n            if (seq->step >= seq->length) {\n                SndSeStop(seq->se_no, seq->voice);\n                InitSeSeq(seq);\n            }\n\n            seq->step++;\n        }\n    }\n}\n\n/**\n * Stops every sound-effect sequence.\n *\n * @mangled SndSeSeqAllStop__Fv\n * @address 0x15B060\n * @size 0x84\n */\nvoid SndSeSeqAllStop() {\n    SND_SE_SEQ *seq;\n    int         i;\n\n    for (i = 0; i < 32; i++) {\n        seq = &se_seq[i];\n\n        if (seq->se_no >= 0) {\n            SndSeStop(seq->se_no, seq->voice);\n            InitSeSeq(seq);\n            seq->step++;\n        }\n    }\n}\n",
+          "new": "static SND_SE_SEQ *GetSeSeq(int *found, int se_no, int voice) {\n    int         i;\n    SND_SE_SEQ *slot = 0;\n\n    *found = 0;\n\n    for (i = 0; i < chronicle::monsters::SoundSequenceLimit(); i++) {\n        if (se_seq[i].se_no < 0) {\n            slot = &se_seq[i];\n            break;\n        }\n    }\n\n    if (se_no >= 0) {\n        for (i = 0; i < chronicle::monsters::SoundSequenceLimit(); i++) {\n            if (se_seq[i].se_no == se_no && se_seq[i].voice == voice) {\n                *found = 1;\n                return &se_seq[i];\n            }\n        }\n    }\n\n    return slot;\n}\n\nvoid SndSeSeqInit() {\n    int i;\n\n    for (i = 0; i < chronicle::monsters::SoundSequenceLimit(); i++) {\n        InitSeSeq(&se_seq[i]);\n    }\n}\n\nint SndSeSeqPlayStop(int se_no, int length, int voice) {\n    int         found;\n    SND_SE_SEQ *slot = GetSeSeq(&found, se_no, voice);\n\n    if (slot == 0) {\n        return 0;\n    }\n\n    slot->se_no = se_no;\n    slot->length = length;\n\n    if (found) {\n        slot->step = 1;\n    } else {\n        slot->step = 0;\n    }\n\n    slot->voice = voice;\n    return 1;\n}\n\nstatic void SndSeSeqStep() {\n    int i;\n\n    for (i = 0; i < chronicle::monsters::SoundSequenceLimit(); i++) {\n        SND_SE_SEQ *seq = &se_seq[i];\n\n        if (seq->se_no >= 0) {\n            if (seq->step == 0) {\n                SndSePlay(seq->se_no, -1, seq->voice);\n            }\n\n            if (seq->step >= seq->length) {\n                SndSeStop(seq->se_no, seq->voice);\n                InitSeSeq(seq);\n            }\n\n            seq->step++;\n        }\n    }\n}\n\n/**\n * Stops every sound-effect sequence.\n *\n * @mangled SndSeSeqAllStop__Fv\n * @address 0x15B060\n * @size 0x84\n */\nvoid SndSeSeqAllStop() {\n    SND_SE_SEQ *seq;\n    int         i;\n\n    for (i = 0; i < chronicle::monsters::SoundSequenceLimit(); i++) {\n        seq = &se_seq[i];\n\n        if (seq->se_no >= 0) {\n            SndSeStop(seq->se_no, seq->voice);\n            InitSeSeq(seq);\n            seq->step++;\n        }\n    }\n}\n",
+          "count": 1
+        }
+      ]
     }
   }
 }

@@ -2296,3 +2296,29 @@ Validation: Clang 23.1.2 Windows game/test builds pass; 816 tests passed,
 Both 3,840-case no-mod/disabled-mod seed exports retain prior hashes, differing
 from pinned upstream only by map storage size. PS2 and official Kazarov
 sources unchanged. Cross-platform and high-population gameplay unverified.
+
+
+### Expanded native sound sequences (2026-10-20)
+
+Native sound-sequence storage reserves 288 entries. Lookup, initialization,
+refresh, expiry and all-stop loops use an explicit active limit, default 32.
+PrepareSoundSequencesForMonsterSlots enables 32 + requested slots only for
+expanded units, stopping through the previous limit before resetting the
+new range. Retail-to-retail preparation is a no-op. The s16 logical voice
+field already accommodates all 256 monster slots without truncation.
+
+Tests fill the retail and expanded pools, reject excess entries, refresh
+voice 510 in a full pool, expire every entry through native SndStep, and
+retire all high sequences before shrinking. Dormant retail storage is
+untouched. The expiry test deliberately uses a rejected audio ID to isolate
+sequence lifecycle; the prior official-mixer test covers sound routing.
+
+Coordinated floor loading must stop/reset sequences before clearing voice
+leases, activate hit/script/monster limits together, and report failures.
+These internal helpers are still not exposed as public higher-population
+requests; high-population native gameplay and full coverage remain pending.
+
+Clang 23.1.2 Windows game/test builds pass: 818 tests passed, 59 skipped,
+1 disabled; 29 Python checks and three fresh PAL replays pass. Both
+3,840-case seed exports retain prior hashes and differ from pinned upstream
+only by map storage size. PS2 unchanged; other platforms unverified.
