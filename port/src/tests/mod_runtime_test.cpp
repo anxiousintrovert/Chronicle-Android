@@ -634,6 +634,31 @@ TEST_F(ModRuntime, NativePluginRequiresSeparateTrustAndEnableAndRejectsChangedBy
     EXPECT_FALSE(enabled_session.SetTrusted("test.native", fingerprint, true));
 }
 
+TEST_F(ModRuntime, TransitionReadinessIsLazyRisingAndResetsAcrossLoadAndContext) {
+    int queries=0;bool ready=false;
+    mods::QueryGame query=[&](std::string_view op,const Json &args){++queries;EXPECT_EQ(op,"world.transition_state");EXPECT_TRUE(args.empty());return Json{{"ready",ready},{"reason",ready?"":"busy"}};};
+    Add("return {}");Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world,{},{},query);EXPECT_EQ(queries,0);
+    auto manifest=Manifest();manifest["permissions"]={"game.read"};
+    Add(R"(assert(chronicle.subscribe('world_transition_ready',function(w)
+        assert(w.event.ready);chronicle.set('ready',(chronicle.get('ready') or 0)+1)
+    end));return {})",manifest);Start();
+    runtime.Tick(world,{},{},query);ready=true;runtime.Tick(world,{},{},query);runtime.Tick(world,{},{},query);
+    EXPECT_EQ(State()["values"]["ready"],1);
+    ready=false;runtime.Tick(world,{},{},query);ready=true;runtime.Tick(world,{},{},query);EXPECT_EQ(State()["values"]["ready"],2);
+    const auto saved=runtime.SaveState();std::string error;ASSERT_TRUE(runtime.LoadState(saved,error));runtime.Tick(world,{},{},query);EXPECT_EQ(State()["values"]["ready"],3);
+    auto next=world;next.floor=2;runtime.Tick(next,{},{},query);EXPECT_EQ(State()["values"]["ready"],4);
+    next.playing=false;const int before=queries;runtime.Tick(next,{},{},query);EXPECT_EQ(queries,before);
+    next.playing=true;runtime.Tick(next,{},{},query);EXPECT_EQ(State()["values"]["ready"],5);EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+TEST_F(ModRuntime, TransitionReadinessRequiresReadPermissionAndRollsBackFailure) {
+    Add("assert(chronicle.subscribe('world_transition_ready',function() error('must not run') end));return {}");Start();
+    int queries=0;mods::QueryGame query=[&](std::string_view,const Json &){++queries;return Json{{"ready",true}};};
+    runtime.Tick({2,0,0,true,0,1},{},{},query);EXPECT_EQ(queries,0);EXPECT_TRUE(runtime.Diagnostics().empty());
+    auto manifest=Manifest();manifest["permissions"]={"game.read"};
+    Add("assert(chronicle.subscribe('world_transition_ready',function() chronicle.set('leak',true);error('rollback') end));return {}",manifest);Start();
+    runtime.Tick({2,0,0,true,0,1},{},{},query);EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_FALSE(State().contains("values"));
+}
+
 TEST_F(ModRuntime, OwnedListenersFollowLifecycleWithoutRepeatingFloorsOnMenuReturn) {
     Add(R"(
         for _,event in ipairs({'tick','map_enter','floor_enter','game_enter','game_leave'}) do
@@ -1069,6 +1094,15 @@ TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
     const auto state=Json::parse(runtime.SaveState())["mods"]["test.native.v2"];
     EXPECT_EQ(state["quests"]["dynamic"],1);EXPECT_EQ(state["quest_definitions"]["dynamic"]["goal"],1);EXPECT_EQ(state["quest_rewarded"]["dynamic"],true);
     EXPECT_EQ(state["quest_objectives"]["multi"]["people"],2);
+}
+
+TEST_F(ModNativeV2, TransitionReadinessUsesNativeEventMaskAndSnapshot) {
+    LoadPlugin("skills");int calls=0;
+    mods::QueryGame query=[&](std::string_view op,const Json &){EXPECT_EQ(op,"world.transition_state");++calls;return Json{{"ready",true},{"reason",""}};};
+    runtime.Tick({2,0,0,true,0,1},{},{},query);runtime.Tick({2,0,0,true,0,1},{},{},query);
+    EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["test.native.v2"]["values"]["transition_ready"],1);
+    EXPECT_EQ(calls,2);EXPECT_TRUE(runtime.Diagnostics().empty());
+    LoadPlugin("skills",CHRONICLE_NATIVE_V2_NO_EVENTS_FIXTURE);calls=0;runtime.Tick({2,0,0,true,0,1},{},{},query);EXPECT_EQ(calls,0);
 }
 
 TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {

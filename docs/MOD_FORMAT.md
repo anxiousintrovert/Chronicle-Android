@@ -128,6 +128,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `events.map.v1` | Map-entry callback and built-in visit tracking |
 | `events.tick.v1` | Gameplay simulation callback |
 | `player.read.v1`, `party.read.v1`, `inventory.read.v1` | Lazy, detached legacy snapshots; require `game.read` |
+| `events.transition_ready.v1` | Opt-in rising native world-transition readiness notification for Lua and ABI 2 |
 | `events.lifecycle.v1` | Owned Lua listeners for tick, map/floor entry, gameplay enter/leave, and deferred save-loaded notification |
 | `events.custom.v1` | Deferred package-owned Lua/native events; dependency-scoped subscriptions and transactional publication |
 | `services.command.v1` | Explicit Lua/native command exports callable by Lua/native dependents; one shared managed/game transaction |

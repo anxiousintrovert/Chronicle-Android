@@ -76,6 +76,7 @@ struct Module {
     Json                                                                                                 service_arguments, service_result;
     std::map<std::string, std::vector<int>>                                                              listeners;
     unsigned                                                                                             listener_count = 0;
+    bool transition_ready = false;
     std::map<std::string, int>                                                                           exports, command_exports;
     std::function<bool(Module &, const char *, const char *, const Json &, Json &, std::string &, bool)> invoke;
     Json                                                                                                 arguments;
@@ -768,7 +769,7 @@ int Subscribe(lua_State *L) {
     if (!m.initializing || lua_rawlen(L, 1) != std::strlen(event) || !lua_isfunction(L, 2)) {
         return Failure(L, "subscribe requires a function during package initialization");
     }
-    if (std::strcmp(event, "skill_train_requested") && std::strcmp(event, "enemy_killed") && std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
+    if (std::strcmp(event, "world_transition_ready") && std::strcmp(event, "skill_train_requested") && std::strcmp(event, "enemy_killed") && std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
         return Failure(L, "unsupported lifecycle event");
     }
     if (m.listener_count >= 32) {
@@ -1571,6 +1572,19 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             if(!impl_->loaded_pending)impl_->QuestEvent(m,"floor_enter",world,commit_game);
             impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER, nullptr, read_game);
+        }
+        if (!action_context || impl_->loaded_pending) m.transition_ready=false;
+        if (world.playing && !m.failed && Permitted(m,"game.read") &&
+            (m.listeners.contains("on_world_transition_ready") || (m.native && m.native->WantsEvent(CHRONICLE_EVENT_WORLD_TRANSITION_READY)))) {
+            Json readiness;
+            try {if(query_game)readiness=query_game("world.transition_state",Json::object());} catch(...) {readiness=Json();}
+            const bool ready=readiness.is_object()&&readiness.contains("ready")&&readiness["ready"].is_boolean()&&readiness["ready"].get<bool>();
+            const bool notify=ready&&!m.transition_ready;m.transition_ready=ready;
+            if(notify) {
+                World notification=world;notification.event=std::move(readiness);
+                impl_->Call(m,"on_world_transition_ready",notification,money,read_game,query_game,commit_game);
+                impl_->NativeCallback(m,notification,query_game,commit_game,CHRONICLE_EVENT_WORLD_TRANSITION_READY,nullptr,read_game);
+            }
         }
         if (world.playing) {
             if(action_context&&!impl_->loaded_pending)for(const auto &[owner,tree,id]:training) {

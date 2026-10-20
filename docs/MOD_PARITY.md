@@ -4245,3 +4245,23 @@ migrations nor declares a save loadable, and ignores retained-only owners when
 checking requirements. All 80 Python tests pass, including unchanged input files
 and rejection of inferred multi-step migration availability. Engine behavior,
 shared menus, PS2 files and the upstream renderer remain unchanged.
+
+## Native transition readiness events (2026-10-20)
+
+`events.transition_ready.v1` adds an opt-in Lua subscription and ABI 2 event bit
+for rising native `world.transition_state` readiness. Queries are skipped without
+a live, game.read-permitted subscriber. The observation rearms after not-ready
+states, save loads or gameplay context changes; callback writes use existing
+rollback and owner-failure rules. ABI structures are unchanged, and existing
+compiled masks keep their original meaning. Shared menus remain the input path.
+
+This closes operation-specific transition notification coverage only. Broader
+resource-ready lifecycle events remain outstanding; a transition-ready snapshot
+is not a global native readiness guarantee or reservation.
+
+Validation: Clang 23.1.2 game/tests built; 1,056 native tests passed, 107
+skipped and one disabled. All 80 Python tests passed. The isolated PAL shared
+action/back-floor scenario also passed with the readiness notification observed
+from the real native query. Evidence: `transition-ready-retail-20261020` under
+the local framework expansion evidence directory. Non-Windows validation remains
+outstanding. PS2 baseline and upstream renderer checks are unchanged.

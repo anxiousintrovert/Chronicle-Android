@@ -2807,3 +2807,29 @@ life deductions and healing. A PAL dungeon probe also checks rule/skill stacking
 healing, rank/rule release and the subsequent native back-floor transition. It
 uses controlled native life calls, not controller-driven combat. A representative
 combat playthrough and non-Windows validation remain outstanding.
+
+## Native world-transition readiness notification
+
+Require `events.transition_ready.v1` and `game.read`, then register during startup:
+
+```lua
+assert(chronicle.subscribe("world_transition_ready", function(world)
+    -- world.event is the current world.transition_state snapshot, with ready=true.
+    -- An intended transition still needs its normal permission and validation.
+end))
+```
+
+This notification uses the existing native `world.transition_state` check. It
+fires on first observed readiness, or after a not-ready observation becomes ready
+again. Gameplay/context changes and save loads rearm it. Ordinary actions or
+menus can make readiness fluctuate, so handlers must make one-time work explicitly
+idempotent. No notification is delivered outside gameplay or without game.read.
+Unavailable/malformed query results count as not ready. Polling occurs only for
+subscribed, permitted live owners, after map/floor notifications and before normal
+tick callbacks. The subscription shares the existing 32-listener limit.
+
+This is readiness for native world transitions, not universal engine-resource
+readiness or a reservation. A prior callback may change state; commands still
+revalidate at commit. Failed handlers roll back managed writes and stop their
+owner through the existing callback rules. No gameplay transition is performed
+by subscribing, and no-mod/no-subscriber execution makes no readiness query.

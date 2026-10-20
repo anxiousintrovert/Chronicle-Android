@@ -452,12 +452,14 @@ end}
  assert(#rules.outgoing==0 and #rules.incoming==0)
  chronicle.set('combat_verified',true)
 )");
+        source="assert(chronicle.subscribe('world_transition_ready',function(w) assert(w.event.ready);chronicle.set('transition_ready_seen',true) end))\n"+source;
         std::ofstream(script_path) << source;
         const auto manifest_path = root / "mods/audit.back/mod.json";
         std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
         manifest["requires_capabilities"].push_back("combat.rules.v1");
         manifest["requires_capabilities"].push_back("skills.effects.v1");
         manifest["requires_capabilities"].push_back("skills.defense.v1");
+        manifest["requires_capabilities"].push_back("events.transition_ready.v1");
         for (const auto *op : {"combat.rule_set", "combat.rule_remove", "combat.rules_get"}) manifest["requires_operations"].push_back(op);
         std::ofstream(manifest_path) << manifest.dump();
     }
@@ -927,6 +929,7 @@ end}
         EXPECT_TRUE(mods::OwnedCombatDamage().Empty());
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("combat_verified"), true);
+        EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("transition_ready_seen"),true);
     }
     if (actor_models) {
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());

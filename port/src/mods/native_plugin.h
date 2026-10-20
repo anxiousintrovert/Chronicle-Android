@@ -59,7 +59,8 @@ enum ChronicleModEventV2 {
     CHRONICLE_EVENT_ENEMY_KILLED = 1u << 5,
     CHRONICLE_EVENT_CUSTOM = 1u << 6, /* event: {owner,name,payload}; own package or declared dependencies only. */
     CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED = 1u << 7, /* event: {tree,id}; owning package only. */
-    CHRONICLE_EVENT_ALL = (1u << 8) - 1
+    CHRONICLE_EVENT_WORLD_TRANSITION_READY = 1u << 8, /* rising readiness; event is world.transition_state snapshot. */
+    CHRONICLE_EVENT_ALL = (1u << 9) - 1
 };
 
 typedef struct ChronicleModPluginV2 {

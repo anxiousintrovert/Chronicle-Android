@@ -115,6 +115,10 @@ static int event(const ChronicleModHostV2 *host, void *state, uint32_t which, co
     if (!strstr(world, "\"dungeon\":") || !strstr(world, "\"floor\":") || !strstr(world, "\"mode\":"))
         return 0;
     switch (which) {
+    case CHRONICLE_EVENT_WORLD_TRANSITION_READY:
+        if (!strstr(world, "\"ready\":true")) return 0;
+        key = "transition_ready";
+        break;
     case CHRONICLE_EVENT_GAME_ENTER:
         key = "game_enter";
         break;

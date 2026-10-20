@@ -278,3 +278,16 @@ See [the standalone counter](../examples/native-services/README.md).
 
 
 ABI 2 also supports `CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED` (bit 7). The shared skill menu queues this event only to the owning package; world JSON includes `event: {tree, id}`. This is a request, not automatic training. See the host API skill training section for cancellation and transaction semantics. No ABI structure layout change is required.
+
+## World-transition readiness (ABI 2)
+
+With `events.transition_ready.v1` and `game.read`, request
+`CHRONICLE_EVENT_WORLD_TRANSITION_READY` (bit 8). The callback's world JSON contains
+an `event` object with the native `world.transition_state` snapshot and ready=true.
+It fires on rising readiness, rearms after load/context changes, and uses normal
+transaction/owner-failure semantics. This is operation-specific readiness, not a
+promise that every native subsystem is available. Revalidate intended operations;
+see the host API for lifecycle ordering and repeated-notification handling.
+No descriptor layout changes are required. Older binaries' existing event masks
+remain unchanged; new plugins should declare the capability so older hosts reject
+unsupported requests before loading them.
