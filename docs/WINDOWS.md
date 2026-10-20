@@ -41,6 +41,8 @@ downloads and locks in `<checkout>\.kazarov`, which both configurations share:
 - `acquire.ps1` runs only when a dependency is missing. It verifies each pinned archive's SHA-256.
 - `configure.ps1` runs only when the build directory has no `build.ninja`, or its
   `CMakeCache.txt` was made for another checkout path. Then the cache files are deleted first.
+  It explicitly selects the pinned llvm-mingw `clang.exe` for C (including Lua)
+  and `clang++.exe` for C++; both compiler identifications must report Clang.
 - `build.ps1` builds the executables with Ninja, so an unchanged tree rebuilds nothing.
 - A lock in `.kazarov\locks` serialises runs of one configuration; other configurations run in parallel.
 

@@ -38,6 +38,28 @@ normal-input, runtime-injected and source-only evidence distinctly. Windows beta
 validation does not certify Android, Linux or macOS. Broader palette/copy cases
 and experimental APIs must be identified as unverified where applicable.
 
+## Clean Windows Clang build and staged startup (2026-10-20)
+
+The Windows configure helper now explicitly selects llvm-mingw Clang for both
+C and C++, including the Lua library. A new RelWithDebInfo build directory
+configured with Clang 23.1.2 and built `darkcloud` and `dcdata` successfully.
+The source was e28c111b plus this compiler-selection change; upstream Kazarov
+remained 04bd301efd8486c033caf46faf52f179a6022d7c.
+
+`cmake --install` into a new directory supplied both executables, `lang` and
+`glyphs`. Copying the four documented runtime DLLs completed the startup inputs.
+With PATH restricted to Windows/System32 and Windows, and DC_* environment
+overrides cleared, the staged executable completed a three-frame offscreen PAL
+startup on an RTX 3080 and exited zero. Its fresh save's mod report contained
+empty errors, load_order and mods arrays. The executable SHA-256 was
+`5dfb287aaacf9314ca476ceb900ae6cf29d271a86663ee7d2e8e21a8e4cdb0b2`.
+
+This establishes clean compilation and initial runtime dependency resolution,
+not a full gameplay or distribution acceptance run. License-notice collection,
+archive/checksum automation, normal-controls quest playthrough and the staged
+enable/conflict/disable/restart workflow remain pending. The staging directory
+also holds local test saves/evidence and must not itself be distributed.
+
 ## Full-resolution texture upload foundation (2026-10-20)
 
 The port decoded-texture object can now carry optional logical dimensions independently of physical image dimensions. The registry retains logical texel dimensions and forwards both dimensions to the existing upstream Kazarov TextureDesc. Defaults are zero, preserving original behavior. This is internal groundwork, not an exposed package capability.

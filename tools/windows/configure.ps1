@@ -11,7 +11,7 @@ $python = Find-WindowsPython
 $testOption = if ($Tests) { 'ON' } else { 'OFF' }
 & $cmake -S $source -B $build -G Ninja `
     -DPLATFORM=PC "-DCMAKE_BUILD_TYPE=$BuildType" "-DDC_BUILD_TESTS=$testOption" `
-    "-DCMAKE_CXX_COMPILER=$llvm/clang++.exe" "-DCMAKE_RC_COMPILER=$llvm/windres.exe" `
+    "-DCMAKE_C_COMPILER=$llvm/clang.exe" "-DCMAKE_CXX_COMPILER=$llvm/clang++.exe" "-DCMAKE_RC_COMPILER=$llvm/windres.exe" `
     "-DCMAKE_MAKE_PROGRAM=$root/deps/ninja/ninja.exe" "-DPython3_EXECUTABLE=$python" `
     "-DSDL3_DIR=$root/deps/sdl/SDL3-3.4.18/x86_64-w64-mingw32/lib/cmake/SDL3" `
     "-DVulkan_INCLUDE_DIR=$root/deps/vulkan/Vulkan-Headers-vulkan-sdk-1.4.363.0/include" `
