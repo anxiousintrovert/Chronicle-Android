@@ -33,6 +33,16 @@
           "old": "    MAP_TRAP_CIRCLE  trap_circle[3];        /**< Trap circles that lie on the floor. */",
           "new": "    MAP_TRAP_CIRCLE  trap_circle[3];        /**< Trap circles that lie on the floor. */\n\n    // Port-only dimensions survive the temporary generation context.\n    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;\n    int GridExtent() const {\n        return port_grid_extent == chronicle::dungeon::GridStride ? chronicle::dungeon::GridStride : chronicle::dungeon::RetailGridExtent;\n    }",
           "count": 1
+        },
+        {
+          "old": "events[48]",
+          "new": "events[chronicle::dungeon::MapEventCapacity]",
+          "count": 1
+        },
+        {
+          "old": "    int GridExtent() const {",
+          "new": "    int MapEventLimit() const {\n        return GridExtent() == chronicle::dungeon::GridStride ? chronicle::dungeon::MapEventCapacity : chronicle::dungeon::RetailMapEventCapacity;\n    }\n    int GridExtent() const {",
+          "count": 1
         }
       ]
     },
@@ -1038,6 +1048,66 @@
           "old": "void CDungeonMap::DrawWater(float *pos, int mute) {\n    static int  wait;\n    static char init;\n\n    float          vec[4];\n    float          best_pos[4];\n    float          vol;\n    float          pan;\n    float          near_dist;\n    float          sound_dist;\n    int            shake;\n    int            col;\n    int            row;\n    PARTS_WATER   *best;\n    PARTS_WATER   *water;\n    CDungeonParts *part;\n    int            best_col;\n    int            best_row;\n\n    best = NULL;\n    near_dist = 320.0f;\n    sound_dist = 300.0f;\n    shake = false;\n\n    // The surface only shakes once every thirty frames.\n    if (init == 0) {\n        wait = 0;\n        init = 1;\n    }\n\n    if (wait >= 30) {\n        wait = 0;\n        shake = true;\n    } else {\n        wait++;\n    }\n\n    // One surface draws for the whole floor: the one nearest to the player.\n    for (row = 0; row < 16; row++) {\n        for (col = 0; col < 16; col++) {\n            int   cell_no = col + row * chronicle::dungeon::GridStride;\n            float dist;\n\n            if (this->cells[cell_no].parts_no == MAP_PARTS_NONE) {\n                continue;\n            }\n\n            part = &this->parts[this->cells[cell_no].parts_no];\n            water = &part->water;\n\n            if (this->parts[this->cells[cell_no].parts_no].water.used == 0) {\n                continue;\n            }\n\n            vec[0] = 160.0f * (float) col;\n            vec[1] = water->vertex[0][1];\n            vec[2] = 160.0f * (float) row;\n            dist = DistVector(pos, vec);\n\n            if (dist < near_dist) {\n                best = water;\n                near_dist = dist;\n                best_pos[0] = vec[0];\n                best_pos[1] = vec[1];\n                best_pos[2] = vec[2];\n                best_col = col;\n                best_row = row;\n            }\n\n            if (sound_dist >= dist) {\n                sound_dist = dist;\n            }\n        }\n    }\n\n    if (best != NULL) {\n        this->water.SetVertex(best->vertex[0], best->vertex[1], best->vertex[2], best->vertex[3]);\n        this->water.frame.SetPosition(best_pos);\n        u8 red = best->red;\n        u8 green = best->green;\n        u8 blue = best->blue;\n\n        this->water.SetColor(red, green, blue, 0x80);\n\n        if (shake != 0) {\n            if (selectMapNo == DUNGEON_DIVINE_BEAST_CAVE && selectMapNo == DUNGEON_DEMON_SHAFT) {\n                float height = 1.0f;\n\n                this->water.SetParam(0.12f, 0.018f, height, 11.0f);\n            } else {\n                float speed = 11.0f;\n\n                this->water.SetParam(0.12f, 0.018f, 0.0f, speed);\n            }\n\n            this->water.Shake(16, 4, 2.15f);\n        }\n\n        this->water.Hamon();\n        DrawVu1__6CWaterFP10RenderInfoP13sceVif1PacketP1(&this->water, &mgRenderInfo, Vif1Packet, NULL);\n    }\n\n    if (best != NULL) {\n\n        // A waterfall stands at the cell that the surface came from.\n        if (best->has_fall != 0 && this->fall_model != NULL) {\n            float x = 160.0f * (float) best_col;\n            float z = 160.0f * (float) best_row;\n\n            this->fall_model->SetPosition(x, 0.0f, z);\n            MGDraw(this->fall_model);\n        }\n\n        if (sound_dist < 300.0f) {\n            SndGetVolPan(&vol, &pan, best_pos, 50.0f, 300.0f);\n\n            if (mute != 0) {\n                vol = 0.0f;\n            }\n\n            SndSetSeVolf(SE_AMBIENT_DUNGEON_HISS, vol, 0);\n            SndSetSePanf(61, pan, 0);\n        } else {\n            SndSetSeVol(61, 0, 0);\n        }\n    } else {\n        float vol;\n        float pan;\n\n        if (sound_dist < 300.0f) {\n            SndGetVolPan(&vol, &pan, best_pos, 50.0f, 300.0f);\n\n            if (mute != 0) {\n                vol = 0.0f;\n            }\n\n            SndSetSeVolf(SE_AMBIENT_TOWN_NOISE, vol, 0);\n            SndSetSePanf(52, pan, 0);\n        } else {\n            SndSetSeVol(52, 0, 0);\n        }\n    }\n}",
           "new": "void CDungeonMap::DrawWater(float *pos, int mute) {\n    static int  wait;\n    static char init;\n\n    float          vec[4];\n    float          best_pos[4];\n    float          vol;\n    float          pan;\n    float          near_dist;\n    float          sound_dist;\n    int            shake;\n    int            col;\n    int            row;\n    PARTS_WATER   *best;\n    PARTS_WATER   *water;\n    CDungeonParts *part;\n    int            best_col;\n    int            best_row;\n\n    best = NULL;\n    near_dist = 320.0f;\n    sound_dist = 300.0f;\n    shake = false;\n\n    // The surface only shakes once every thirty frames.\n    if (init == 0) {\n        wait = 0;\n        init = 1;\n    }\n\n    if (wait >= 30) {\n        wait = 0;\n        shake = true;\n    } else {\n        wait++;\n    }\n\n    // One surface draws for the whole floor: the one nearest to the player.\n    for (row = 0; row < (this->GridExtent() == chronicle::dungeon::GridStride ? chronicle::dungeon::GridStride : 16); row++) {\n        for (col = 0; col < (this->GridExtent() == chronicle::dungeon::GridStride ? chronicle::dungeon::GridStride : 16); col++) {\n            int   cell_no = col + row * chronicle::dungeon::GridStride;\n            float dist;\n\n            if (this->cells[cell_no].parts_no == MAP_PARTS_NONE) {\n                continue;\n            }\n\n            part = &this->parts[this->cells[cell_no].parts_no];\n            water = &part->water;\n\n            if (this->parts[this->cells[cell_no].parts_no].water.used == 0) {\n                continue;\n            }\n\n            vec[0] = 160.0f * (float) col;\n            vec[1] = water->vertex[0][1];\n            vec[2] = 160.0f * (float) row;\n            dist = DistVector(pos, vec);\n\n            if (dist < near_dist) {\n                best = water;\n                near_dist = dist;\n                best_pos[0] = vec[0];\n                best_pos[1] = vec[1];\n                best_pos[2] = vec[2];\n                best_col = col;\n                best_row = row;\n            }\n\n            if (sound_dist >= dist) {\n                sound_dist = dist;\n            }\n        }\n    }\n\n    if (best != NULL) {\n        this->water.SetVertex(best->vertex[0], best->vertex[1], best->vertex[2], best->vertex[3]);\n        this->water.frame.SetPosition(best_pos);\n        u8 red = best->red;\n        u8 green = best->green;\n        u8 blue = best->blue;\n\n        this->water.SetColor(red, green, blue, 0x80);\n\n        if (shake != 0) {\n            if (selectMapNo == DUNGEON_DIVINE_BEAST_CAVE && selectMapNo == DUNGEON_DEMON_SHAFT) {\n                float height = 1.0f;\n\n                this->water.SetParam(0.12f, 0.018f, height, 11.0f);\n            } else {\n                float speed = 11.0f;\n\n                this->water.SetParam(0.12f, 0.018f, 0.0f, speed);\n            }\n\n            this->water.Shake(16, 4, 2.15f);\n        }\n\n        this->water.Hamon();\n        DrawVu1__6CWaterFP10RenderInfoP13sceVif1PacketP1(&this->water, &mgRenderInfo, Vif1Packet, NULL);\n    }\n\n    if (best != NULL) {\n\n        // A waterfall stands at the cell that the surface came from.\n        if (best->has_fall != 0 && this->fall_model != NULL) {\n            float x = 160.0f * (float) best_col;\n            float z = 160.0f * (float) best_row;\n\n            this->fall_model->SetPosition(x, 0.0f, z);\n            MGDraw(this->fall_model);\n        }\n\n        if (sound_dist < 300.0f) {\n            SndGetVolPan(&vol, &pan, best_pos, 50.0f, 300.0f);\n\n            if (mute != 0) {\n                vol = 0.0f;\n            }\n\n            SndSetSeVolf(SE_AMBIENT_DUNGEON_HISS, vol, 0);\n            SndSetSePanf(61, pan, 0);\n        } else {\n            SndSetSeVol(61, 0, 0);\n        }\n    } else {\n        float vol;\n        float pan;\n\n        if (sound_dist < 300.0f) {\n            SndGetVolPan(&vol, &pan, best_pos, 50.0f, 300.0f);\n\n            if (mute != 0) {\n                vol = 0.0f;\n            }\n\n            SndSetSeVolf(SE_AMBIENT_TOWN_NOISE, vol, 0);\n            SndSetSePanf(52, pan, 0);\n        } else {\n            SndSetSeVol(52, 0, 0);\n        }\n    }\n}",
           "count": 1
+        },
+        {
+          "old": "#include \"chronicle/dungeon_build.hpp\"",
+          "new": "#include \"chronicle/dungeon_build.hpp\"\n#include \"chronicle/dungeon_events.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "    for (i = 0; i < 48; i++) {\n        if (this->events[i].kind == DNG_EVENT_NONE) {",
+          "new": "    for (i = 0; i < this->MapEventLimit(); i++) {\n        if (this->events[i].kind == DNG_EVENT_NONE) {",
+          "count": 1
+        },
+        {
+          "old": "    for (j = 0; j < 48; j++) {\n        if (this->events[j].kind == DNG_EVENT_NONE) {",
+          "new": "    for (j = 0; j < this->MapEventLimit(); j++) {\n        if (this->events[j].kind == DNG_EVENT_NONE) {",
+          "count": 2
+        },
+        {
+          "old": "                for (int k = 0; k < 48; k++) {\n                    if (this->events[k].kind == DNG_EVENT_NONE) {",
+          "new": "                for (int k = 0; k < this->MapEventLimit(); k++) {\n                    if (this->events[k].kind == DNG_EVENT_NONE) {",
+          "count": 1
+        },
+        {
+          "old": "    for (int i = 0; i < 48; i++) {\n        if (this->events[i].kind != DNG_EVENT_NONE) {",
+          "new": "    for (int i = 0; i < this->MapEventLimit(); i++) {\n        if (this->events[i].kind != DNG_EVENT_NONE) {",
+          "count": 1
+        },
+        {
+          "old": "    for (int i = 0; i < 48; i++) {\n        if (this->events[i].kind != DNG_EVENT_NONE && DistVector(this->events[i].pos, pos) <= this->events[i].radius) {",
+          "new": "    for (int i = 0; i < this->MapEventLimit(); i++) {\n        if (this->events[i].kind != DNG_EVENT_NONE && DistVector(this->events[i].pos, pos) <= this->events[i].radius) {",
+          "count": 1
+        },
+        {
+          "old": "    for (i = 0; i < 48; i++) {\n        this->events[i].kind = DNG_EVENT_NONE;",
+          "new": "    for (i = 0; i < chronicle::dungeon::MapEventCapacity; i++) {\n        this->events[i].kind = DNG_EVENT_NONE;",
+          "count": 1
+        },
+        {
+          "old": "    for (j = 0; j < 48; j++) {\n        this->events[j].kind = DNG_EVENT_NONE;",
+          "new": "    for (j = 0; j < chronicle::dungeon::MapEventCapacity; j++) {\n        this->events[j].kind = DNG_EVENT_NONE;",
+          "count": 2
+        },
+        {
+          "old": "void CDungeonMap::SetAtraBoll(float *pos, int atra_no) {",
+          "new": "void CDungeonMap::SetAtraBoll(float *pos, int atra_no) {\n    RequireExpandedMapEventSlot(*this);\n    if (this->GridExtent() == chronicle::dungeon::GridStride && (this->atra_num < 0 || this->atra_num >= 8)) {\n        throw std::runtime_error(\"expanded dungeon Atla storage exhausted\");\n    }",
+          "count": 1
+        },
+        {
+          "old": "int CDungeonMap::SetTreasureBox(float *pos, int item_no, int kind, int trap_no) {",
+          "new": "int CDungeonMap::SetTreasureBox(float *pos, int item_no, int kind, int trap_no) {\n    RequireExpandedMapEventSlot(*this);",
+          "count": 1
+        },
+        {
+          "old": "void CDungeonMap::SetMimicEvent(float x, float y, float z, int item_no, int kind) {",
+          "new": "void CDungeonMap::SetMimicEvent(float x, float y, float z, int item_no, int kind) {\n    RequireExpandedMapEventSlot(*this);",
+          "count": 1
+        },
+        {
+          "old": "            if (valid != 0) {\n                sceVu0CopyVector(this->atra[this->atra_num].pos, object_pos);",
+          "new": "            if (valid != 0) {\n                RequireExpandedMapEventSlot(*this);\n                sceVu0CopyVector(this->atra[this->atra_num].pos, object_pos);",
+          "count": 1
         }
       ]
     },
@@ -1188,6 +1258,16 @@
           "old": "    for (k = 0; k < 96; k++) {\n        CDungeonEventData *slot = &UraEventMan.event[k];",
           "new": "    UraEventMan.port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (k = 0; k < chronicle::dungeon::RuntimeEventCapacity; k++) {\n        CDungeonEventData *slot = &UraEventMan.event[k];",
           "count": 1
+        },
+        {
+          "old": "    for (i = 0; i < 48; i++) {\n        map->events[i].kind = DNG_EVENT_NONE;",
+          "new": "    for (i = 0; i < chronicle::dungeon::MapEventCapacity; i++) {\n        map->events[i].kind = DNG_EVENT_NONE;",
+          "count": 1
+        },
+        {
+          "old": "    for (j = 0; j < 48; j++) {\n        UraDungeonMap.events[j].kind = DNG_EVENT_NONE;",
+          "new": "    for (j = 0; j < chronicle::dungeon::MapEventCapacity; j++) {\n        UraDungeonMap.events[j].kind = DNG_EVENT_NONE;",
+          "count": 1
         }
       ]
     },
@@ -1227,6 +1307,21 @@
         {
           "old": "    /**\n     * Returns a used event slot",
           "new": "    s32 port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    int EventLimit() const {\n        return port_event_limit == chronicle::dungeon::RuntimeEventCapacity ? chronicle::dungeon::RuntimeEventCapacity : chronicle::dungeon::RetailRuntimeEventCapacity;\n    }\n\n    /**\n     * Returns a used event slot",
+          "count": 1
+        }
+      ]
+    },
+    "src/collisiondata.cpp": {
+      "sha256": "3b01e207b4283cee01f969d9fc524ea57a5bbc4e908be8f78742efb213ddda40",
+      "replacements": [
+        {
+          "old": "for (i = 0; i < 48; i++) {\n        map->events[i].kind = DNG_EVENT_NONE;",
+          "new": "for (i = 0; i < chronicle::dungeon::MapEventCapacity; i++) {\n        map->events[i].kind = DNG_EVENT_NONE;",
+          "count": 1
+        },
+        {
+          "old": "for (i = 0; i < 96; i++) {\n        CDungeonEventData *data = &event_man->event[i];",
+          "new": "event_man->port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (i = 0; i < chronicle::dungeon::RuntimeEventCapacity; i++) {\n        CDungeonEventData *data = &event_man->event[i];",
           "count": 1
         }
       ]

@@ -64,5 +64,7 @@ TEST(ModDungeonCapacity, RetailSceneryPreservesRowWrappingAndAdjacentFieldReads)
     EXPECT_EQ(chronicle::dungeon::RetailDummyPart(*map, 16, 20), 42);
     const int marker = 321;
     std::memcpy(&map->events[47].unk_30[16], &marker, sizeof(marker));
+    const int expanded_tail = 999;
+    std::memcpy(&map->events[383].unk_30[16], &expanded_tail, sizeof(expanded_tail));
     EXPECT_EQ(chronicle::dungeon::RetailDummyPart(*map, -1, 0), marker);
 }

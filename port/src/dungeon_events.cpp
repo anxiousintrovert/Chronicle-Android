@@ -5,6 +5,18 @@
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
 
+void RequireExpandedMapEventSlot(const CDungeonMap &map) {
+    if (map.GridExtent() != chronicle::dungeon::GridStride) {
+        return;
+    }
+    for (const auto &event : map.events) {
+        if (event.kind == DNG_EVENT_NONE) {
+            return;
+        }
+    }
+    throw std::runtime_error("expanded dungeon placed map-event capacity exceeded");
+}
+
 void PrepareExpandedDungeonEvents(CDungeonEventMan &manager, const CDungeonMap &map) {
     int available = 0, required = 0;
     for (const auto &event : manager.event) {

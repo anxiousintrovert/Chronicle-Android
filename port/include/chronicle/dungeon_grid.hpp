@@ -19,7 +19,8 @@ inline int RetailDummyPart(const CDungeonMap &map, int x, int z) {
     }
     std::uintptr_t address;
     if (index < 0) {
-        address = reinterpret_cast<std::uintptr_t>(map.cells) - static_cast<std::uintptr_t>(-index) * sizeof(MAP_CELL);
+        address = reinterpret_cast<std::uintptr_t>(&map.events[RetailMapEventCapacity]) -
+                  static_cast<std::uintptr_t>(-index) * sizeof(MAP_CELL);
     } else {
         auto offset = static_cast<std::size_t>(index - cells) * sizeof(MAP_CELL);
         if (offset >= 16 * sizeof(ROOM_INFO)) {

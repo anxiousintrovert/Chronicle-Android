@@ -7,6 +7,7 @@
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
 #include "frame.hpp"
+#include "framevu1.hpp"
 
 namespace {
 std::unique_ptr<CDungeonMap> EventMap(int count, bool expanded) {
@@ -86,4 +87,57 @@ TEST(ModDungeonEvents, ExhaustionAndMissingFramesRejectBeforePublishingAnySlots)
     EXPECT_THROW(manager->SetupEvent(map.get(), 1), std::runtime_error);
     EXPECT_EQ(std::memcmp(manager.get(), before.data(), before.size()), 0);
     EXPECT_EQ(manager->EventLimit(), 96);
+}
+
+TEST(ModDungeonEvents, PlacedEventsUseExplicitMapCapacityAndNativeActivation) {
+    auto map = std::make_unique<CDungeonMap>();
+    EXPECT_EQ(map->MapEventLimit(), 48);
+    map->port_grid_extent = 48;
+    EXPECT_EQ(map->MapEventLimit(), 384);
+    for (auto &event : map->events) {
+        event.kind = DNG_EVENT_ATRA;
+    }
+    map->events[383].kind = DNG_EVENT_NONE;
+    float pos[4]{6880, 0, 6880, 1};
+    ASSERT_EQ(map->SetTreasureBox(pos, 148, TREASURE_BOX_SMALL, 0), 383);
+    EXPECT_EQ(map->events[383].kind, DNG_EVENT_TREASURE_BOX);
+    EXPECT_EQ(map->events[383].index, 0);
+    EXPECT_EQ(map->boxes[0].used, 1);
+    CFrameVu1 player;
+    std::memcpy(player.position, map->events[383].pos, sizeof(player.position));
+    EXPECT_EQ(map->GetActiveIvent(&player), 383);
+    map->port_grid_extent = 20;
+    EXPECT_EQ(map->GetActiveIvent(&player), -1);
+    map->events[383].kind = DNG_EVENT_MIMIC;
+    map->RsetMimicEvent();
+    EXPECT_EQ(map->events[383].kind, DNG_EVENT_MIMIC);
+    map->port_grid_extent = 48;
+    map->RsetMimicEvent();
+    EXPECT_EQ(map->events[383].kind, DNG_EVENT_NONE);
+    EXPECT_EQ(map->boxes[0].used, 0);
+    map->initalize();
+    EXPECT_EQ(map->MapEventLimit(), 48);
+    for (const auto &event : map->events) {
+        EXPECT_EQ(event.kind, DNG_EVENT_NONE);
+    }
+}
+
+TEST(ModDungeonEvents, PlacedAllocationExhaustionDoesNotChangeMap) {
+    auto map = std::make_unique<CDungeonMap>();
+    map->port_grid_extent = 48;
+    for (auto &event : map->events) {
+        event.kind = DNG_EVENT_ATRA;
+    }
+    std::vector<unsigned char> before(sizeof(*map));
+    std::memcpy(before.data(), static_cast<const void *>(map.get()), before.size());
+    float pos[4]{6880, 0, 6880, 1};
+    EXPECT_THROW(map->SetTreasureBox(pos, 148, TREASURE_BOX_SMALL, 0), std::runtime_error);
+    EXPECT_THROW(map->SetAtraBoll(pos, 0), std::runtime_error);
+    EXPECT_THROW(map->SetMimicEvent(pos[0], pos[1], pos[2], 148, TREASURE_BOX_SMALL), std::runtime_error);
+    EXPECT_EQ(std::memcmp(static_cast<const void *>(map.get()), before.data(), before.size()), 0);
+    map->events[383].kind = DNG_EVENT_NONE;
+    map->atra_num = 8;
+    std::memcpy(before.data(), static_cast<const void *>(map.get()), before.size());
+    EXPECT_THROW(map->SetAtraBoll(pos, 0), std::runtime_error);
+    EXPECT_EQ(std::memcmp(static_cast<const void *>(map.get()), before.data(), before.size()), 0);
 }

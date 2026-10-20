@@ -5,3 +5,4 @@ class CDungeonMap;
 
 // Validate the complete expanded placement before mutating any runtime slot.
 void PrepareExpandedDungeonEvents(CDungeonEventMan &manager, const CDungeonMap &map);
+void RequireExpandedMapEventSlot(const CDungeonMap &map);

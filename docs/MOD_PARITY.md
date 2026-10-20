@@ -1811,3 +1811,44 @@ Validation: Clang 23.1.2 Windows game/test builds pass; the full suite has
 The empty/disabled 3,840-case exports retain their prior hashes and still
 match pinned upstream except for map size. No PS2 originals were edited.
 
+### Expanded placed map events
+
+`CDungeonMap::events` now has 384 backing records, separately from runtime script
+events. Allocation, activation and mimic cleanup use 384 only for maps with
+expanded dimensions; retail maps retain a 48-record active limit. Native map
+initialization and generation clear the full backing storage. Chest and Atla
+object capacities remain unchanged and are not implied by the larger event array.
+
+Custom chest/mimic/Atla allocation checks event availability before changing
+objects. Direct Atla placement also rejects an exhausted eight-object array.
+Native floor-generation Atla placement checks event space before publishing that
+object; full floor generation still needs a staging/recovery adapter. These
+guards do not alter retail exhaustion behavior.
+
+Enlarging the array moves the cells that follow it. The Moon Sea compatibility
+reader therefore explicitly addresses the original 48-event prefix boundary,
+not the new physical tail. A regression test plants different values at both
+boundaries and verifies the retail value is read.
+
+Native tests place a chest in event slot 383, activate it by position, verify
+retail exclusion, exercise expanded mimic cleanup and confirm initialization
+resets every slot. Exhausted event/Atla allocation preserves the entire map.
+All seven PAL retail back-floor scenarios pass with the new object layout.
+The 3,840-case empty/disabled comparisons match all upstream fields except map
+size: 142,512 bytes on this Windows build versus the baseline's 76,576.
+The additional capacity consumes memory by default but does not increase
+retail object counts or active event limits. Protected PS2 files remain unchanged.
+
+Transport coordinates, complete large-floor resource/spawn handling, custom
+scenery and the owned public layout API with failure recovery remain unfinished.
+
+
+The native debug floor-reset path also clears all placed and runtime event
+records and restores the retail runtime limit before setup. The independent
+96-entry collision-hit storage is unchanged.
+
+Validation: Clang 23.1.2 Windows game/test builds pass; the full suite has
+787 passes, 34 skips and one disabled benchmark. All 29 Python checks pass.
+Both 3,840-case empty/disabled exports differ from pinned upstream only in
+map memory size. Other platforms and complete expanded-floor gameplay remain
+unverified.

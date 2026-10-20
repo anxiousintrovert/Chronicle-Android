@@ -9,4 +9,6 @@ inline constexpr int GridCells = GridStride * GridStride;
 inline constexpr int RetailGridExtent = 20;
 inline constexpr int RuntimeEventCapacity = 384;
 inline constexpr int RetailRuntimeEventCapacity = 96;
+inline constexpr int MapEventCapacity = 384;
+inline constexpr int RetailMapEventCapacity = 48;
 }
