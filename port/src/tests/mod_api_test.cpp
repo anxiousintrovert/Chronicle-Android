@@ -159,7 +159,7 @@ TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
         if (op.name.starts_with("map.")) {
             a["map"] = 0;
         }
-        if (op.name == "georama.get") {
+        if (op.name == "georama.get" || op.name == "georama.satisfaction_get") {
             a["town"] = 0;
         }
         if (op.name == "georama.elements_get") {
@@ -379,5 +379,31 @@ TEST(ModNative, Sha256MatchesStandardVectors) {
     EXPECT_EQ(mods::Sha256(""), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     EXPECT_EQ(mods::Sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     EXPECT_EQ(mods::Sha256(std::string(1000000, 'a')), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
+}
+TEST(ModApi, GeoramaSatisfactionIsDetachedBoundedAndReadOnly) {
+    auto save = std::make_unique<CSaveData>();
+    auto &town = *save->GetGrdData(0);
+    town.request_count = 3;
+    town.request_complete[0] = 1;
+    town.request_complete[1] = 0;
+    town.request_complete[2] = 2;
+    const auto before = std::make_unique<CSaveData>(*save);
+    srand(92); const auto next = rand(); srand(92);
+    auto result = mods::ReadSave(*save, {}, "georama.satisfaction_get", {{"town", 0}});
+    EXPECT_EQ(result["request_count"], 3);
+    EXPECT_EQ(result["completed_requests"], 2);
+    EXPECT_EQ(result["satisfaction_percent"], 67);
+    EXPECT_EQ(result["requests"][1]["completed"], false);
+    result["requests"][0]["completed"] = false;
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    EXPECT_EQ(rand(), next);
+    town.request_count = 0;
+    EXPECT_EQ(mods::ReadSave(*save, {}, "georama.satisfaction_get", {{"town", 0}})["satisfaction_percent"], 0);
+    for (int count : {-1, 25}) {
+        town.request_count = count;
+        EXPECT_THROW(mods::ReadSave(*save, {}, "georama.satisfaction_get", {{"town", 0}}), std::runtime_error);
+    }
+    for (int id : {-1, 5}) EXPECT_FALSE(mods::ValidateOperation("georama.satisfaction_get", {{"town", id}}).empty());
+    EXPECT_FALSE(mods::ValidateOperation("georama.satisfaction_get", {{"town", 0}, {"extra", 1}}).empty());
 }
 } // namespace

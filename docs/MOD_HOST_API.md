@@ -1686,3 +1686,21 @@ map/crystal guarantees and separately placed door keys remain in use. Clown
 rewards and other scripted rewards are outside this API. A pool does not
 increase chest capacity. With no matching active claim, native selection and
 RNG consumption are unchanged. No gameplay package is enabled by this API.
+
+
+## Georama satisfaction readback
+
+`georama.satisfaction_get {town=0}` (`game.read`) reports saved request
+completion for a settlement (0 Norune, 1 Matataki, 2 Queens, 3 Muska Lacka,
+4 Yellow Drops). It returns `town`, `request_count`, `completed_requests`,
+`satisfaction_percent`, `requests`, and an explicit `derivation` description.
+Each request has a zero-based `request` index and boolean `completed`.
+
+The percentage is the nearest whole-number share of saved requests completed
+(half rounds upward); an empty request list returns zero. Every nonzero native
+completion flag counts as completed. Invalid saved counts outside 0..24 are
+reported as errors rather than silently clipped. The query does not evaluate
+current building placement, change completion flags, award rewards or run
+native Georama scripts. Returned data is detached from the save. Use
+`georama.get` for plot and placement details, and declare this operation in
+`requires_operations` when using it from a package.

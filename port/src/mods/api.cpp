@@ -111,6 +111,7 @@ constexpr Operation operations[] = {
     {"fishing.get",               "game.read",     "Fishing point balance.",                                                       false},
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
+    {"georama.satisfaction_get", "game.read", "Saved request completion totals and rounded satisfaction percentage.", false},
     {"georama.get",               "game.read",     "Saved plots, placements and request completion.",                              false},
     {"georama.elements_get",      "game.read",     "Inspect loaded retail optional plot elements and their prerequisites.",        false},
     {"georama.element_set",       "game.write",    "Enable or disable a loaded retail plot element atomically with saved state.",  true },
@@ -358,6 +359,11 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (name == "georama.elements_get" || name == "georama.element_set") {
         return ValidateGeoramaElements(name, a);
+    }
+    if (name == "georama.satisfaction_get") {
+        if (a.size() != 1 || !a.contains("town") || !a["town"].is_number_integer() || a["town"].get<double>() < 0 || a["town"].get<double>() > 4)
+            return "town must identify a Georama settlement in 0..4";
+        return {};
     }
     if (name == "georama.get") {
         if (a.size() != 1 || !a.contains("town") || !a["town"].is_number_integer() || a["town"].get<double>() < 0 || a["town"].get<double>() > 5) {
@@ -697,6 +703,23 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
             {"points",   save.GetFishingPoint()},
             {"capacity", 9999                  }
         };
+    }
+    if (op == "georama.satisfaction_get") {
+        const auto &town = *save.GetGrdData(a.at("town"));
+        if (town.request_count < 0 || town.request_count > 24)
+            throw std::runtime_error("saved Georama request count is outside 0..24");
+        int completed = 0;
+        Json requests = Json::array();
+        for (int i = 0; i < town.request_count; ++i) {
+            const bool done = town.request_complete[i] != 0;
+            completed += done;
+            requests.push_back({{"request", i}, {"completed", done}});
+        }
+        return {{"town", a.at("town")}, {"request_count", town.request_count},
+                {"completed_requests", completed},
+                {"satisfaction_percent", town.request_count == 0 ? 0 : (completed * 100 + town.request_count / 2) / town.request_count},
+                {"requests", std::move(requests)},
+                {"derivation", "rounded share of saved requests completed; does not recompute placement conditions"}};
     }
     if (op == "georama.get") {
         const auto &g = *save.GetGrdData(a.at("town"));
