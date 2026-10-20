@@ -84,6 +84,7 @@ public:
     bool                      LoadState(const std::string &json, std::string &error);
     std::vector<QuestStatus>  Quests() const;
     std::vector<SkillStatus> Skills() const;
+    bool QueueSkillTraining(std::string_view owner, std::string_view tree, std::string_view id, std::string &error);
     bool HasSkillDamageEffects() const noexcept;
     float ApplySkillDamage(float damage) const noexcept;
     std::vector<ActionStatus> Actions(std::string_view owner) const;

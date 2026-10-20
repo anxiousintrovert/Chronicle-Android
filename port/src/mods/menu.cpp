@@ -43,6 +43,7 @@ UI::ListView             action_list({
 
 std::string quest_owner;
 bool skills_page=false;
+std::string training_result;
 int quest_selected=0,quest_detail=0,quest_filter=0;
 UI::ListView quest_list({
     .bounds={42,150,226,189}, .row_height=24, .row_stride=27,
@@ -180,7 +181,7 @@ std::vector<QuestStatus> JournalQuests() {
 }
 
 void OpenQuests(bool skills=false) {
-    skills_page=skills;quest_owner=SelectedQuestOwner(skills);quest_selected=quest_detail=quest_filter=0;quest_list.Reset();
+    training_result.clear();skills_page=skills;quest_owner=SelectedQuestOwner(skills);quest_selected=quest_detail=quest_filter=0;quest_list.Reset();
 }
 
 void RunQuests(std::uint16_t pressed) {
@@ -191,7 +192,7 @@ void RunQuests(std::uint16_t pressed) {
     const auto clicked=mouse.buttons&~buttons;buttons=mouse.buttons;
     if(mouse.dx||mouse.dy||clicked||mouse.wheel)pointer=true;
     if((pressed&PAD_CIRCLE)||(clicked&2)||((clicked&1)&&Inside(490,393,100,28))){quest_owner.clear();return;}
-    if((pressed&PAD_SQUARE)||((clicked&1)&&Inside(42,393,330,28))){quest_filter=(quest_filter+1)%3;quest_selected=quest_detail=0;quest_list.Reset();}
+    if((pressed&PAD_SQUARE)||((clicked&1)&&Inside(42,393,305,28))){quest_filter=(quest_filter+1)%3;quest_selected=quest_detail=0;quest_list.Reset();}
     const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());const int previous=quest_selected;
     if(pressed&PAD_UP)--quest_selected;
     if(pressed&PAD_DOWN)++quest_selected;
@@ -201,7 +202,11 @@ void RunQuests(std::uint16_t pressed) {
     if(clicked&1){const int hit=quest_list.HitTest(px,py,count);if(hit>=0)quest_selected=hit;
         else if(Inside(300,365,100,25))--quest_detail;else if(Inside(480,365,100,25))++quest_detail;}
     quest_selected=std::clamp(quest_selected,0,std::max(0,count-1));quest_list.SetSelectedIndex(quest_selected,count);
-    if(previous!=quest_selected)quest_detail=0;quest_detail=std::max(0,quest_detail);
+    if(previous!=quest_selected){quest_detail=0;training_result.clear();}quest_detail=std::max(0,quest_detail);
+    if(skills_page&&count&&((pressed&PAD_CROSS)||((clicked&1)&&Inside(355,393,130,28)))) {
+        const auto &entry=entries[quest_selected];const auto split=entry.id.find(" / ");
+        if(Scripts().QueueSkillTraining(quest_owner,entry.id.substr(0,split),entry.id.substr(split+3),training_result))training_result="Training request queued.";
+    }
 }
 
 void DrawQuests() {
@@ -216,11 +221,13 @@ void DrawQuests() {
     });
     std::string body=skills_page?"No skills match this filter.":"No quests match this filter.";
     if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(skills_page?(q.progress>=q.goal?"Maximum rank":q.status=="available"?"Available":"Prerequisites unmet"):(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":"In progress"))+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
+    if(skills_page&&!training_result.empty())body=training_result+"\n\n"+body;
     const auto lines=Lines(body,298);const int pages=std::max(1,(static_cast<int>(lines.size())+8)/9);
     quest_detail=std::clamp(quest_detail,0,pages-1);
     for(int i=0;i<9&&quest_detail*9+i<static_cast<int>(lines.size());++i)Text(40+i,Literal(lines[quest_detail*9+i]),295,150+i*21,300);
     Text(60,"<  Details "+std::to_string(quest_detail+1)+"/"+std::to_string(pages)+"  >",300,365,285);
-    Text(61,std::string("{square} Filter: ")+filters[quest_filter],42,395,330);
+    Text(61,std::string("{square} Filter: ")+filters[quest_filter],42,395,305);
+    if(skills_page)Text(62,"{cross} Train",355,395,130);
     Text(63,"{circle} Back",490,395,110);
     if(pointer){cursor.SetPointer(px,py);cursor.Draw();}
 }

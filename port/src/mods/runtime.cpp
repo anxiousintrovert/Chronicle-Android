@@ -768,7 +768,7 @@ int Subscribe(lua_State *L) {
     if (!m.initializing || lua_rawlen(L, 1) != std::strlen(event) || !lua_isfunction(L, 2)) {
         return Failure(L, "subscribe requires a function during package initialization");
     }
-    if (std::strcmp(event, "enemy_killed") && std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
+    if (std::strcmp(event, "skill_train_requested") && std::strcmp(event, "enemy_killed") && std::strcmp(event, "tick") && std::strcmp(event, "map_enter") && std::strcmp(event, "floor_enter") && std::strcmp(event, "game_enter") && std::strcmp(event, "game_leave") && std::strcmp(event, "save_loaded")) {
         return Failure(L, "unsupported lifecycle event");
     }
     if (m.listener_count >= 32) {
@@ -1019,6 +1019,7 @@ struct Runtime::Impl {
     MeshPackages meshes;
     std::vector<std::pair<std::string, std::string>> pending_actions;
     std::vector<CustomEvent>                         pending_events;
+    std::vector<std::tuple<std::string,std::string,std::string>> pending_training;
     mutable bool skill_effects_dirty=true;
     mutable std::vector<double> skill_effects;
 
@@ -1335,6 +1336,7 @@ void Runtime::Start(const Manager &manager) {
     impl_->was_playing = false;
     impl_->loaded_pending = false;
     impl_->pending_actions.clear();
+    impl_->pending_training.clear();
     impl_->pending_events.clear();
     for (const auto &id : manager.LoadOrder()) {
         if (impl_->audio) impl_->audio->Retain(ActiveOwners());
@@ -1506,6 +1508,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
     impl_->skill_effects_dirty=true;
     // UI requests are consumed exactly once, never carried into another session.
     const auto actions = std::exchange(impl_->pending_actions, {});
+    const auto training = std::exchange(impl_->pending_training, {});
     const auto events = std::exchange(impl_->pending_events, {});
     const bool action_context = world.playing && impl_->was_playing && world.mode == impl_->previous.mode &&
                                 world.map == impl_->previous.map && world.dungeon == impl_->previous.dungeon && world.floor == impl_->previous.floor;
@@ -1570,6 +1573,12 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER, nullptr, read_game);
         }
         if (world.playing) {
+            if(action_context&&!impl_->loaded_pending)for(const auto &[owner,tree,id]:training) {
+                if(m.failed||owner!=m.package.id)continue;
+                World requested=world;requested.event={{"tree",tree},{"id",id}};
+                impl_->Call(m,"on_skill_train_requested",requested,money,read_game,query_game,commit_game);
+                impl_->NativeCallback(m,requested,query_game,commit_game,CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED,nullptr,read_game);
+            }
             for (const auto &event : events) {
                 if (m.failed || impl_->loaded_pending || !action_context || event.context.mode != world.mode ||
                     event.context.map != world.map || event.context.dungeon != world.dungeon || event.context.floor != world.floor) {
@@ -1822,6 +1831,24 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
         error = e.what();
         return false;
     }
+}
+
+bool Runtime::QueueSkillTraining(std::string_view owner,std::string_view tree,std::string_view id,std::string &error) {
+    error.clear();
+    const auto request=std::tuple{std::string(owner),std::string(tree),std::string(id)};
+    if(!impl_->was_playing||impl_->loaded_pending)error="Training requests require active gameplay.";
+    else if(impl_->pending_training.size()>=16)error="At most 16 queued training requests.";
+    else if(std::ranges::find(impl_->pending_training,request)!=impl_->pending_training.end())error="Training is already queued.";
+    else for(const auto &m:impl_->modules)if(!m->failed&&m->package.id==owner) {
+        if(!m->listeners.contains("on_skill_train_requested")&&!(m->native&&m->native->WantsEvent(CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED))) {
+            error="This mod has no training handler.";return false;
+        }
+        try {CallOwnedSkill(*m->state,"skills.get",{{"tree",tree},{"id",id}});}
+        catch(const std::exception &e){error=e.what();return false;}
+        impl_->pending_training.push_back(request);return true;
+    }
+    if(error.empty())error="Skill or package is unavailable.";
+    return false;
 }
 
 bool Runtime::HasSkillDamageEffects() const noexcept {

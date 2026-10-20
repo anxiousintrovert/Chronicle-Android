@@ -2639,3 +2639,26 @@ effects follow those retained ranks. Authors implementing a full respec must
 reset those nodes too. The shared skill page describes the per-rank and current
 bonus. There are no preinstalled trees or bonuses, and the no-effect path returns
 the original damage without applying a clamp or consuming RNG.
+
+
+## Skill training requests
+
+`skills.training.v1` lets the player request training from the shared Mod Skills page using Cross or the Train button. Requests identify the owning package, tree and node; they do not spend currency, enforce a cost, or change ranks automatically. A mod handles its own policy and can use `skills.unlock` and currency operations in the same transactional callback. Maximum-rank and locked nodes may still be requested so the owner can explain its policy; rank-write validation still enforces rank bounds and prerequisites.
+
+Lua subscribes during initialization:
+
+```lua
+chronicle.subscribe("skill_train_requested", function(world)
+    local skill = chronicle.call("skills.get", world.event)
+    if not skill.available then
+        chronicle.log("info", "This skill cannot be trained yet.")
+        return
+    end
+    -- Apply your mod's cost and eligibility policy here.
+    chronicle.call("skills.unlock", world.event)
+end)
+```
+
+`world.event` contains `{tree, id}` using package-local IDs. ABI 2 plugins opt into `CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED` and receive the same object under `event` in their world JSON. Native plugins remain trusted unsandboxed code. Lua and native handlers, if both registered, run as separate existing callback transactions.
+
+Only the owning active package receives a request. No handler means rejection with a menu explanation. Requests require an observed gameplay context, are deferred until a subsequent gameplay tick, deduplicated per owner/tree/node, and bounded to 16 pending requests. Changes of gameplay mode/map/dungeon/floor, load, reset or unload cancel pending requests; they are never saved. The menu reports queue acceptance, not a promise that training succeeded. A failed callback rolls back its managed rank/state and queued engine writes. No request or training policy runs merely because the framework is installed.

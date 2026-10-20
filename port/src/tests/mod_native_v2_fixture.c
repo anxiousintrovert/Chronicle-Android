@@ -81,6 +81,7 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
         return !mode(host, "\"fail_command\"");
     }
     if(mode(host,"\"skills\"")) {
+        if (*(int *)state != 1) return 1;
         return host->call(host->context,"skills.register","{\"id\":\"combat\",\"title\":\"Combat\",\"description\":\"Training\",\"nodes\":[{\"id\":\"focus\",\"title\":\"Focus\",\"description\":\"Focus training\",\"max_rank\":2,\"effects\":{\"enemy_damage_per_rank\":0.25}}]}",&result) &&
                host->call(host->context,"skills.unlock","{\"tree\":\"combat\",\"id\":\"focus\"}",&result) &&
                host->call(host->context,"skills.get","{\"tree\":\"combat\",\"id\":\"focus\"}",&result) && strstr(result,"\"rank\":1") &&
@@ -134,6 +135,10 @@ static int event(const ChronicleModHostV2 *host, void *state, uint32_t which, co
             !strstr(world, "\"source\":\"scripted\""))
             return 0;
         key = "enemy_killed";
+        break;
+    case CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED:
+        if (!strstr(world, "\"tree\":\"combat\"") || !strstr(world, "\"id\":\"focus\"")) return 0;
+        key = "training";
         break;
     case CHRONICLE_EVENT_CUSTOM:
         if (!strstr(world, "\"owner\":\"test.native.v2\"") || !strstr(world, "\"name\":\"pulse\"") ||

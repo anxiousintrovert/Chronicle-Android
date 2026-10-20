@@ -275,3 +275,6 @@ dependencies are mandatory; active providers cannot be reentered. Nested calls
 share the 16-call/8-depth service budget.
 
 See [the standalone counter](../examples/native-services/README.md).
+
+
+ABI 2 also supports `CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED` (bit 7). The shared skill menu queues this event only to the owning package; world JSON includes `event: {tree, id}`. This is a request, not automatic training. See the host API skill training section for cancellation and transaction semantics. No ABI structure layout change is required.

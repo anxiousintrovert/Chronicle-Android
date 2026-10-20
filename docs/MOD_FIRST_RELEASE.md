@@ -1,0 +1,23 @@
+# Chronicle mod framework first release
+
+The first release prioritizes quests, texture replacements and a reliable author/user workflow. Full MoonMod coverage is no longer a release requirement. Existing tested APIs can remain available, but broader APIs must not delay these priorities.
+
+## Required scope
+
+- Folder packages, strict manifests, new mods disabled by default, dependency/version checks and deterministic activation.
+- Shared-framework mod manager with enable/disable, restart requirements, conflict reasons and useful diagnostics. No bundled enabled gameplay mods.
+- Same-size compatible native asset replacements without modifying extracted originals.
+- Full texture replacement: independently decoded replacement images with different resolutions/file sizes, preserving native logical coordinates and UV behavior. Use a dedicated texture path, not arbitrary larger reads into native asset buffers. Validate dimensions, memory limits, target identity and conflicts; retain original texture fallback. This remains outstanding.
+- Owned quests with named objectives, explicit start, progress, supported events, one-time transactional rewards, save/load and manager browsing. Document precisely which events/content can be authored; foreign quest formats and native story replacement are not implied.
+- Author documentation, valid disabled examples, package creation/check/pack/install tooling and diagnostic reports.
+- Regression evidence for empty/disabled packages, conflict fallback, restart/disable, quest persistence/rewards and representative retail texture rendering. Use Clang; leave every PS2 directory read-only; keep upstream Kazarov.
+
+## Release boundaries
+
+Defer broader MoonMod parity, registered maps/characters/animations, advanced save/NG+ services, remote discovery and bespoke character-sheet UI. Contributor-owned custom item, weapon and cutscene frameworks remain separate; do not allocate their registries or impose their implementation.
+
+The first release must state the platforms actually validated. A Windows build does not certify Linux/macOS/Android. Existing broader experimental APIs are not evidence that all of their retail scenarios are release-certified.
+
+## Next implementation priority
+
+Inspect port texture decode/upload and upstream renderer logical-size handling. Add package-owned full-resolution texture declarations and target discovery that can distinguish textures reliably, then exercise conflicting packs, original fallback, atlas/UV behavior and disable/restart on real assets. Do not silently downscale a purported high-resolution replacement to satisfy old buffer sizes.

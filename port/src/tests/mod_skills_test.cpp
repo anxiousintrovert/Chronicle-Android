@@ -84,6 +84,49 @@ protected:
     void Start(){manager.Scan({root},{},enabled);runtime.Start(manager);}
     std::string Register()const{return "assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes={{id='focus',title='Focus',description='Build focus',max_rank=2}}})); ";}
 };
+TEST_F(ModSkillsRuntime, TrainingIsDeferredOwnedAndDoesNotImplicitlyChangeRanks) {
+    for(const auto id:{"test.one","test.two"})Add(id,
+        "chronicle.subscribe('skill_train_requested',function(w) assert(w.event.tree=='combat' and w.event.id=='focus'); chronicle.set('requests',(chronicle.get('requests') or 0)+1) end); return {on_tick=function() "+Register()+"end}");
+    Start();std::string error;EXPECT_FALSE(runtime.QueueSkillTraining("test.one","combat","focus",error));
+    const mods::World world{2,0,0,true,0,1};runtime.Tick(world);
+    const auto before=runtime.SaveState();ASSERT_TRUE(runtime.QueueSkillTraining("test.one","combat","focus",error))<<error;
+    EXPECT_FALSE(runtime.QueueSkillTraining("test.one","combat","focus",error));EXPECT_FALSE(runtime.QueueSkillTraining("test.one","combat","missing",error));
+    EXPECT_EQ(runtime.SaveState(),before);runtime.Tick(world);ASSERT_TRUE(runtime.Diagnostics().empty());
+    const auto state=Json::parse(runtime.SaveState())["mods"];
+    EXPECT_EQ(state["test.one"]["values"]["requests"],1);EXPECT_FALSE(state["test.two"]["values"].contains("requests"));
+    EXPECT_EQ(runtime.Skills()[0].rank,0);runtime.Tick(world);EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["test.one"]["values"]["requests"],1);
+}
+TEST_F(ModSkillsRuntime, TrainingCancelsAcrossContextLoadResetAndUnavailableOwners) {
+    Add("test.mod","chronicle.subscribe('skill_train_requested',function(w) chronicle.set('trained',true) end); return {on_tick=function() "+Register()+"end}");
+    Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);std::string error;
+    ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","focus",error));runtime.Tick({2,0,0,true,0,2});
+    EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.mod"]["values"].contains("trained"));
+    ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","focus",error));const auto saved=runtime.SaveState();ASSERT_TRUE(runtime.LoadState(saved,error));runtime.Tick(world);EXPECT_EQ(runtime.SaveState(),saved);
+    ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","focus",error));runtime.ResetState();runtime.Tick(world);EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.mod"]["values"].contains("trained"));
+    runtime.Start(mods::Manager{});EXPECT_FALSE(runtime.QueueSkillTraining("test.mod","combat","focus",error));
+}
+TEST_F(ModSkillsRuntime, TrainingQueueIsBoundedAndSuccessfulHandlersChooseRankWrites) {
+    Add("test.mod",R"(chronicle.subscribe('skill_train_requested',function(w) assert(chronicle.call('skills.unlock',w.event)) end)
+        return {on_tick=function() local nodes={};for i=1,17 do nodes[i]={id='node'..i,title='Node',description='Training',max_rank=2} end
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes=nodes})) end})");
+    Add("test.passive","return {on_tick=function() "+Register()+"end}");
+    Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);std::string error;
+    EXPECT_FALSE(runtime.QueueSkillTraining("test.passive","combat","focus",error));EXPECT_NE(error.find("no training handler"),std::string::npos);
+    for(int i=1;i<=16;++i)ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","node"+std::to_string(i),error))<<error;
+    EXPECT_FALSE(runtime.QueueSkillTraining("test.mod","combat","node17",error));
+    runtime.Tick(world);ASSERT_TRUE(runtime.Diagnostics().empty());
+    const auto ranks=Json::parse(runtime.SaveState())["mods"]["test.mod"]["skill_ranks"]["combat"];EXPECT_EQ(ranks.size(),16u);
+    for(int i=1;i<=16;++i)EXPECT_EQ(ranks["node"+std::to_string(i)],1);
+    ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","node17",error));runtime.Tick(world);EXPECT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_EQ(Json::parse(runtime.SaveState())["mods"]["test.mod"]["skill_ranks"]["combat"]["node17"],1);
+}
+TEST_F(ModSkillsRuntime, TrainingHandlerRankAndCurrencyChangesRollbackTogether) {
+    Add("test.mod","chronicle.subscribe('skill_train_requested',function(w) assert(chronicle.call('skills.unlock',w.event)); assert(chronicle.add_money(-5)) end); return {on_tick=function() "+Register()+"end}");
+    Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);std::string error;
+    ASSERT_TRUE(runtime.QueueSkillTraining("test.mod","combat","focus",error));runtime.Tick(world,[](int amount){EXPECT_EQ(amount,-5);return false;});
+    EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_FALSE(Json::parse(runtime.SaveState())["mods"]["test.mod"].contains("skill_ranks"));
+    EXPECT_FALSE(runtime.QueueSkillTraining("test.mod","combat","focus",error));
+}
 TEST_F(ModSkillsRuntime, SaveRestoreOwnerIsolationAndMenuSnapshots) {
     for(const auto id:{"test.one","test.two"})Add(id,"return {on_tick=function() "+Register()+
         "assert(chronicle.call('skills.set_rank',{tree='combat',id='focus',rank="+(std::string(id)=="test.one"?"1":"2")+"})); end}");

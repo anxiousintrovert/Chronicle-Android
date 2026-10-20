@@ -86,6 +86,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     InputScriptInstall(std::move(skillMouse));InputScriptApply(0);mods::menu::Run(0);
     InputScriptApply(1);mods::menu::Run(0); // Move the cursor below the compared content.
     EXPECT_TRUE(same_content(skills,draw("skills-mouse.png")));
+    mods::menu::Run(PAD_CROSS);EXPECT_TRUE(draw("skill-training-unavailable.png")!=skills);
     InputScriptApply(1);mods::menu::Run(0);mods::menu::Run(PAD_CIRCLE);mods::menu::Run(PAD_CIRCLE);EXPECT_FALSE(mods::menu::IsOpen());
     EXPECT_EQ(mods::Scripts().SaveState(),before);
 }

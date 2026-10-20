@@ -38,8 +38,9 @@ Circle returns to the package list. This view reads existing progress without
 advancing objectives or granting rewards; it uses the same shared UI framework.
 
 Packages with registered skills show **L2 Skills** (or click Skills in the header).
-This read-only page shows ranks and missing prerequisites using the same controls
-and shared UI. Training can be exposed through explicit mod actions.
+This page shows ranks and missing prerequisites using the same controls and shared UI.
+Cross or Train queues an owner-scoped training request when the mod registers a handler.
+The framework does not automatically spend currency or change ranks.
 
 Enable selections are written atomically to `<save>/mods-profile.json`; they do
 not edit the distributed manifests. Conflicts are recomputed immediately.

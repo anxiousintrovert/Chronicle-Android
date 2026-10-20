@@ -1101,6 +1101,12 @@ TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {
                                   "test.native.v2: [native] floor_enter", "test.native.v2: [native] v2 tick", "test.native.v2: [native] game_leave"}));
 }
 
+TEST_F(ModNativeV2, SkillTrainingRequestsUseOwnedNativeEvent) {
+    LoadPlugin("skills");const mods::World world{1,2,0,true};runtime.Tick(world);
+    std::string error;ASSERT_TRUE(runtime.QueueSkillTraining("test.native.v2","combat","focus",error))<<error;
+    runtime.Tick(world);ASSERT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["training"],1);
+}
+
 TEST_F(ModNativeV2, NativeHostWritesCarryRuntimePackageOwner) {
     LoadPlugin();
     unsigned writes = 0;
