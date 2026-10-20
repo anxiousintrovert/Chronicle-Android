@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run isolated PAL full-resolution texture baseline, replacement, disabled and conflict scenarios."""
+"""Run isolated PAL texture baseline, PNG round-trip, replacement, 4K, disabled and conflict scenarios."""
 import argparse
 import hashlib
 import json
@@ -34,13 +34,14 @@ def run(build,data,output):
     env={k:v for k,v in os.environ.items() if not k.upper().startswith(('DC_','GTEST_'))}
     env['DC_DATA']=str(data)
     results=[];target=None;original_pixels=None
-    for name in ['baseline','replacement','upscaled4k','disabled','conflict']:
+    for name in ['baseline','roundtrip','replacement','upscaled4k','disabled','conflict']:
         folder=output/name;folder.mkdir()
         if target:
             ids=['audit.texture']+(['audit.conflict'] if name=='conflict' else [])
             for id in ids:
                 package=folder/'mods'/id;package.mkdir(parents=True)
-                if name=='upscaled4k':
+                if name=='roundtrip':image=encode_png(256,256,original_pixels)
+                elif name=='upscaled4k':
                     pixels=upscale_4k(original_pixels);image=encode_png(4096,4096,pixels)
                     (folder/'expected-rgba.sha256').write_text(hashlib.sha256(pixels).hexdigest())
                 else:image=encode_png(512,512,bytes([255,0,255,255])*512*512)
@@ -57,7 +58,7 @@ def run(build,data,output):
         report=ET.parse(xml).getroot()
         if int(report.get('tests','0'))!=1 or int(report.get('failures','0')) or int(report.get('disabled','0')) or any(node.tag=='skipped' for node in report.iter()):raise ValueError(f'{name} did not pass its retail test')
         result=json.loads((folder/'texture-result.json').read_text())
-        if result['active_targets'] != (1 if name in ['replacement','upscaled4k'] else 0):raise ValueError(f'{name} activated unexpected texture targets')
+        if result['active_targets'] != (1 if name in ['roundtrip','replacement','upscaled4k'] else 0):raise ValueError(f'{name} activated unexpected texture targets')
         result['case']=name;results.append(result)
         if name=='baseline':
             matches=[read_snapshot(path) for path in (folder/'captures').glob('*.texture')]

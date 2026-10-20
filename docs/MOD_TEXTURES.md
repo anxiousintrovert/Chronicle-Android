@@ -56,3 +56,21 @@ python tools/chronicle_texture_smoke.py --build build-mods --data "C:\path\to\pa
 The runner uses independent game processes and save/profile directories for baseline, 512x512 diagnostic replacement, 4096x4096 upscaled original, disabled package and conflicting packages. It discovers the original player-body target rather than hardcoding its digest. The 4K source uses deterministic nearest-neighbor expansion of the captured 256x256 RGBA pixels; this tests resolution handling, not invented texture detail. Each scenario reaches live dungeon gameplay and records a screenshot plus logical/physical texture sizes. The 4K case compares the SHA-256 of all 64 MiB of GPU-readback RGBA pixels with the generated source. Every case requires no gameplay-script modules. Disabled/conflicting cases must keep native 256x256 pixels and zero active texture targets.
 
 The Windows Clang PAL run passed all five scenarios. The 4K texture retains 256x256 logical coordinates and 4096x4096 physical pixels, and its rendered character appearance was inspected. This does not certify every texture, palette animation, platform, texture-copy path or device-memory limit. No capture, original PNG or generated retail-derived upscale is committed to the repository.
+
+## Interpreting the retail smoke images
+
+The smoke runner includes an unchanged 256x256 PNG round-trip control before
+the replacement cases. This separates palette-to-RGBA conversion from scaling.
+The 512x512 diagnostic deliberately paints the body texture magenta: pink gloves
+and boots in that case confirm the replacement is applied. The 4096x4096 case
+uses the original captured colors expanded with nearest-neighbor sampling.
+Nearest-neighbor expansion changes the effective filtering footprint, so its
+rendered screenshot need not be pixel-identical to the native bilinear image.
+A matching GPU readback hash proves upload fidelity, not visual equivalence.
+
+Windows PAL validation on 2026-10-20 passed all six isolated cases. The unchanged
+PNG control differed from the native screenshot by at most one RGB level; the
+earlier 4K capture differed by at most 15 levels around the replaced body parts.
+Disabled and conflicting packages matched the baseline screenshot exactly.
+These observations apply to this captured scene, not every palette animation,
+texture, renderer setting or platform.
