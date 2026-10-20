@@ -9,7 +9,11 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <stdexcept>
 
+#include "expanded_effect_voices.hpp"
+#include "chronicle/monster_audio.hpp"
+#include "chronicle/monster_limits.hpp"
 #include "audio/mixer.hpp"
 #include "audio/soundtrack.hpp"
 #include "audio/trace.hpp"
@@ -52,6 +56,7 @@ struct EffectMessage {
 };
 
 std::vector<EffectMessage> g_effect_queue;
+std::unique_ptr<chronicle_audio::ExpandedEffectVoices> g_expanded_voices;
 
 struct FadeRoute {
     int port;
@@ -111,6 +116,22 @@ void QueueProgram(int port, int bank) {
 
 void QueueExtended(int port, std::array<std::uint8_t, 8> bytes) {
     g_effect_queue.push_back({EffectPort(port), true, 0, bytes});
+}
+
+chronicle_audio::EffectIdentity EffectKey(int port, int bank, int program, int voice) {
+    return {EffectPort(port), bank & 0x7F, static_cast<std::uint8_t>(program), voice};
+}
+
+void StopLease(chronicle_audio::EffectIdentity identity, unsigned token) {
+    QueueProgram(identity.port, identity.bank);
+    QueueExtended(identity.port, {0xFD, 0x10, 0, static_cast<std::uint8_t>(identity.program),
+                                 static_cast<std::uint8_t>(token), 0, 0});
+}
+
+int EffectToken(int port, int bank, int program, int voice, bool play) {
+    if (!g_expanded_voices) return static_cast<std::uint8_t>(voice);
+    const auto key = EffectKey(port, bank, program, voice);
+    return play ? g_expanded_voices->Play(key, StopLease) : g_expanded_voices->Find(key);
 }
 
 int TransHdBdData(const std::uint8_t *hd, int hd_size, const std::uint8_t *bd, int bd_size) {
@@ -503,6 +524,7 @@ PORT_OVERRIDE int CSound::Init(int mode0, int mode1, int depth0, int depth1) {
     }
     set_spu(mode0, mode1, depth0, depth1);
     g_effect_queue.clear();
+    g_expanded_voices.reset();
 
     static constexpr int kSpuAddress[kSlots] = {0x5010, 0x7D010, 0x7D010, 0x16E900, 0x16E900, 0x16E900, 0x18AE20, 0x1B6D40};
     for (int slot = 0; slot < kSlots; slot++) {
@@ -535,10 +557,11 @@ PORT_OVERRIDE void CSound::SQ_RePlay(int port) {
 PORT_OVERRIDE void CSound::SE_Play(int port, int bank, int program, int pan, int velocity, int volume, int voice) {
     audio::Trace("SE_Play port %d bank %d program %d pan %d velocity %d volume %d voice %d", port, bank,
                  program, pan, velocity, volume, voice);
+    const int token = EffectToken(port, bank, program, voice, true);
     QueueProgram(port, bank);
     QueueExtended(port, {0xF9, 0, 0, static_cast<std::uint8_t>(volume), 0});
     QueueExtended(port, {0xF9, 1, 0, static_cast<std::uint8_t>(pan), 0});
-    QueueExtended(port, {0xFD, 0x10, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(voice),
+    QueueExtended(port, {0xFD, 0x10, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(token),
                          static_cast<std::uint8_t>(velocity), 0});
 }
 
@@ -561,15 +584,19 @@ PORT_OVERRIDE void CSound::SE_Play(int port, int bank, int program, int voice) {
 PORT_OVERRIDE void CSound::SE_SetVol(int port, int bank, int program, int volume, int voice) {
     audio::Trace("SE_SetVol port %d bank %d program %d volume %d voice %d", port, bank, program, volume,
                  voice);
+    const int token = EffectToken(port, bank, program, voice, false);
+    if (token < 0) return;
     QueueProgram(port, bank);
-    QueueExtended(port, {0xFD, 0, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(voice),
+    QueueExtended(port, {0xFD, 0, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(token),
                          static_cast<std::uint8_t>(volume), 0});
 }
 
 PORT_OVERRIDE void CSound::SE_SetPan(int port, int bank, int program, int pan, int voice) {
     audio::Trace("SE_SetPan port %d bank %d program %d pan %d voice %d", port, bank, program, pan, voice);
+    const int token = EffectToken(port, bank, program, voice, false);
+    if (token < 0) return;
     QueueProgram(port, bank);
-    QueueExtended(port, {0xFD, 1, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(voice),
+    QueueExtended(port, {0xFD, 1, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(token),
                          static_cast<std::uint8_t>(pan), 0});
 }
 
@@ -582,8 +609,11 @@ PORT_OVERRIDE void CSound::SE_SetPan(int port, int se_no, int pan, int voice) {
 
 PORT_OVERRIDE void CSound::SE_Stop(int port, int bank, int program, int voice) {
     audio::Trace("SE_Stop port %d bank %d program %d voice %d", port, bank, program, voice);
+    const int token = EffectToken(port, bank, program, voice, false);
+    if (token < 0) return;
     QueueProgram(port, bank);
-    QueueExtended(port, {0xFD, 0x10, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(voice), 0, 0});
+    QueueExtended(port, {0xFD, 0x10, 0, static_cast<std::uint8_t>(program), static_cast<std::uint8_t>(token), 0, 0});
+    if (g_expanded_voices) g_expanded_voices->Forget(EffectKey(port, bank, program, voice));
 }
 
 PORT_OVERRIDE void CSound::Fade(int port, float step, int volume) {
@@ -688,4 +718,15 @@ PORT_OVERRIDE int CSound::LoadSeq_E(int address, int size) {
 
 PORT_OVERRIDE int CSound::LoadSeq_I(int address, int size) {
     return LoadSequence(4, FromInt(address), size);
+}
+
+namespace chronicle::monsters {
+bool ExpandedEffectVoicesActive() { return bool(g_expanded_voices); }
+
+void PrepareEffectVoicesForMonsterSlots(unsigned slots) {
+    if (slots < RetailSlots || slots > StorageCapacity) throw std::invalid_argument("invalid monster audio slot limit");
+    if (g_expanded_voices) g_expanded_voices->Clear(StopLease);
+    if (slots == RetailSlots) g_expanded_voices.reset();
+    else if (!g_expanded_voices) g_expanded_voices = std::make_unique<chronicle_audio::ExpandedEffectVoices>();
+}
 }

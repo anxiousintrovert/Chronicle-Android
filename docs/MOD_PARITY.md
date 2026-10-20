@@ -2270,3 +2270,29 @@ Clang 23.1.2 Windows game/test builds pass; 814 tests passed, 59 skipped,
 managed Cave/Forest) pass. Both 3,840-case no-mod/disabled-mod seed exports
 retain prior hashes and differ from pinned upstream only in map storage
 size. PS2 unchanged; other platforms and high-population play unverified.
+
+
+### Expanded effect voice routing (2026-10-20)
+
+The port can explicitly enable full-width logical effect IDs for expanded
+monster populations. A lazily allocated 256-lease router keys sounds by
+port/bank/program/logical voice and sends byte-sized tokens through the
+unmodified official Kazarov interface. Repeated play refreshes the lease;
+when full, least-recently-played reuse queues a stop before the replacement.
+Stale control/stop requests for evicted IDs are ignored. Returning to retail
+queues stops for every lease, then restores the original byte-ID path.
+Default sixteen-slot preparation neither allocates nor changes routing.
+The upstream mixer's 48 physical voices remain unchanged.
+
+Unit tests cover all 256 logical monster IDs, deterministic eviction and stale
+lookups. An official-mixer test plays voices 0 and 256 together, stops 256
+without stopping 0, ignores stale controls, and stops the final sound on reset.
+This internal activation is not yet wired to public high-population requests.
+The separate native 32-entry sound-sequence pool, coordinated floor activation
+and reset, error reporting and populated gameplay still need completion.
+
+Validation: Clang 23.1.2 Windows game/test builds pass; 816 tests passed,
+59 skipped, 1 disabled; 29 Python checks and three fresh PAL replays pass.
+Both 3,840-case no-mod/disabled-mod seed exports retain prior hashes, differing
+from pinned upstream only by map storage size. PS2 and official Kazarov
+sources unchanged. Cross-platform and high-population gameplay unverified.
