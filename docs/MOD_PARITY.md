@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 119 implemented operations, native plugins and author
+a real host-call boundary, 120 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -22,7 +22,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Native enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
+| Rendering / audio | Detached native dungeon camera pose/orbit inspection, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -2605,3 +2605,26 @@ completion reward services remain outside this gameplay proof.
 Clang 23.1.2 builds both executables. Full regression: 833 passed, 88 skipped,
 one disabled; all 35 Python checks pass. The explicit PAL placement replay passes.
 PS2 remains unchanged against the framework baseline.
+
+
+### Georama reference boundary and dungeon camera inspection (2026-10-20)
+
+Rechecked the pinned reference patch: separate georama.condition_set,
+request_known_set and river_set are Chronicle Two bindings. Its Chronicle
+capability response explicitly reports no separate saved analysis-condition or
+river-grid state. Do not mistake these catalog names for missing Chronicle
+bindings. Custom pieces and native condition/reward services remain separate
+work in this ledger; this audit does not implement them.
+
+The confirmed Chronicle render.camera_get binding is now covered by an on-demand
+read of the active native dungeon camera. It returns detached eye/target, pose
+angles, orbit distance/height/target angle and follow status; invalid scene or
+non-finite native data rejects. Tests preserve native bytes and RNG and check
+invalid state/arguments. A PAL shared-action replay reads the pose, modifies its
+Lua snapshot, verifies a fresh read is unaffected and completes back-floor travel.
+Camera writes remain open: lifecycle identity and conditional owner cleanup must
+be verified before exposing orbit mutation. No default engine path or PS2 source
+changes are needed for inspection.
+
+Validation: Clang 23.1.2 game/tests build; 835 regression tests passed, 89 skipped,
+one disabled; all 35 Python checks pass, plus the explicit PAL camera replay.

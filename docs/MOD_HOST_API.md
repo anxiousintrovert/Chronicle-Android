@@ -1786,3 +1786,17 @@ an owned override: disabling the mod does not undo it. Inspect the result on
 the next callback. These operations do not add custom definitions, grant stock,
 play a construction animation, or execute completion reward scripts. They add
 no automatic engine hooks when unused.
+
+## Dungeon camera inspection
+
+`render.camera_get {}` requires `game.read` and an active native dungeon camera.
+Declare it in `requires_operations`. The detached result contains
+`scene="dungeon"`, `eye=[x,y,z]`, `target=[x,y,z]`, `heading`, `pitch`, `roll`,
+`distance`, `height`, `angle` (the requested follow-orbit angle), and boolean
+`following`. Angles use radians and positions/distance/height use native world
+units. Current pose and requested orbit can differ while the camera interpolates.
+
+Missing cameras, town scenes and non-finite native pose/orbit values return an
+error. Inspection does not advance interpolation, change the camera or consume
+RNG. It adds no automatic hooks. Camera modification and ownership cleanup are
+not yet exposed.

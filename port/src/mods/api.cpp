@@ -114,6 +114,7 @@ constexpr Operation operations[] = {
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
     {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
+    {"render.camera_get", "game.read", "Inspect the active native dungeon camera pose and orbit.", false},
     {"georama.place", "game.write", "Place a built retail piece through native fit checks.", true},
     {"georama.remove", "game.write", "Remove a current native placement through dependency checks.", true},
     {"georama.atla_list", "game.read", "Inspect native Atla spheres and contents on the current floor.", false},
@@ -369,6 +370,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
         return ValidateGeoramaElements(name, a);
     }
     if (name == "georama.placement_state" || name == "georama.place" || name == "georama.remove") return ValidateGeoramaPlacement(name, a);
+    if (name == "render.camera_get") return a.is_object() && a.empty() ? "" : "render.camera_get takes no arguments";
     if (name == "georama.atla_list" || name == "georama.atla_collect") return ValidateAtla(name, a);
     if (name == "georama.request_set") return ValidateGeoramaRequest(a);
     if (name == "georama.satisfaction_get") {
