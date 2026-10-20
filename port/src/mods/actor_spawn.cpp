@@ -2,6 +2,7 @@
 #include "monstorunit.hpp"
 #include "dataalloc.hpp"
 #include "entity_tracking.hpp"
+#include "model_identity.hpp"
 #include "userstatus.hpp"
 #include "dun/gameloop.hpp"
 #include <stdexcept>
@@ -103,7 +104,8 @@ nlohmann::json ReadLoadedActorModels(const CMonstorUnit *unit) {
         const auto plan = PlanLoadedActorSpawn(unit, index, {}, reason);
         const bool radius_valid = std::isfinite(model.collision_radius) && model.collision_radius >= 0 && model.collision_radius <= 1000;
         if (reason.empty() && (model.max_hp <= 0 || !radius_valid)) reason = "invalid loaded model health or radius";
-        result["models"].push_back({{"model", index}, {"kind", model.kind}, {"name", model.name_no},
+        const int native_id = NativeMonsterModelId(unit, index);
+        result["models"].push_back({{"native_model_id", native_id >= 0 ? Json(native_id) : Json(nullptr)}, {"model", index}, {"kind", model.kind}, {"name", model.name_no},
             {"max_hp", model.max_hp}, {"radius", radius_valid ? Json(model.collision_radius) : Json(nullptr)},
             {"resources_ready", plan.has_value() && reason.empty()}, {"reason", reason}});
     }

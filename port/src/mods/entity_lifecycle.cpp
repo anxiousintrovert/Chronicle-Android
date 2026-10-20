@@ -38,6 +38,8 @@
 #include "weaponelement.hpp"
 
 #include "entity_tracking.hpp"
+#include "model_identity.hpp"
+#include "runtime.hpp"
 
 PORT_OVERRIDE void CMonstorUnit::CleanViewMonstor(int back_floor) {
     mods::EntityUnitCleared(this);
@@ -230,5 +232,70 @@ PORT_OVERRIDE int CMonstorUnit::SetupViewMonstor(int model_no, float *position, 
 
     script_state[current_monster] = 0;
     alive_count++;
+    return 1;
+}
+
+PORT_OVERRIDE int CMonstorUnit::SetupBaseModel(int slot, int model_no, int texture_block, CDataAlloc2<1> *alloc) {
+    mods::BeginNativeModelLoad(this, slot);
+    MONSTOR_MODEL *description = &MonstorTable[model_no];
+    char           filename[64];
+    CFrameAttr     attr;
+    int            file_size;
+    attr.fog_enable = true;
+    sprintf(filename, "dun/monstor/%s.chr", description->model_name[0]);
+    LoadFile(filename, read_buffer, NULL);
+    wait_now_loading_vsync();
+    CCharacter *character = &base_chara[slot][0];
+    character->InitializeTexAnime(MonsterTexAnim, 320);
+    character->LoadPackData3(read_buffer, "info.cfg", alloc, 42, alloc, 1, 0);
+    base_chara[slot][0].frame->SetAttr(attr, 1, 64);
+    SetFrameAttr(base_chara[slot][0].frame, 1);
+
+    for (int j = 0; j < 3; j++) {
+        if (description->model_name[j + 1][0] != 0) {
+            sprintf(filename, "dun/monstor/%s.chr", description->model_name[j + 1]);
+            LoadFile(filename, read_buffer, NULL);
+            wait_now_loading_vsync();
+            base_chara[slot][j + 1].LoadPackData(read_buffer, "info.cfg", alloc, alloc);
+            base_chara[slot][j + 1].frame->SetAttr(attr, 1, 64);
+            SetFrameAttr(base_chara[slot][j + 1].frame, 1);
+        }
+    }
+
+    sprintf(filename, "dun/monstor/%s.stb", description->script_name);
+    LoadFile(filename, read_buffer, &file_size);
+    wait_now_loading_vsync();
+    script_data[slot] = (char *) (alloc->base + alloc->used * 16);
+    alloc->Alloc((((file_size >> 6) + 1) << 6) >> 4);
+    memcpy(script_data[slot], read_buffer, file_size);
+    memcpy(&model[slot], description, sizeof(MONSTOR_MODEL));
+    int count = 2;
+
+    if (description->kind == MONSTER_KIND_NO_LOCK_ON) {
+        count = 6;
+    }
+
+    if (description->shot_effect[0] != -1) {
+        int entry = NowShotEffect->Entry(BtEntryEffectTbl[description->shot_effect[0]], read_buffer, texture_block, alloc, count);
+
+        if (entry == -1) {
+            printf("******* ShotEntry Error !!***********\n");
+        } else {
+            model[slot].shot_effect[0] = entry;
+        }
+    }
+
+    if (description->shot_effect[1] != -1) {
+        int entry = NowShotEffect->Entry(BtEntryEffectTbl[description->shot_effect[1]], read_buffer, texture_block, alloc, count);
+
+        if (entry == -1) {
+            printf("******* ShotEntry Error !!***********\n");
+        } else {
+            model[slot].shot_effect[1] = entry;
+        }
+    }
+
+    model_count++;
+    if (mods::Scripts().HasGameplay()) mods::RecordNativeModelLoad(this, slot, model_no);
     return 1;
 }

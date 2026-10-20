@@ -2093,6 +2093,13 @@ Outside a dungeon or with an invalid model count, `available` is false and the
 array is empty. Each entry contains the floor-local integer `model` index, native
 `kind` and numeric `name` ID, `max_hp`, `radius`, `resources_ready` and `reason`.
 An invalid native radius is returned as null with a rejection reason.
+Each entry also reports `native_model_id`, the exact retail model-table ID
+observed at the native loader boundary, or null when unavailable. Recording is
+active only while gameplay mods are active. A mod enabled after models were
+loaded may see null until the next native load. Reloads invalidate the old
+identity; changed script/frame pointers also invalidate it. IDs are never guessed
+from names or mutable stats. This field identifies existing retail models and
+does not reserve IDs for a future custom-model registry.
 
 `resources_ready` checks the loaded script, main/attachment frames, first free
 slot's script arena, model health and radius. It is not permission to spawn: it

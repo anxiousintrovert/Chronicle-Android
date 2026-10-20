@@ -30,6 +30,17 @@ class EntityLifecycleSource(unittest.TestCase):
         adapter = "\n".join(line for line in adapter.split("\n") if capture not in line)
         self.assertEqual(adapter.replace(hook, ""), function(native, signature))
 
+    def test_model_loader_preserves_every_native_statement(self):
+        native = (ROOT / "ps2/src/monstorunit.cpp").read_text()
+        port = (ROOT / "port/src/mods/entity_lifecycle.cpp").read_text()
+        signature = "int CMonstorUnit::SetupBaseModel(int slot, int model_no, int texture_block, CDataAlloc2<1> *alloc)"
+        adapter = function(port, signature)
+        for hook in ("    mods::BeginNativeModelLoad(this, slot);\n",
+                     "    if (mods::Scripts().HasGameplay()) mods::RecordNativeModelLoad(this, slot, model_no);\n"):
+            self.assertEqual(adapter.count(hook), 1)
+            adapter = adapter.replace(hook, "")
+        self.assertEqual(adapter, function(native, signature))
+
     def test_native_statements_are_preserved(self):
         native = (ROOT / "ps2/src/monstorunit.cpp").read_text()
         port = (ROOT / "port/src/mods/entity_lifecycle.cpp").read_text()

@@ -2,6 +2,7 @@
 
 #include "entity_events.hpp"
 #include "owned_actors.hpp"
+#include "model_identity.hpp"
 #include <stdexcept>
 #include "entity_reactions.hpp"
 #include "monstorunit.hpp"
@@ -64,6 +65,7 @@ void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {
 }
 
 void EntityUnitCleared(CMonstorUnit *unit) {
+    if (unit && (unit->model_count <= 0 || unit->model_count > 9)) ClearNativeModelIdentities(unit);
     ClearBoundActorOwnership(unit);
     ClearOwnedEnemyScales(unit);
     ClearOwnedEnemyStats(unit);

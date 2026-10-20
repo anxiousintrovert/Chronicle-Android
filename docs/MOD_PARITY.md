@@ -3471,3 +3471,28 @@ and incoming hit hooks, trustworthy native-model identity/context mapping,
 transactional public registration/inspection, owner/epoch cleanup and shared-menu
 combat replay remain required before exposing this capability to packages.
 No game loop calls this registry yet; no default gameplay behavior changes.
+
+
+## Native loaded-model identity (2026-10-20)
+
+The native SetupBaseModel boundary now records the exact retail model-table ID
+only while gameplay mods are active. Framework-owned bounded metadata performs
+no native writes or RNG calls; reloads invalidate old entries, and changed
+script/frame pointers return unknown. Actor-only clears retain loaded-model
+identity, while discarded model tables expire it. No descriptor/name/stat
+matching is used, so identical models and mutable stats cannot misidentify IDs.
+
+The existing entities.models query adds nullable native_model_id. Late-enabled
+mods may see null until the next observed native load. This identifies retail
+content only and does not define or reserve contributor custom-model IDs. Public
+operation count remains 140. Native damage hooks, transactional rule APIs and
+owner/epoch cleanup remain outstanding; this prerequisite does not activate the
+damage modifier registry.
+
+Validation: Clang game/test builds passed; all 25 focused model identity, actor
+spawn and entity-handle tests passed, together with all 39 Python tests. The
+source guard proves every original loader statement is preserved. All five PAL
+actor scenarios passed through shared-manager actions, including numeric model
+IDs, spawn/despawn, failed-owner cleanup, native floor reset and spawn tuning.
+The PS2 diff against the framework baseline is empty. These focused results are
+not full no-mod gameplay equivalence or cross-platform validation.

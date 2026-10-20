@@ -503,6 +503,7 @@ end}
  local ready=0
  for _,model in ipairs(models.models) do
   assert(model.model>=0 and model.model<9 and type(model.reason)=='string')
+  assert(type(model.native_model_id)=='number' and model.native_model_id>=0 and model.native_model_id<167)
   if model.resources_ready then
    assert(model.max_hp>0 and model.radius>=0)
    ready=ready+1
