@@ -3274,3 +3274,24 @@ rectangles, not complete collision clearance against dynamic actors/chests/event
 The planner has no production caller yet. Dynamic obstruction checks, spawn
 commit/ownership and shared-menu PAL lifecycle replay remain required. Public
 operation count stays 135. PS2 diff remains empty.
+
+
+### Spawn obstruction checks and ownership reservation (2026-10-20)
+
+Added a read-only obstruction check against the player, every occupied monster
+slot, used treasure boxes/Atla, trap circles and active dungeon event triggers.
+Counts are checked against native storage before iteration; nonfinite positions
+or invalid radii reject. Actor and object clearance is added to the requested
+radius. It respects active map event limits, does not consume RNG or clear/move
+any obstruction, and still needs PAL validation with the eventual spawn commit.
+
+Actor ownership can now reserve its map node and strings before native creation,
+then publish that preallocated node to the resulting live generation without
+allocating. Abandoning a reservation creates no ownership record. Wrong/stale
+registries, duplicate ownership and repeated publication reject; slot reuse
+cannot transfer the old ownership. The spawn path must use this reservation
+instead of allocating ownership after a native actor already exists.
+
+Validation: Clang 23.1.2 game/test builds and all 14 focused actor tests passed.
+Public operations remain 135; native spawn commit, runtime lifecycle integration
+and shared-menu PAL spawn/despawn replay remain outstanding. PS2 diff is empty.

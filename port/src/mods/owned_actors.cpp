@@ -1,6 +1,26 @@
 #include "owned_actors.hpp"
 
 namespace mods {
+std::optional<ActorOwners::Reservation> ActorOwners::Reserve(const EntityHandles &handles, std::string_view owner,
+                                                          std::string_view definition, std::string &error) const {
+    if (!handles.Active() || (registry_ && registry_ != &handles)) { error = "actor identity registry is unavailable"; return {}; }
+    if (owner.empty() || owner.size() > 128 || definition.empty() || definition.size() > 128) {
+        error = "actor ownership requires bounded owner and definition IDs"; return {};
+    }
+    Records prepared;
+    prepared.emplace(0, Record{std::string(owner), std::string(definition)});
+    error.clear(); return Reservation{prepared.extract(0), &handles};
+}
+bool ActorOwners::Publish(const EntityHandles &handles, EntityHandles::Handle handle, Reservation &&reservation) noexcept {
+    if (reservation.registry != &handles || reservation.node.empty() || !handles.Resolve(handle) ||
+        (registry_ && registry_ != &handles) || records_.contains(handle)) return false;
+    Expire(handles);
+    if (records_.size() >= EntityHandles::Capacity) return false;
+    reservation.node.key() = handle;
+    const auto inserted = records_.insert(std::move(reservation.node));
+    if (!inserted.inserted) return false;
+    registry_ = &handles; return true;
+}
 bool ActorOwners::Claim(const EntityHandles &handles, EntityHandles::Handle handle,
                         std::string_view owner, std::string_view definition, std::string &error) {
     if (registry_ && registry_ != &handles) { error = "actor ownership belongs to another identity registry"; return false; }

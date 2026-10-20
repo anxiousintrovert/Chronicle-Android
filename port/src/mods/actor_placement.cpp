@@ -1,6 +1,7 @@
 #include "actor_spawn.hpp"
 #include "dungeonmap.hpp"
 #include "dungeonparts.hpp"
+#include "monstorunit.hpp"
 #include "chronicle/dungeon_limits.hpp"
 #include <algorithm>
 #include <cmath>
@@ -65,6 +66,45 @@ bool ValidateActorPlacement(const CDungeonMap &map, std::span<const ITEM_FREE_AR
         }
     }
     if (!inside) return fail("actor position is outside a native placement area with radius clearance");
+    error.clear(); return true;
+}
+}
+
+namespace mods {
+bool ValidateActorObstructions(const CDungeonMap &map, CMonstorUnit &unit,
+                               std::array<float, 3> position, float radius,
+                               std::array<float, 3> player_position, float player_radius, std::string &error) {
+    const auto fail = [&](const char *reason) { error = reason; return false; };
+    const auto valid_point = [](const auto &point) {
+        for (int i = 0; i < 3; ++i) if (!std::isfinite(point[i]) || std::abs(point[i]) > 1000000.0f) return false;
+        return true;
+    };
+    const auto valid_radius = [](float value) { return std::isfinite(value) && value >= 0 && value <= 1000; };
+    if (!valid_point(position) || !valid_point(player_position) || !valid_radius(radius) || !valid_radius(player_radius))
+        return fail("invalid actor obstruction request");
+    const auto blocked = [&](const auto &point, float clearance) {
+        return !valid_point(point) || !valid_radius(clearance) ||
+            std::hypot(double(position[0]) - point[0], double(position[1]) - point[1], double(position[2]) - point[2]) <= double(radius) + clearance;
+    };
+    if (blocked(player_position, player_radius)) return fail("actor spawn overlaps the player");
+    for (unsigned slot = 0; slot < unit.SlotLimit(); ++slot) {
+        const auto &actor = unit.monster[slot]; if (actor.state == -1) continue;
+        float point[4]{}; unit.chara[slot][0].GetPosition(point);
+        if (!valid_radius(actor.collision_radius) || blocked(point, std::max(13.0f, actor.collision_radius))) return fail("actor spawn overlaps an occupied monster slot");
+    }
+    if (map.box_num < 0 || map.box_num > static_cast<int>(std::size(map.boxes)) ||
+        map.atra_num < 0 || map.atra_num > static_cast<int>(std::size(map.atra))) return fail("invalid floor object counts");
+    for (int i = 0; i < map.box_num; ++i)
+        if (map.boxes[i].used && blocked(map.boxes[i].pos, 20)) return fail("actor spawn overlaps a treasure box");
+    for (int i = 0; i < map.atra_num; ++i)
+        if (map.atra[i].used && blocked(map.atra[i].pos, 20)) return fail("actor spawn overlaps an Atla ball");
+    for (const auto &trap : map.trap_circle)
+        if (trap.state && blocked(trap.pos, 20)) return fail("actor spawn overlaps a trap circle");
+    for (int i = 0; i < map.MapEventLimit(); ++i) {
+        const auto &event = map.events[i];
+        if (event.kind != DNG_EVENT_NONE && (!valid_radius(event.radius) || blocked(event.pos, std::max(20.0f, event.radius))))
+            return fail("actor spawn overlaps a dungeon event");
+    }
     error.clear(); return true;
 }
 }

@@ -66,3 +66,26 @@ TEST(ModOwnedActors, SeparateIdentityRegistriesCannotAliasOwnership) {
     owners.Expire(second);
     EXPECT_TRUE(owners.Find(first, a));
 }
+
+TEST(ModOwnedActors, ReservationPublishesOnlyToLiveGenerationAndCanBeAbandoned) {
+    mods::EntityHandles handles; handles.Activate();
+    mods::ActorOwners owners; std::string error;
+    auto abandoned = owners.Reserve(handles, "alpha", "guard", error);
+    ASSERT_TRUE(abandoned); abandoned.reset(); EXPECT_EQ(owners.Size(), 0);
+    auto reservation = owners.Reserve(handles, "alpha", "guard", error);
+    ASSERT_TRUE(reservation);
+    EXPECT_FALSE(owners.Publish(handles, 0, std::move(*reservation)));
+    EXPECT_EQ(owners.Size(), 0);
+    const auto handle = handles.Construct(0);
+    ASSERT_TRUE(owners.Publish(handles, handle, std::move(*reservation)));
+    EXPECT_TRUE(owners.CheckOwner(handles, handle, "alpha", error));
+    EXPECT_FALSE(owners.Publish(handles, handle, std::move(*reservation)));
+    auto conflict = owners.Reserve(handles, "beta", "guard", error);
+    ASSERT_TRUE(conflict);
+    EXPECT_FALSE(owners.Publish(handles, handle, std::move(*conflict)));
+    EXPECT_TRUE(owners.CheckOwner(handles, handle, "alpha", error));
+    const auto replacement = handles.Construct(0);
+    ASSERT_TRUE(owners.Publish(handles, replacement, std::move(*conflict)));
+    EXPECT_EQ(owners.Size(), 1);
+    EXPECT_TRUE(owners.CheckOwner(handles, replacement, "beta", error));
+}

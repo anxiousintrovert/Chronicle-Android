@@ -2,6 +2,7 @@
 #include "mods/actor_spawn.hpp"
 #include "dungeonmap.hpp"
 #include "dungeonparts.hpp"
+#include "monstorunit.hpp"
 #include "dun/gameloop.hpp"
 #include <memory>
 #include <limits>
@@ -68,4 +69,40 @@ TEST(ModActorPlacement, NativeGeneratedPointsMatchBoundedGeometryAcrossAllDungeo
         }
     }
     selectMapNo = previous;
+}
+
+TEST(ModActorPlacement, RejectsOccupiedSpaceAndInvalidCountsWithoutNativeMutations) {
+    auto map = std::make_unique<CDungeonMap>(); map->port_grid_extent = 20;
+    map->box_num = map->atra_num = 0;
+    for (auto &trap : map->trap_circle) trap.state = 0;
+    for (auto &event : map->events) event.kind = DNG_EVENT_NONE;
+    auto unit = std::make_unique<CMonstorUnit>(); unit->CleanViewMonstor(0);
+    std::string error;
+    const auto check = [&] { return mods::ValidateActorObstructions(*map, *unit, {100, 0, 100}, 13, {500, 0, 500}, 15, error); };
+    EXPECT_TRUE(check()) << error;
+    EXPECT_FALSE(mods::ValidateActorObstructions(*map, *unit, {100, 0, 100}, 13, {100, 0, 100}, 15, error));
+    unit->monster[0].state = 2;
+    unit->chara[0][0].SetPosition(100, 0, 100);
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("monster"), std::string::npos);
+    EXPECT_EQ(unit->monster[0].state, 2);
+    unit->monster[0].state = -1;
+    map->box_num = 1; map->boxes[0].used = 1;
+    map->boxes[0].pos[0] = map->boxes[0].pos[2] = 100; map->boxes[0].pos[1] = 0;
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("treasure"), std::string::npos);
+    map->boxes[0].used = 0; map->atra_num = 1; map->atra[0].used = 1;
+    map->atra[0].pos[0] = map->atra[0].pos[2] = 100; map->atra[0].pos[1] = 0;
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("Atla"), std::string::npos);
+    map->atra[0].used = 0; map->trap_circle[0].state = 1;
+    map->trap_circle[0].pos[0] = map->trap_circle[0].pos[2] = 100; map->trap_circle[0].pos[1] = 0;
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("trap"), std::string::npos);
+    map->trap_circle[0].state = 0;
+    map->events[0].kind = 0; map->events[0].radius = 20;
+    map->events[0].pos[0] = map->events[0].pos[2] = 100; map->events[0].pos[1] = 0;
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("event"), std::string::npos);
+    map->events[0].kind = DNG_EVENT_NONE;
+    map->box_num = 100000;
+    EXPECT_FALSE(check()); EXPECT_NE(error.find("counts"), std::string::npos);
+    map->box_num = 1;
+    srand(23); const auto expected = rand(); srand(23);
+    EXPECT_TRUE(check()); EXPECT_EQ(rand(), expected);
 }
