@@ -21,8 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
-| `quests.register` | `id`, `title`, `description`, `goal` | `game.write` | Register an owned saved objective; returns its status |
-| `quests.advance` | `id`, `amount` | `game.write` | Transactionally advance an owned objective; returns its status |
+| `quests.register` | `id`, `title`, `description`, `goal` or `objectives` | `game.write` | Register an owned saved objective; returns its status |
+| `quests.advance` | `id`, `amount`, optional `objective` | `game.write` | Transactionally advance an owned objective; returns its status |
 | `quests.list` | none | `game.read` | This owner's declared quests and saved objective progress |
 | `quests.get` | `id` | `game.read` | One declared quest owned by the caller; unknown IDs fail |
 | `weapons.equip_state` | none | `game.read` | Town loadout readiness/reason and saved equipped slots for joined characters |
@@ -2378,3 +2378,45 @@ native event hooks, quest-start scenes, dialogue, item/weapon grants or rewards.
 Authors must verify their events and use existing transactional grant APIs plus
 owned reward flags. No registrations, storage or native changes occur merely from
 discovering a disabled package or starting with no gameplay mods.
+
+
+## Quests with named objectives
+
+Require `quests.objectives.v1` to register a quest with `objectives` instead of
+`goal`. Existing single-counter declarations and calls remain valid.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "rebuild", title = "Rebuild the village",
+    description = "Recover supplies and find the villagers.",
+    objectives = {
+        {id = "supplies", title = "Recover supplies", goal = 2},
+        {id = "villagers", title = "Find villagers", goal = 3}
+    }
+}))
+local progress = assert(chronicle.call("quests.advance", {
+    id = "rebuild", objective = "supplies", amount = 1
+}))
+```
+
+A quest accepts 1..16 objectives with unique quest-style IDs, 1..256-byte titles,
+and positive integer goals. Their sum cannot exceed 1000000. Do not provide both
+`goal` and `objectives`, or unknown objective fields. Named-objective advances
+require `objective`; unknown IDs fail atomically. Single-counter quests reject
+that field. Advancing one counter does not touch the others, and each saturates
+at its own goal. These are parallel completion requirements, not automatic stages.
+
+Status results include the ordered `objectives` array with per-objective `id`,
+`title`, `goal`, `progress`, and `complete`. Top-level goal/progress are their sums;
+completion requires all objectives. `quest_get` returns aggregate progress, while
+legacy `quest_add` rejects named-objective quests because it cannot select a
+counter. Use the shared advance call instead. The existing filtered quest page
+shows aggregate status and paginates individual objective counts in its details.
+
+Counts are stored separately under the owner's `quest_objectives`. Save loading
+rejects unknown/out-of-range counters, missing definitions, or aggregate totals
+that disagree with individual counts. The atomic `rename_quests` migration moves
+the definition, aggregate and objective counters together. Renaming objectives or
+changing definitions remains a separate migration feature; immutable registration
+still rejects changed saved definitions. No automatic rewards, native writes or
+new native quest hooks are introduced.

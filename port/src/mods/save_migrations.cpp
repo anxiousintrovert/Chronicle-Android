@@ -73,7 +73,7 @@ bool MigrateSavedState(Json &state,const Json &rules,std::string_view from_versi
         Require(staged.is_object(),"invalid migration owner state");
         for(const auto &[field,operation]:{std::pair{"values","rename_values"},std::pair{"quests","rename_quests"}})
             if(rule.contains(operation))Rename(staged,field,rule[operation]);
-        if(rule.contains("rename_quests"))Rename(staged,"quest_definitions",rule["rename_quests"]);
+        if(rule.contains("rename_quests")){Rename(staged,"quest_definitions",rule["rename_quests"]);Rename(staged,"quest_objectives",rule["rename_quests"]);}
         if(rule.contains("remove_values")&&staged.contains("values"))for(const auto &key:rule["remove_values"])staged["values"].erase(key.get<std::string>());
         if(rule.contains("defaults")&&!rule["defaults"].empty()) {
             if(!staged.contains("values"))staged["values"]=Json::object();

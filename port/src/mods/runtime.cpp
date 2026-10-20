@@ -1765,7 +1765,11 @@ std::vector<QuestStatus> Runtime::Quests() const {
         if(m->failed)continue;
         for (const auto &q : QuestDefinitions(m->package,*m->state)) {
             const int value = m->state->contains("quests") ? (*m->state)["quests"].value(q.id, 0) : 0;
-            result.push_back({m->package.id, q.id, q.title, q.description, std::min(value, q.goal), q.goal});
+            auto description=q.description;
+            const auto status=QuestStatusJson(q,*m->state);
+            if(status.contains("objectives"))for(const auto &objective:status["objectives"])
+                description+="\n\n"+objective["title"].get<std::string>()+": "+std::to_string(objective["progress"].get<int>())+" / "+std::to_string(objective["goal"].get<int>());
+            result.push_back({m->package.id, q.id, q.title, description, std::min(value, q.goal), q.goal});
         }
     }
     return result;

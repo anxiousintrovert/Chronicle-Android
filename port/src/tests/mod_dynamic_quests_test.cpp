@@ -35,6 +35,37 @@ TEST(ModDynamicQuests, StrictValidationRejectsMalformedDefinitionsAndArguments) 
     Json state={{"quest_definitions",{{"dynamic",{{"title","Title"},{"description","Description"},{"goal",0}}}}}};
     EXPECT_THROW(mods::QuestDefinitions({},state),std::runtime_error);
 }
+Json MultiDefinition() {
+    return {{"id","multi"},{"title","Rebuild the village"},{"description","Recover supplies and find the villagers."},
+        {"objectives",{{{"id","supplies"},{"title","Recover supplies"},{"goal",2}},{{"id","villagers"},{"title","Find villagers"},{"goal",3}}}}};
+}
+TEST(ModDynamicQuests, NamedObjectivesAdvanceIndependentlyAndCompleteOnlyTogether) {
+    mods::Package package;Json state=Json::object();auto result=mods::CallOwnedQuest(package,state,"quests.register",MultiDefinition());
+    ASSERT_EQ(result["objectives"].size(),2u);EXPECT_EQ(result["goal"],5);EXPECT_EQ(result["progress"],0);
+    const auto before=state;
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"amount",1}}),std::runtime_error);
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","unknown"},{"amount",1}}),std::runtime_error);EXPECT_EQ(state,before);
+    result=mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",99}});
+    EXPECT_EQ(result["progress"],2);EXPECT_EQ(result["complete"],false);EXPECT_EQ(result["objectives"][0]["progress"],2);EXPECT_EQ(result["objectives"][1]["progress"],0);
+    result=mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","villagers"},{"amount",3}});
+    EXPECT_EQ(result["complete"],true);EXPECT_EQ(state["quests"]["multi"],5);
+    EXPECT_EQ(mods::CallOwnedQuest(package,state,"quests.register",MultiDefinition()),result);
+}
+TEST(ModDynamicQuests, ObjectiveShapesLimitsAndCorruptCountsAreRejected) {
+    auto definition=MultiDefinition();definition["objectives"]=Json::array();EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+    definition=MultiDefinition();definition["objectives"][1]["id"]="supplies";EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+    definition=MultiDefinition();definition["objectives"][1]["goal"]=1000000;EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+    definition=MultiDefinition();definition["goal"]=5;EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+    definition=MultiDefinition();definition["objectives"]=Json::array();for(int i=0;i<17;++i)definition["objectives"].push_back({{"id","o"+std::to_string(i)},{"title","Objective"},{"goal",1}});
+    EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+    Json state=Json::object();mods::CallOwnedQuest({},state,"quests.register",MultiDefinition());
+    for(const auto &counts:std::vector<Json>{{{"supplies",3}},{{"foreign",1}},{{"supplies",true}},{{"supplies",1}}}) {
+        auto bad=state;bad["quest_objectives"]["multi"]=counts;EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+    }
+    auto bad=state;bad["quests"]["multi"]=1;EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+    bad=state;bad["quest_objectives"]["other"]=Json::object();EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+}
+
 class ModDynamicQuestRuntime:public testing::Test {
 protected:
     std::filesystem::path root=std::filesystem::temp_directory_path()/("chronicle-dynamic-quest-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -79,4 +110,33 @@ TEST_F(ModDynamicQuestRuntime, CorruptSavedDefinitionRejectsLoadAndMigrationMove
     EXPECT_EQ(runtime.Quests()[0].id,"renamed");EXPECT_EQ(runtime.Quests()[0].progress,2);
     EXPECT_FALSE(State()["mods"]["test.mod"]["quest_definitions"].contains("dynamic"));
 }
+TEST_F(ModDynamicQuestRuntime, MultiObjectiveSaveMigrationKeepsEveryCounterAndMenuDetail) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='multi',title='Rebuild',description='Recover the village',objectives={
+            {id='supplies',title='Supplies',goal=2},{id='villagers',title='Villagers',goal=3}}}))
+        assert(chronicle.call('quests.advance',{id='multi',objective='supplies',amount=1}).progress==1)
+        assert(chronicle.call('quests.advance',{id='multi',objective='villagers',amount=2}).progress==3)
+        assert(chronicle.quest_get('multi')==3)
+        assert(not chronicle.quest_add('multi',1))
+    end})",Json{{{"from","1"},{"rename_quests",{{"multi","renamed"}}}}});
+    Start();runtime.Tick({1,2,0,true});ASSERT_TRUE(runtime.Diagnostics().empty());
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_NE(runtime.Quests()[0].description.find("Supplies: 1 / 2"),std::string::npos);
+    auto old=State();const auto before=runtime.SaveState();const auto epoch=runtime.Epoch();std::string error;
+    auto bad=old;bad["mods"]["test.mod"]["quests"]["multi"]=4;EXPECT_FALSE(runtime.LoadState(bad.dump(),error));EXPECT_EQ(runtime.SaveState(),before);EXPECT_EQ(runtime.Epoch(),epoch);
+    old["required"]["test.mod"]="1";ASSERT_TRUE(runtime.LoadState(old.dump(),error))<<error;
+    const auto state=State()["mods"]["test.mod"];EXPECT_FALSE(state["quest_objectives"].contains("multi"));
+    EXPECT_EQ(state["quest_objectives"]["renamed"],(Json{{"supplies",1},{"villagers",2}}));
+    EXPECT_EQ(state["quests"]["renamed"],3);EXPECT_EQ(runtime.Quests()[0].goal,5);
+    const auto saved=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(saved,error))<<error;EXPECT_EQ(runtime.SaveState(),saved);
+}
+TEST_F(ModDynamicQuestRuntime, MultiObjectiveChangesRollBackWithRejectedGameCommit) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='multi',title='Rebuild',description='Recover the village',objectives={{id='supplies',title='Supplies',goal=2}}}))
+        assert(chronicle.call('quests.advance',{id='multi',objective='supplies',amount=2}).complete)
+        assert(chronicle.add_money(1))
+    end})");Start();runtime.Tick({1,2,0,true},[](int){return false;});
+    EXPECT_FALSE(runtime.Diagnostics().empty());const auto state=State()["mods"]["test.mod"];
+    EXPECT_FALSE(state.contains("quests"));EXPECT_FALSE(state.contains("quest_objectives"));EXPECT_FALSE(state.contains("quest_definitions"));
+}
+
 }

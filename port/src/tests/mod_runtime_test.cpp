@@ -1060,6 +1060,7 @@ TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
     EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["quest_read"],true);
     const auto state=Json::parse(runtime.SaveState())["mods"]["test.native.v2"];
     EXPECT_EQ(state["quests"]["dynamic"],1);EXPECT_EQ(state["quest_definitions"]["dynamic"]["goal"],3);
+    EXPECT_EQ(state["quest_objectives"]["multi"]["people"],1);
 }
 
 TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {

@@ -37,6 +37,9 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     mods::Shared().Start({root/"mods"},{},root);mods::Scripts().Start(mods::Shared().Active());
     auto state=Json::parse(mods::Scripts().SaveState());state["mods"]["test.quests"]["quests"]={{"quest.0",3},{"quest.1",1}};
     for(auto definition:quests){const auto id=definition["id"].get<std::string>();definition.erase("id");state["mods"]["test.quests"]["quest_definitions"][id]=definition;}
+    auto &first_definition=state["mods"]["test.quests"]["quest_definitions"]["quest.0"];
+    first_definition.erase("goal");first_definition["objectives"]={{{"id","home"},{"title","Return to Norune"},{"goal",1}},{{"id","people"},{"title","Speak to villagers"},{"goal",2}}};
+    state["mods"]["test.quests"]["quest_objectives"]["quest.0"]={{"home",1},{"people",2}};
     std::string error;ASSERT_TRUE(mods::Scripts().LoadState(state.dump(),error))<<error;
     const auto before=mods::Scripts().SaveState();
     InputSetMenuMouse(true);
@@ -53,6 +56,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     };
     mods::menu::Open();const auto manager=draw("manager.png");
     mods::menu::Run(PAD_L1);const auto all=draw("all.png");EXPECT_TRUE(all!=manager);
+    mods::menu::Run(PAD_RIGHT);EXPECT_TRUE(draw("objectives-page.png")!=all);mods::menu::Run(PAD_LEFT);
     mods::menu::Run(PAD_SQUARE);const auto ongoing=draw("ongoing.png");EXPECT_TRUE(ongoing!=all);
     mods::menu::Run(PAD_SQUARE);const auto complete=draw("complete.png");EXPECT_TRUE(complete!=ongoing);
     mods::menu::Run(PAD_SQUARE);EXPECT_TRUE(same_content(draw("all-again.png"),all));

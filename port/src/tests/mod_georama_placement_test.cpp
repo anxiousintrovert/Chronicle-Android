@@ -46,16 +46,21 @@ protected:
         mode = previous_mode; GameMode = previous_game_mode; MapNo = previous_map; NowEditMap = previous_town;
     }
     void RejectWithoutMutation(const std::string &reason) {
-        const auto before = std::make_unique<CSaveData>(*save);
-        const auto parts_before = EditPartsInfo;
-        const auto geometry = std::make_unique<CEditGround>(*ground);
+        // Snapshot object representations directly. Memberwise copies need not
+        // preserve padding, which is included in these byte-preservation checks.
+        const auto before = std::make_unique<unsigned char[]>(sizeof(CSaveData));
+        std::memcpy(before.get(), save.get(), sizeof(CSaveData));
+        std::array<unsigned char, sizeof(EditPartsInfo)> parts_before{};
+        std::memcpy(parts_before.data(), &EditPartsInfo, sizeof(EditPartsInfo));
+        const auto geometry = std::make_unique<unsigned char[]>(sizeof(CEditGround));
+        std::memcpy(geometry.get(), ground.get(), sizeof(CEditGround));
         std::array<unsigned char, sizeof(templates)> templates_before{};
         std::memcpy(templates_before.data(), templates.data(), sizeof(templates));
         srand(907); const int expected = rand(); srand(907);
         EXPECT_FALSE(mods::ApplyGeoramaPlacement({command}, 0, error));
         EXPECT_NE(error.find(reason), std::string::npos) << error;
         EXPECT_EQ(std::memcmp(before.get(), save.get(), sizeof(CSaveData)), 0);
-        EXPECT_EQ(std::memcmp(&parts_before, &EditPartsInfo, sizeof(EditPartsInfo)), 0);
+        EXPECT_EQ(std::memcmp(parts_before.data(), &EditPartsInfo, sizeof(EditPartsInfo)), 0);
         EXPECT_EQ(std::memcmp(geometry.get(), ground.get(), sizeof(CEditGround)), 0);
         EXPECT_EQ(std::memcmp(templates_before.data(), templates.data(), sizeof(templates)), 0);
         EXPECT_EQ(rand(), expected);
