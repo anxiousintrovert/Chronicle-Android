@@ -3,9 +3,11 @@
 #include <cstdio>
 
 #include "btitem_port.hpp"
+#include "chronicle/dungeon_transport.hpp"
 #include "dataalloc.hpp"
 #include "dataread.hpp"
 #include "dun/gameloop.hpp"
+#include "dungeonmap.hpp"
 #include "editground.hpp"
 #include "editloop.hpp"
 #include "editloop3.hpp"
@@ -16,9 +18,14 @@
 // Retail keeps the floor's event script in BtEventData, an s32, and casts it back to a pointer
 // to run an event. Both ends are replaced to hold the address whole; nothing else reads it.
 
+extern CDungeonMap MainDungeonMap, UraDungeonMap;
+
 namespace {
 
-char *g_event_data = nullptr;
+char             *g_event_data = nullptr;
+int               g_event_size = 0, g_event_dungeon = -1;
+std::vector<char> g_expanded_transport;
+bool              g_transport_prepared = false;
 
 int GetStackInt(RS_STACKDATA *argument) {
     if (argument->type == RS_FLOAT) {
@@ -43,6 +50,10 @@ PORT_OVERRIDE void BtSystemScriptLoad(int floor) {
     g_event_data = reinterpret_cast<char *>(BtSystemScriptFileBuffer.base + BtSystemScriptFileBuffer.used * 0x10);
     LoadFile(path, g_event_data, &read_size);
     wait_now_loading_vsync();
+    g_event_size = read_size;
+    g_event_dungeon = floor;
+    g_expanded_transport.clear();
+    g_transport_prepared = false;
     BtSystemScriptFileBuffer.Alloc((read_size >> 4) + 1);
     mes = reinterpret_cast<char *>(BtSystemScriptFileBuffer.base + BtSystemScriptFileBuffer.used * 0x10);
     LoadFile(mes_path, mes, &mes_size);
@@ -53,6 +64,19 @@ PORT_OVERRIDE void BtSystemScriptLoad(int floor) {
 }
 
 PORT_OVERRIDE int BtSystemScriptRun(int event, CDataAlloc2<1> *arena) {
+    if (NowDngMap && NowDngMap->GridExtent() == chronicle::dungeon::GridStride &&
+        event == (g_event_dungeon == 4 ? 201 : 200)) {
+        if (!g_transport_prepared || MainDungeonMap.GridExtent() != chronicle::dungeon::GridStride ||
+            UraDungeonMap.GridExtent() != chronicle::dungeon::GridStride) {
+            g_expanded_transport = ExpandedTransportScript(
+                std::span<const char>(g_event_data, g_event_size > 0 ? g_event_size : 0),
+                g_event_dungeon, MainDungeonMap.GridExtent(), UraDungeonMap.GridExtent());
+            g_transport_prepared = true;
+        }
+        if (!g_expanded_transport.empty()) {
+            return EdEventInit(event, arena, g_expanded_transport.data());
+        }
+    }
     return EdEventInit(event, arena, g_event_data);
 }
 

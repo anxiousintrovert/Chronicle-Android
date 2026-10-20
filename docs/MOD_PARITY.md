@@ -1902,3 +1902,48 @@ Both 3,840-case no-mod/disabled exports retain their previous hashes and match
 pinned upstream except for map memory size. Protected PS2 files are unchanged.
 All seven separate PAL retail back-floor scenarios also passed with the
 placement wrapper; this does not validate expanded-floor transport.
+
+
+### Expanded built-in transport scenes
+
+All seven native back-floor entry scenarios now pass on explicit 48-cell maps
+using six rooms spread across a 46-cell build area. The shared-manager action
+runs the real confirmation and transport script, verifies both front/back
+extents, then requires 90 consecutive normal-play frames on a populated back
+floor cell, unchanged inventory and all 50 access flags, and retirement of the
+owned request. This verifies one first-floor entry per dungeon, not every seed,
+maximum room/population settings, return travel, or a complete floor playthrough.
+
+The first visual capture exposed an actual integration bug: the expanded cave
+cart travelled through black space because the rail tunnel moved to column 47
+while the built-in script still used column 19. An internal adapter now checks
+the complete PAL script fingerprint and makes a runtime copy with the reviewed
+transport X operands relocated by 4,480 world units. Camera, actor and sound
+operands move together; differences between paired X constants stay unchanged.
+Only the selected built-in transport program uses that copy. Original buffers,
+assets and PS2 files are unchanged, and retail extents bypass inspection/copying.
+Moon Sea and Demon Shaft programs require no coordinate operands to change.
+The corrected cave tunnel and forest transport scenery were visually inspected.
+
+Unknown/modified scripts and mixed front/back extents are rejected by this
+adapter. These cases need an explicit custom-content contract or another
+verified adapter; a future public layout operation must preflight these
+requirements before publishing a floor. This is not the contributor's cutscene
+framework and does not introduce its contracts. Public owned layout settings,
+staged failure recovery, higher population/object capacities, maximum-size
+retail playthroughs and content/resource validation remain unfinished.
+
+Reproduce the optional expanded scenarios individually with `DC_DATA`, a fresh
+`DC_BACK_FLOOR_AUDIT` directory and `DC_EXPANDED_BACK_FLOOR_AUDIT=1`, selecting
+`ModBackFloorRetail.ExpandedCaveTransport` (or the other six named scenarios).
+They record frame/position diagnostics and, where sampled during the road
+segment, a `road.png` capture. The independent local-PAL transport test verifies
+all seven script fingerprints, exact changed operand counts, preserved inputs,
+and rejection of altered programs. No copyrighted scripts are stored in Git.
+
+Validation: Clang 23.1.2 Windows game/test builds and the full suite pass
+(790 passed, 42 skipped, 1 disabled). All 29 Python checks pass. Both
+3,840-case empty/disabled seed exports retain their previous hashes and match
+pinned upstream except for map memory size. Other platforms remain unverified.
+All seven retail and seven expanded PAL transport scenarios were rerun
+separately on the final revision and passed.

@@ -2,15 +2,19 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 
 #include "character.hpp"
+#include "chronicle/dungeon_build.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeoneventman.hpp"
+#include "dungeonmap.hpp"
 #include "gameloop.hpp"
 #include "gamemode.hpp"
+#include "gfx/gfx.hpp"
 #include "gfx_fixture.hpp"
 #include "main.hpp"
 #include "mods/back_floor.hpp"
@@ -21,10 +25,12 @@
 #include "platform/paths.hpp"
 #include "savedata.hpp"
 
-extern s32 gameTask;
+extern s32         gameTask;
+extern CDungeonMap MainDungeonMap, UraDungeonMap;
 
 namespace {
 bool               queued = false, arrived = false;
+bool               expected_expanded = false, road_captured = false;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
 std::string        last_state;
@@ -37,9 +43,27 @@ void BackPump() {
     InputScriptApply(GameFrameCount());
     const auto state = mods::ReadBackFloor();
     last_state = state.dump();
+    if (std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT") && GameFrameCount() % 100 == 0) {
+        float position[4]{};
+        CharaMain.GetPosition(position);
+        std::ofstream trace(std::filesystem::path(std::getenv("DC_BACK_FLOOR_AUDIT")) / "frames.log", std::ios::app);
+        if (!road_captured && queued && gameTask == GAME_TASK_SCRIPT_RUN && std::abs(position[0] - (expected_expanded ? 7520.0f : 3040.0f)) < 40.0f) {
+            std::vector<uint8_t> pixels;
+            uint32_t             width, height;
+            if (gfx::ReadbackFrame(pixels, width, height)) {
+                gfx::WritePng((std::filesystem::path(std::getenv("DC_BACK_FLOOR_AUDIT")) / "road.png").string().c_str(), pixels.data(), width, height);
+                road_captured = true;
+            }
+        }
+        trace << GameFrameCount() << " task=" << gameTask << " script=" << BtEventInfo.script_no << " pos=" << position[0] << "," << position[1] << "," << position[2] << " " << last_state << "\n";
+    }
     if (!queued && state.value("ready", false)) {
         for (const auto &action : mods::Scripts().Actions("audit.back")) {
             if (action.id == "enter" && action.available) {
+                if (expected_expanded) {
+                    EXPECT_EQ(MainDungeonMap.GridExtent(), 48);
+                    EXPECT_EQ(UraDungeonMap.GridExtent(), 48);
+                }
                 std::string error;
                 inventory_before = SaveData->GetDngStatus()->item_pack;
                 std::copy_n(SaveData->GetDngStatus()->event_flags, 50, flags_before.begin());
@@ -59,6 +83,25 @@ void BackPump() {
         ++stable;
         maximum_stable = std::max(maximum_stable, stable);
         if (stable >= 90) {
+            if (expected_expanded) {
+                float pos[4]{};
+                CharaMain.GetPosition(pos);
+                if (!std::isfinite(pos[0]) || !std::isfinite(pos[1]) || !std::isfinite(pos[2]) ||
+                    pos[0] < -80 || pos[0] >= 48 * 160 - 80 || pos[2] < -80 || pos[2] >= 48 * 160 - 80) {
+                    ADD_FAILURE() << "player ended outside expanded map: " << pos[0] << "," << pos[1] << "," << pos[2];
+                    GameRequestStop();
+                    return;
+                }
+                const int x = static_cast<int>((pos[0] + 80) / 160), z = static_cast<int>((pos[2] + 80) / 160);
+                EXPECT_GE(x, 0);
+                EXPECT_GE(z, 0);
+                EXPECT_LT(x, 48);
+                EXPECT_LT(z, 48);
+                if (x >= 0 && x < 48 && z >= 0 && z < 48) {
+                    EXPECT_NE(UraDungeonMap.cells[x + z * 48].parts_no, MAP_PARTS_NONE);
+                }
+                EXPECT_GT(pos[1], -100.0f);
+            }
             arrived = true;
             EXPECT_EQ(state["request"]["state"], "dispatched");
             EXPECT_FALSE(state.value("pending", true));
@@ -72,12 +115,17 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon) {
+void RunBackAudit(int dungeon, bool expanded = false) {
+    if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
+        GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
+    }
     const char *data = std::getenv("DC_DATA"), *audit = std::getenv("DC_BACK_FLOOR_AUDIT");
     if (!data || !audit || !*audit) {
         GTEST_SKIP() << "Run alone with DC_DATA and DC_BACK_FLOOR_AUDIT";
     }
     queued = arrived = false;
+    expected_expanded = expanded;
+    road_captured = false;
     stable = maximum_stable = 0;
     input_released = false;
     const std::filesystem::path root = audit;
@@ -115,7 +163,12 @@ end}
     GameSetFastLoad(true);
     GameSetAutosave(false);
     GameSetFrameBudget(18500);
+    std::unique_ptr<chronicle::dungeon::BuildScope> layout;
+    if (expanded) {
+        layout = std::make_unique<chronicle::dungeon::BuildScope>(chronicle::dungeon::BuildLayout{6, 46, 3, 4});
+    }
     const int result = RunGame(0, nullptr);
+    layout.reset();
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
@@ -139,4 +192,18 @@ TEST(ModBackFloorRetail, MoonSeaTransport) { RunBackAudit(4); }
 TEST(ModBackFloorRetail, GalleryTransport) { RunBackAudit(5); }
 
 TEST(ModBackFloorRetail, DemonShaftTransport) { RunBackAudit(6); }
+
+TEST(ModBackFloorRetail, ExpandedCaveTransport) { RunBackAudit(0, true); }
+
+TEST(ModBackFloorRetail, ExpandedWiseOwlTransport) { RunBackAudit(1, true); }
+
+TEST(ModBackFloorRetail, ExpandedShipwreckTransport) { RunBackAudit(2, true); }
+
+TEST(ModBackFloorRetail, ExpandedTempleTransport) { RunBackAudit(3, true); }
+
+TEST(ModBackFloorRetail, ExpandedMoonSeaTransport) { RunBackAudit(4, true); }
+
+TEST(ModBackFloorRetail, ExpandedGalleryTransport) { RunBackAudit(5, true); }
+
+TEST(ModBackFloorRetail, ExpandedDemonShaftTransport) { RunBackAudit(6, true); }
 } // namespace
