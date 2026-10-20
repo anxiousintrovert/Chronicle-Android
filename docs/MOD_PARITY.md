@@ -3174,3 +3174,24 @@ replays. Public operation count remains 135; the entity lifecycle gap is open.
 
 Validation: Clang 23.1.2 game/test builds and all 20 ownership/entity-handle
 tests passed. PS2 diff against the baseline remains empty.
+
+
+### Loaded actor spawn resource preflight (2026-10-20)
+
+Added internal read-only planning for a loaded retail monster model. It validates
+finite bounded position values, the nine-model table bounds, script/model and
+attachment-frame presence, and the exact first free slot native setup will use.
+That slot must have at least the 448 quadwords reserved by BtSetEventScript;
+the preflight must not skip an unready first slot in favor of a later arena.
+Mimics reject because their map chest-trigger lifecycle needs separate handling.
+
+The planner does not execute scripts, activate handles, grow the active limit or
+mutate the RNG/native actor state. It does not yet validate floor placement,
+custom bytecode contents or the game transition context. These are prerequisites,
+not a claim that public spawn/despawn is implemented. No production caller yet;
+public operation count remains 135.
+
+Validation: Clang 23.1.2 game/test builds and six spawn/ownership tests passed.
+Tests exercise missing resources, model bounds, first-slot arena capacity,
+attachment requirements, full floors, ownership reuse and RNG preservation.
+PS2 remains untouched; contributor-owned content registries are unaffected.
