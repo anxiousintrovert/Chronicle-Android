@@ -3678,3 +3678,33 @@ helpers, and no package capability is added yet.
 The visual-construction/remake caller, package target/conflict handling, combined
 skin/morph residual handling, GPU publication and actual replacement rendering
 still need integration and validation. Full capability parity is not complete.
+
+
+## Internal replacement GPU publication and native refresh (2026-10-20)
+
+Added staged internal replacement registration for existing native visuals. It
+uploads a distinct GPU mesh and retains the original visual/handle for fallback.
+Draw resolves healthy replacements; native remake refreshes them; retirement
+releases replacement GPU resources and skin bindings. Failed registration keeps
+the previous committed replacement. Geometry limits include 256 visuals, one
+million replacement vertices and flattened source points each, and three million
+indices. Budget rejection is tested without evicting existing meshes.
+
+An explicit flattened-to-native source mapping aligns color/morph transfer with
+bone inheritance. Native skin notifications record actual native skin output;
+refresh adds only subsequent native-position residuals to the replacement pose,
+retaining morph changes without applying skin twice. Empty registries leave the
+native path in place. Invalid refreshes fall back until rebuilt.
+
+Clang 23.1.2 game/test builds passed. The full regression before the final budget
+guard passed 949 tests, skipped 104 and left one benchmark disabled; all 52 Python
+checks and the dormant PAL combat/shared-manager/back-floor replay passed. After
+the budget guard, all 24 focused mesh/retirement tests passed, including actual
+Vulkan upload/readback displacement, refresh, fallback, cleanup, cumulative budget
+rejection and combined skin/morph behavior. No Kazarov or PS2 files changed.
+
+This establishes internal GPU publication, not package-ready mesh replacement.
+Package declarations, target discovery/matching, conflict diagnostics, activation,
+culling bounds and actual retail replacement-model screenshots remain required.
+No mesh capability is advertised; public operation count remains 143 and the
+full coverage goal remains unfinished.

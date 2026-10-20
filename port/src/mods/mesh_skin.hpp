@@ -10,7 +10,7 @@ public:
     using Vertex = std::array<float,4>;
     // Binds in native model coordinates; equal-distance ties use the lowest
     // source index. Preparation allocates, pose updates do not.
-    static MeshSkinBinding Prepare(std::span<const Point> source, std::span<const Point> replacement);
+    static MeshSkinBinding Prepare(std::span<const Point> source, std::span<const Point> replacement, std::span<const std::uint32_t> mapping = {});
     void BeginPose() noexcept;
     // Exact native skin arithmetic; false rejects invalid input without changes.
     bool ApplyBone(std::uint32_t source_vertex, const float base[4][4], const float bone[4][4],

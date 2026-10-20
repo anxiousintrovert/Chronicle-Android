@@ -4,6 +4,7 @@
 #include <cmath>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 namespace mods {
 namespace {
@@ -74,15 +75,17 @@ bool Valid(const MeshSkinBinding::Vertex &vertex) {
     return std::ranges::all_of(vertex,[](float value){return std::isfinite(value);});
 }
 }
-MeshSkinBinding MeshSkinBinding::Prepare(std::span<const Point> source,std::span<const Point> replacement) {
+MeshSkinBinding MeshSkinBinding::Prepare(std::span<const Point> source,std::span<const Point> replacement,std::span<const std::uint32_t> mapping) {
     if(source.empty() || source.size()>100000 || replacement.empty() || replacement.size()>100000)
         throw std::runtime_error("mesh binding requires 1..100000 source and replacement points");
     for(auto points:{source,replacement}) for(const auto &point:points) for(float value:point)
         if(!std::isfinite(value) || std::abs(value)>1000000) throw std::runtime_error("mesh binding point must be finite and bounded");
-    Nearest nearest(source);MeshSkinBinding result;
+    if(!mapping.empty() && (mapping.size()!=replacement.size() || std::ranges::any_of(mapping,[&](auto i){return i>=source.size();})))
+        throw std::runtime_error("invalid explicit mesh source mapping");
+    std::optional<Nearest> nearest;if(mapping.empty())nearest.emplace(source);MeshSkinBinding result;
     result.rest_.reserve(replacement.size());result.sources_.reserve(replacement.size());result.offsets_.resize(source.size()+1);
     for(const auto &point:replacement) {
-        const auto index=nearest.Find(point);result.sources_.push_back(index);++result.offsets_[index+1];
+        const auto index=mapping.empty()?nearest->Find(point):mapping[result.sources_.size()];result.sources_.push_back(index);++result.offsets_[index+1];
         result.rest_.push_back({point[0],point[1],point[2],1});
     }
     std::partial_sum(result.offsets_.begin(),result.offsets_.end(),result.offsets_.begin());

@@ -101,7 +101,7 @@ Mot_List *MotionProc2(CFrame *frame, tagMOTION_TYPE *motion, tagFRAME_INF *frame
         u32 vertex = list->keys[i].frame;
         SkinVertex(vert[vertex], g_deformed[vertex], frame_info[list->frame].base_vertices[vertex], Bone_Matrix_Base,
                    Bone_Matrix, Bone_Matrix_inv, 0.01f * list->keys[i].value[0]);
-        if (mod_skin) mods::ApplyNativeMeshBone(vertex, Bone_Matrix_Base, Bone_Matrix, Bone_Matrix_inv, 0.01f * list->keys[i].value[0]);
+        if (mod_skin) mods::ApplyNativeMeshBone(vertex, Bone_Matrix_Base, Bone_Matrix, Bone_Matrix_inv, 0.01f * list->keys[i].value[0], vert[vertex]);
     }
 
     return list->next;

@@ -136,8 +136,33 @@ Material refresh preserves replacement index ranges. It validates all updates
 before publishing and allocates nothing, so malformed updates cannot leave a
 partially refreshed visual.
 
-These helpers remain internal preparation. The game does not yet select a mesh
-package, call this adapter on native visual construction/remake, or publish its
-GPU mesh. Native animation tests alone are not retail replacement-rendering
-validation. Package conflict handling, activation and visual evidence are still
-required.
+These helpers remain internal preparation. The game does not yet select a mesh package or attach replacements during
+native visual construction. Internal registration can now upload a separate GPU
+mesh, and native draw/remake paths resolve and refresh it while retaining the
+original as fallback. Native animation and synthetic GPU tests are not retail
+replacement-model validation. Package conflict handling, activation, culling
+bounds and retail visual evidence are still required.
+
+
+## Internal GPU publication
+
+`AttachReplacementVisual` requires a registered source visual, native model rest
+points and the flattened-render-vertex to native-vertex index mapping. That exact
+mapping keeps color/morph correspondence and inherited bone influences aligned,
+including duplicate source positions. It stages geometry, a GPU mesh and registry
+storage before replacing a committed binding. Failed attachments retain the old
+replacement. The original visual and GPU mesh remain available for fallback.
+
+The draw adapter selects the replacement only while it is healthy. Native remake
+refreshes colors/materials and either source displacement or a skin pose plus the
+residual between the latest native source positions and recorded native skin
+output. This prevents double-applying skinning and retains later morph changes.
+Invalid updates stop selecting the replacement until rebuilt; visual retirement
+releases its GPU handle and skin binding. Empty registries leave native drawing
+and updates in place.
+
+Limits are 256 replacement visuals, one million replacement vertices, one million
+flattened source points, and three million triangle indices across committed
+replacements, in addition to the per-asset and skin-registry limits. These bound
+framework resources; they do not change native array capacities. This internal
+registration API is not yet callable by packages or a new public host operation.

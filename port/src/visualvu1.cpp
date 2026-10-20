@@ -1,4 +1,5 @@
 #include "mods/mesh_skin_runtime.hpp"
+#include "mods/mesh_visual_runtime.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -25,6 +26,7 @@ std::unordered_map<const void *, std::unique_ptr<Draw3DVisual>> g_visuals;
 std::unordered_map<const void *, std::unique_ptr<Draw3DVisual>> g_transient;
 
 void Release(Draw3DVisual &visual, const void *block) {
+    mods::DetachReplacementVisual(&visual);
     mods::DetachMeshSkin(block);
     if (visual.mesh != gfx::kNullMesh) {
         gfx::DestroyMesh(visual.mesh);
@@ -441,7 +443,7 @@ void Draw3DRetireVisuals(const void *base, std::size_t bytes) {
 // Native arenas remain mapped when cleared or reused; missing tags retire their records.
 // Separately owned storage must explicitly retire records before unmapping.
 void Draw3DSweepVisuals() {
-    for (const auto &[block, visual] : g_transient) mods::DetachMeshSkin(block);
+    for (const auto &[block, visual] : g_transient) { mods::DetachReplacementVisual(visual.get()); mods::DetachMeshSkin(block); }
     g_transient.clear();
     std::erase_if(g_visuals, [](auto &entry) {
         const unsigned int *block = static_cast<const unsigned int *>(entry.first);
@@ -475,7 +477,8 @@ void Draw3DStripToList(std::vector<uint32_t> &indices, uint32_t first_vertex, ui
 
 // The VU1 header's PRMODE: TME only when lit (not on shadow passes, not with unlit), IIP off on
 // shadow passes, FGE when the frame takes fog and it is not a shadow pass, ABE always.
-void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const RenderInfo &info, int program) {
+void Draw3DDrawVisual(const Draw3DVisual &source, const float model[4][4], const RenderInfo &info, int program) {
+    const Draw3DVisual &visual = mods::ResolveReplacementVisual(source);
     if (visual.strips.empty() || (!visual.immediate && visual.mesh == gfx::kNullMesh)) {
         return;
     }
@@ -725,6 +728,7 @@ PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDTRemake(u_int *block, u_int *dat
             }
         }
     }
+    mods::RefreshReplacementVisual(*visual);
     if (visual->mesh != gfx::kNullMesh) {
         gfx::UpdateMeshVertices(visual->mesh, 0, visual->vertices);
     }

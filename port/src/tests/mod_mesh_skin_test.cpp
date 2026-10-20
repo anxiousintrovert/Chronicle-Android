@@ -13,6 +13,14 @@ TEST(ModMeshSkin, NearestBindingsHaveDeterministicLowestIndexTiesAndNoRng) {
     EXPECT_EQ((std::vector<std::uint32_t>(binding.Sources().begin(),binding.Sources().end())),(std::vector<std::uint32_t>{0,0,3}));
     EXPECT_EQ(rand(),expected);
 }
+TEST(ModMeshSkin, ExplicitMappingKeepsVisualAndNativeSourceIndicesConsistent) {
+    const Binding::Point source[]{{0,0,0},{100,0,0}},replacement[]{{0.1f,0,0}};
+    const std::uint32_t mapping[]{1};auto binding=Binding::Prepare(source,replacement,mapping);Matrix base,bone,inverse;bone.v[3][0]=5;
+    ASSERT_TRUE(binding.ApplyBone(0,base.v,bone.v,inverse.v,1));EXPECT_FLOAT_EQ(binding.Positions()[0][0],0.1f);
+    ASSERT_TRUE(binding.ApplyBone(1,base.v,bone.v,inverse.v,1));EXPECT_FLOAT_EQ(binding.Positions()[0][0],5.1f);
+    const std::uint32_t invalid[]{2};EXPECT_ANY_THROW(Binding::Prepare(source,replacement,invalid));
+    const std::uint32_t wrong_count[]{0,1};EXPECT_ANY_THROW(Binding::Prepare(source,replacement,wrong_count));
+}
 TEST(ModMeshSkin, SpatialSearchMatchesExhaustiveOracleAcrossAllAxes) {
     std::vector<Binding::Point> source,replacement;
     for(int i=0;i<255;++i) source.push_back({float((i*17)%37),float((i*31)%41),float((i*13)%29)});
