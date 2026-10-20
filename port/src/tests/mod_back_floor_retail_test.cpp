@@ -9,6 +9,8 @@
 
 #include "character.hpp"
 #include "chronicle/dungeon_build.hpp"
+#include "chronicle/dungeon_prepare.hpp"
+#include "chronicle/random_state.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
@@ -31,11 +33,19 @@ extern CDungeonMap MainDungeonMap, UraDungeonMap;
 namespace {
 bool               queued = false, arrived = false;
 bool               expected_expanded = false, road_captured = false;
+int                expected_rooms = 6;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
 std::string        last_state;
 ITEM_PACK          inventory_before{};
 std::array<s8, 50> flags_before{};
+
+template <typename T>
+std::vector<unsigned char> ObjectBytes(const T &value) {
+    std::vector<unsigned char> bytes(sizeof(value));
+    std::memcpy(bytes.data(), static_cast<const void *>(&value), bytes.size());
+    return bytes;
+}
 
 void BackPump() {
     WindowPollEvents();
@@ -63,6 +73,37 @@ void BackPump() {
                 if (expected_expanded) {
                     EXPECT_EQ(MainDungeonMap.GridExtent(), 48);
                     EXPECT_EQ(UraDungeonMap.GridExtent(), 48);
+                    if (expected_rooms > 16) {
+                        EXPECT_GT(MainDungeonMap.room_num, 16);
+                        EXPECT_GT(UraDungeonMap.room_num, 16);
+                        const auto front_before = ObjectBytes(MainDungeonMap);
+                        const auto back_before = ObjectBytes(UraDungeonMap);
+                        const auto events_snapshot = ObjectBytes(DngEventMan);
+                        const auto status_before = ObjectBytes(*SaveData->GetDngStatus());
+                        const auto scratch_before = CaptureDungeonBuildScratch();
+                        const auto rng_before = chronicle::RandomState();
+                        const auto map_before = NowDngMap;
+                        const auto events_before = NowEventMan;
+                        const auto user_before = UserStatus;
+                        auto       staged = chronicle::dungeon::PrepareMaps(MainDungeonMap, DngEventMan, *SaveData->GetDngStatus(), {64, 46, 3, 6});
+                        EXPECT_GT(staged.front->room_num, 16);
+                        EXPECT_GT(staged.back->room_num, 16);
+                        EXPECT_THROW(chronicle::dungeon::PrepareMaps(MainDungeonMap, DngEventMan, *SaveData->GetDngStatus(), {2, 8, 6, 6}), std::runtime_error);
+                        auto invalid = std::make_unique<CDungeonEventMan>(DngEventMan);
+                        invalid->slot[0].enabled = 1;
+                        invalid->slot[0].parts_id = 0;
+                        invalid->slot[0].placement_frame = nullptr;
+                        EXPECT_THROW(chronicle::dungeon::PrepareMaps(MainDungeonMap, *invalid, *SaveData->GetDngStatus(), {64, 46, 3, 6}), std::runtime_error);
+                        EXPECT_EQ(ObjectBytes(DngEventMan), events_snapshot);
+                        EXPECT_EQ(ObjectBytes(MainDungeonMap), front_before);
+                        EXPECT_EQ(ObjectBytes(UraDungeonMap), back_before);
+                        EXPECT_EQ(ObjectBytes(*SaveData->GetDngStatus()), status_before);
+                        EXPECT_EQ(chronicle::RandomState(), rng_before);
+                        EXPECT_EQ(CaptureDungeonBuildScratch(), scratch_before);
+                        EXPECT_EQ(NowDngMap, map_before);
+                        EXPECT_EQ(NowEventMan, events_before);
+                        EXPECT_EQ(UserStatus, user_before);
+                    }
                 }
                 std::string error;
                 inventory_before = SaveData->GetDngStatus()->item_pack;
@@ -115,7 +156,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -125,6 +166,7 @@ void RunBackAudit(int dungeon, bool expanded = false) {
     }
     queued = arrived = false;
     expected_expanded = expanded;
+    expected_rooms = rooms;
     road_captured = false;
     stable = maximum_stable = 0;
     input_released = false;
@@ -165,7 +207,7 @@ end}
     GameSetFrameBudget(18500);
     std::unique_ptr<chronicle::dungeon::BuildScope> layout;
     if (expanded) {
-        layout = std::make_unique<chronicle::dungeon::BuildScope>(chronicle::dungeon::BuildLayout{6, 46, 3, 4});
+        layout = std::make_unique<chronicle::dungeon::BuildScope>(chronicle::dungeon::BuildLayout{rooms, 46, 3, rooms > 6 ? 6 : 4});
     }
     const int result = RunGame(0, nullptr);
     layout.reset();
@@ -206,4 +248,18 @@ TEST(ModBackFloorRetail, ExpandedMoonSeaTransport) { RunBackAudit(4, true); }
 TEST(ModBackFloorRetail, ExpandedGalleryTransport) { RunBackAudit(5, true); }
 
 TEST(ModBackFloorRetail, ExpandedDemonShaftTransport) { RunBackAudit(6, true); }
+
+TEST(ModBackFloorRetail, MaximumCaveTransport) { RunBackAudit(0, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumWiseOwlTransport) { RunBackAudit(1, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumShipwreckTransport) { RunBackAudit(2, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumTempleTransport) { RunBackAudit(3, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumMoonSeaTransport) { RunBackAudit(4, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumGalleryTransport) { RunBackAudit(5, true, 64); }
+
+TEST(ModBackFloorRetail, MaximumDemonShaftTransport) { RunBackAudit(6, true, 64); }
 } // namespace

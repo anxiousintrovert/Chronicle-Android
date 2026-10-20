@@ -3,6 +3,7 @@
 #include <iterator>
 
 #include "dataread.hpp"
+#include "chronicle/random_state.hpp"
 #include "exitcodes.hpp"
 #include "mathutil.hpp"
 #include "title/title_port.hpp"
@@ -24,6 +25,9 @@
 namespace {
 unsigned int g_rand_state = 1;
 }
+
+std::uint32_t chronicle::RandomState() { return g_rand_state; }
+void chronicle::RestoreRandomState(std::uint32_t state) { g_rand_state = state; }
 
 // glibc declares these noexcept; Apple's libc and the Windows CRT do not.
 #if defined(__APPLE__) || defined(_WIN32)

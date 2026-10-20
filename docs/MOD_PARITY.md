@@ -1947,3 +1947,45 @@ Validation: Clang 23.1.2 Windows game/test builds and the full suite pass
 pinned upstream except for map memory size. Other platforms remain unverified.
 All seven retail and seven expanded PAL transport scenarios were rerun
 separately on the final revision and passed.
+
+
+### Maximum-layout replay and nonpublishing preparation
+
+The seven optional `ModBackFloorRetail.Maximum*Transport` scenarios request
+64 rooms, a 46-cell build area and room sides 3–6. Both generated floors must
+contain more than 16 rooms and retain the expanded extent. All seven reached
+and sustained normal back-floor play. This is maximum requested packing for
+one first-floor seed per dungeon; the native packer may place fewer than the
+requested 64 rooms. It does not prove every seed, later floor, key route,
+return journey, or larger monster/chest populations.
+
+An internal `PrepareMaps` operation now builds the front/back pair and object
+placements in owned temporary maps and a copied dungeon status. It validates
+runtime event capacity and frames before returning, without drawing or changing
+loaded frames. Successful preparation returns the prospective RNG and generator
+scratch state alongside the maps/status. Both success and failure restore the
+live status/map/event pointers, RNG and all generator scratch arrays. Scratch
+snapshots stay local to the process; they are not a save or plugin ABI format.
+The scratch copy matters because later native room/door operations can reuse
+those arrays. No staging allocations or calls run on the no-mod path.
+
+The maximum-layout replays additionally prepare a valid candidate, reject an
+impossible room packing, and reject an event definition without a placement
+frame. They compare complete live front/back map bytes, dungeon-status bytes,
+event-manager bytes, generator scratch and RNG state before/after, then enter
+the back floor normally. Separate tests check invalid-request context restoration
+and rejection of a malformed scratch snapshot before any write.
+
+This is preparation, not completed public layout support. The owner-scoped
+configuration/transaction API, transport preflight integration, accepted-map
+publication at the native loading boundary, recovery/reporting and broader
+content/resource validation remain required. The public operation count stays
+at 106. The contributor's item, weapon and cutscene contracts remain reserved.
+
+Validation: Clang 23.1.2 Windows game/test builds and the full suite pass
+(792 passed, 49 skipped, 1 disabled). All 29 Python checks pass. Both
+3,840-case no-mod/disabled exports retain their previous hashes and match pinned
+upstream except for map memory size. No PS2 originals changed. Other platforms
+remain unverified.
+All seven maximum-layout PAL replays passed again on the final revision,
+including successful staging and both injected failure cases.
