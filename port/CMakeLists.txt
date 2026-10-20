@@ -43,9 +43,44 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(KZ_PORT_VENDOR_DIRS ${CMAKE_SOURCE_DIR}/audio_decoders ${CMAKE_SOURCE_DIR}/stb_truetype)
 kz_port_host_library(dc_host)
 
-set(PS2_DIR ${CMAKE_SOURCE_DIR}/ps2/src)
+# All native translation units and transitive headers use one checked port copy.
+# The identity manifest preserves retail bytes until explicit transformations
+# are added. No command writes beneath the original ps2 tree.
+set(NATIVE_ORIGINAL_ROOT ${CMAKE_SOURCE_DIR}/ps2)
+set(NATIVE_OVERLAY_ROOT ${CMAKE_BINARY_DIR}/native-overlay)
+set(NATIVE_OVERLAY_SCRIPT ${CMAKE_SOURCE_DIR}/tools/native_overlay.py)
+set(NATIVE_OVERLAY_MANIFEST ${CMAKE_CURRENT_SOURCE_DIR}/native_overlay.json)
+file(GLOB_RECURSE NATIVE_OVERLAY_INPUTS CONFIGURE_DEPENDS LIST_DIRECTORIES false
+    ${NATIVE_ORIGINAL_ROOT}/include/* ${NATIVE_ORIGINAL_ROOT}/src/*)
+set(NATIVE_OVERLAY_FILES "")
+foreach(input IN LISTS NATIVE_OVERLAY_INPUTS)
+    file(RELATIVE_PATH relative ${NATIVE_ORIGINAL_ROOT} ${input})
+    list(APPEND NATIVE_OVERLAY_FILES ${NATIVE_OVERLAY_ROOT}/${relative})
+endforeach()
+set(native_overlay_command ${Python3_EXECUTABLE} ${NATIVE_OVERLAY_SCRIPT}
+    --source-root ${NATIVE_ORIGINAL_ROOT} --output-root ${NATIVE_OVERLAY_ROOT}
+    --manifest ${NATIVE_OVERLAY_MANIFEST})
+# Make headers available during configure-time checks as well as compilation.
+execute_process(COMMAND ${native_overlay_command} RESULT_VARIABLE native_overlay_result
+    OUTPUT_VARIABLE native_overlay_output ERROR_VARIABLE native_overlay_error)
+if(NOT native_overlay_result EQUAL 0)
+    message(FATAL_ERROR "Native port overlay failed: ${native_overlay_error}")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    ${NATIVE_OVERLAY_SCRIPT} ${NATIVE_OVERLAY_MANIFEST})
+set(NATIVE_OVERLAY_STAMP ${CMAKE_BINARY_DIR}/native-overlay.stamp)
+add_custom_command(OUTPUT ${NATIVE_OVERLAY_STAMP}
+    BYPRODUCTS ${NATIVE_OVERLAY_FILES} ${NATIVE_OVERLAY_ROOT}/overlay-files.json
+    COMMAND ${native_overlay_command}
+    COMMAND ${CMAKE_COMMAND} -E touch ${NATIVE_OVERLAY_STAMP}
+    DEPENDS ${NATIVE_OVERLAY_INPUTS} ${NATIVE_OVERLAY_SCRIPT} ${NATIVE_OVERLAY_MANIFEST}
+    COMMENT "Generating checked native port sources and headers"
+    VERBATIM)
+add_custom_target(dc_native_overlay DEPENDS ${NATIVE_OVERLAY_STAMP})
+
+set(PS2_DIR ${NATIVE_OVERLAY_ROOT}/src)
 set(PORT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-file(GLOB_RECURSE PS2_SOURCES CONFIGURE_DEPENDS RELATIVE ${PS2_DIR} ${PS2_DIR}/*.cpp)
+file(GLOB_RECURSE PS2_SOURCES CONFIGURE_DEPENDS RELATIVE ${NATIVE_ORIGINAL_ROOT}/src ${NATIVE_ORIGINAL_ROOT}/src/*.cpp)
 file(GLOB_RECURSE PORT_SOURCES CONFIGURE_DEPENDS ${PORT_DIR}/*.cpp)
 list(FILTER PORT_SOURCES EXCLUDE REGEX "/tests/")
 # Temporary files beside a source are not units.
@@ -112,9 +147,10 @@ add_custom_command(OUTPUT ${PORT_OVERRIDES_CHECKED}
 # accepts constructs clang rejects by default: pointers truncated to 32-bit
 # integers, narrowing in braced initialisers and the register keyword.
 add_library(dc_options INTERFACE)
+add_dependencies(dc_options dc_native_overlay)
 target_compile_definitions(dc_options INTERFACE ${PORT_DEFINITIONS})
 target_include_directories(dc_options INTERFACE
-    ${CMAKE_SOURCE_DIR}/port/include ${KZ_ROOT}/include ${CMAKE_SOURCE_DIR}/ps2/include ${CMAKE_SOURCE_DIR}/ps2/include/sce)
+    ${CMAKE_SOURCE_DIR}/port/include ${KZ_ROOT}/include ${NATIVE_OVERLAY_ROOT}/include ${NATIVE_OVERLAY_ROOT}/include/sce)
 target_compile_options(dc_options INTERFACE
     "SHELL:-include \"${CMAKE_SOURCE_DIR}/port/include/port.h\""
     -fms-extensions -ffunction-sections -fdata-sections

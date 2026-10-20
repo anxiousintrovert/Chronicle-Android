@@ -1536,7 +1536,7 @@ claim that expanded generation or its no-mod invariants have been validated.
 layout work. It mirrors the complete native `include/` and `src/` trees into
 a separate output tree, preserving unpatched bytes. Mirroring all headers lets
 transitive quoted includes resolve to the same generated definitions. This tool
-is not yet wired into CMake and does not itself expand any engine capacity or
+was initially standalone; the CMake integration below now uses it. It does not expand any engine capacity or
 publish an additional host operation.
 
 Usage from the repository root:
@@ -1569,4 +1569,32 @@ mirror compiled its dungeon/monster headers with llvm-mingw Clang 23.1.2 and
 asserted retail room/cell capacities. No original PS2 file changed. This proves
 the copy/check mechanism and header compilation, not expanded-layout runtime
 behavior or complete build integration; those remain the next implementation work.
+
+### Native overlay build integration
+
+The PC CMake build now generates the checked `native-overlay/include` and
+`native-overlay/src` trees beneath its binary directory. All native stripping,
+override-signature checks and native/port/test compilation consume that shared
+copy. The original native tree remains the input for file discovery and build
+dependencies, never an output. The checked-in `port/native_overlay.json` is an
+identity manifest: no capacities, statements or RNG behavior change here.
+
+Generation runs during configuration so headers exist for compiler checks, and
+as a prerequisite of native consumers during builds. Explicit byproducts let
+Ninja recreate a missing generated source; input, manifest or generator changes
+rerun generation. Unchanged mirrored files keep timestamps. A repeated build
+performs no C++ compilation; only the existing asset-copy steps still run.
+
+Validation: llvm-mingw Clang 23.1.2 rebuilt game and tests successfully. All 322
+mirror files were byte-identical to their native inputs; inspection of 380
+engine/test C++ compilation commands found the generated include tree and no
+original native include path. Standalone C plugin fixtures use only the plugin
+SDK and do not need native headers. The full suite registered 809 tests: 774
+passed, 34 skipped and one disabled. All 27 Python checks and all 3,840 pinned
+upstream/empty/disabled seed comparisons passed. A missing generated dungeon-map
+source was recreated by the build without changing the protected original.
+
+Expanded layout transformations, ownership APIs, requested-layout runtime tests
+and non-Windows builds remain outstanding. This integrates the build mechanism;
+it does not claim expanded-layout capability parity.
 
