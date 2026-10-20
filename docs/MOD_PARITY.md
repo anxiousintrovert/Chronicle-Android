@@ -2628,3 +2628,23 @@ changes are needed for inspection.
 
 Validation: Clang 23.1.2 game/tests build; 835 regression tests passed, 89 skipped,
 one disabled; all 35 Python checks pass, plus the explicit PAL camera replay.
+
+
+### Camera orbit ownership foundation (2026-10-20)
+
+CameraOrbit now stages bounded distance/height/angle edits before touching native
+values, with per-field package owners, conflict diagnostics, conditional baseline
+restoration, reset and explicit scene discard. It holds no native pointer. Three
+focused tests cover conflicting multi-command rollback, independent owners,
+repeated edits preserving the original baseline, native changes surviving owner
+release, dormant/RNG behavior and scene discard. Clang builds the game and tests.
+
+This is internal groundwork, not a public write API: the operation count remains
+120. GameInit reinitializes both global cameras and NowCamera__3; btitem.cpp also
+copies MainCamera into SubCamera and temporarily switches the active pointer.
+Pointer identity alone cannot distinguish a new scene, and copies can propagate
+modded values. The live adapter still needs verified reset/transition/copy handling
+and gameplay replays before camera_set/reset can be registered. No automatic
+engine hook has been added by this foundation.
+
+Full regression: 838 passed, 89 skipped, one disabled. PS2 remains unchanged.
