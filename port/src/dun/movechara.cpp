@@ -1,5 +1,6 @@
 #include "mods/player_tuning_native.hpp"
 #include "mods/quick_items.hpp"
+#include "mods/world_transition.hpp"
 #include "dun/gameloop.hpp"
 
 #include <libvu0.h>
@@ -1822,7 +1823,7 @@ PORT_OVERRIDE void DunMoveChara() {
                     break;
                 case BT_REQUEST_ENTRANCE_WINDOW:
                     BtEventInfo.request = BT_REQUEST_NONE;
-                    InitDunEnterMenu(0x17, selectMapNo, -1);
+                    InitDunEnterMenu(0x17, selectMapNo, mods::TakeDungeonEntryFloor(selectMapNo));
                     BtGameModeFlag = BT_GAME_MODE_ENTRANCE_MENU;
                     break;
                 case BT_REQUEST_ESCAPE_WINDOW:

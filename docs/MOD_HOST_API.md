@@ -49,6 +49,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `world.get` | none | `game.read` | Native mode, map, dungeon, floor and restriction identifier |
 | `world.locations` | none | `game.read` | List the five supported retail settlement map IDs and names |
 | `world.transition_state` | none | `game.read` | Native travel readiness, rejection reason and last request state |
+| `dungeon.locations` | none | `game.read` | Seven retail dungeons, numeric IDs and native floor counts |
+| `dungeon.enter` | `dungeon` (0-6), optional `floor` | `game.write` | Native entry; optional zero-based floor, sole engine write |
 | `world.transition` | `map` (0–4) | `game.write` | Queue native settlement travel as the callback's sole engine write |
 | `player.heal` | `amount`, optional `character` | `game.write` | Add HP, clamped to current maximum |
 | `player.damage` | `amount`, optional `character` | `game.write` | Reduce HP; direct gauge change, not a combat hit or damage formula |
@@ -1402,3 +1404,26 @@ This API accepts existing settlements only. Dungeon entry, specific floors,
 back floors and registered map destinations remain separate coverage work.
 There is no per-frame readiness/resource scan when no request is queued, and no
 travel is triggered by merely installing or enabling a package.
+
+
+### Native dungeon entry
+
+`dungeon.locations {}` returns seven records containing `dungeon`, `name`, and
+`floor_count`. `dungeon.enter {dungeon=0, floor=1}` requests the second floor of
+Divine Beast Cave. Floor indices are zero-based and must be smaller than the
+reported count. Omitting `floor` retains the native entrance selection menu.
+This does not register maps or increase native dungeon capacities.
+
+Like settlement travel, entry must be the callback's sole engine write,
+including currency. It uses `world.transition_state` readiness and request
+reporting. The reported map is 200 plus the dungeon ID; floor -1 means native
+selection. A dispatched request indicates travel started, not arrival.
+Explicit floor selection uses the native direct-entry path and can bypass
+normal progression selection; authors must enforce their own story conditions.
+
+The floor request is bound to the requesting runtime owner, epoch and save.
+It is prepared after the destination initializes and consumed once by the
+native entrance menu. Owner shutdown, runtime replacement, a different save or
+destination, or a second scene initialization discards it. Canceling the floor
+request after travel has begun does not undo travel; native floor selection
+remains available. With no floor request the native entrance argument stays -1.

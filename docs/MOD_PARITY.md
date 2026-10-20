@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 97 implemented operations, native plugins and author
+a real host-call boundary, 99 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -17,7 +17,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
-| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; native settlement travel with deferred owner-bound requests; vanilla generation unchanged | dungeon/floor/registered-map transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
+| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; native settlement travel and dungeon entry with optional native floor selection through deferred owner-bound requests; vanilla generation unchanged | Registered-map and broader floor transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
@@ -1281,3 +1281,34 @@ additional mouse-capture tests skipped in this environment). Both optional PAL
 travel tests passed separately: town 3.139 s, dungeon exit 11.472 s. All 18 Python
 checks and 3,840 empty/disabled seed comparisons passed. CLI discovery lists all
 three operations. PS2 files remain unchanged.
+
+
+### Native dungeon entry and explicit floor selection
+
+`dungeon.locations` reports seven retail dungeons and their native floor counts.
+`dungeon.enter` accepts a dungeon ID and optional zero-based floor. Entry uses
+the native map transition and entrance menu; an explicit floor uses its existing
+direct-entry mode. Omission retains native selection. Requests do not increase
+arrays or register custom maps, items, weapons or cutscenes. The catalog now
+contains 99 operations.
+
+The floor intent is tied to owner, runtime epoch, save and destination. It can
+cross one scene initialization and one entrance call. Seven transition tests
+cover schema and native bounds, sole-write isolation, map/floor/owner dispatch,
+preflight checks, one-shot consumption and cancellation before/after preparation.
+Without a pending intent both native integration points return immediately and
+the entrance receives its original -1 argument.
+
+An isolated PAL shared-manager Lua action requested Divine Beast Cave floor 1
+(the second floor). The native loader reached ordinary dungeon play on that
+floor, and the intent could not be consumed again. The final run passed in
+2.136 seconds. This covers one dungeon route, not every dungeon, boss floor,
+story variant, dungeon-to-dungeon route or platform. Existing unsupported native
+event diagnostics remain present. Registered destinations, back floors, extra
+floors and generation overrides remain open.
+
+Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
+784 registered, 760 passed, 23 skipped and one disabled, with no failures.
+The PAL explicit-entry test passed separately. All 18 Python checks and 3,840
+empty/disabled generator comparisons passed. CLI discovery lists both new
+operations. PS2 files remain unchanged. Other platforms remain unverified.

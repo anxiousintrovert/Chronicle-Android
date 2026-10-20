@@ -916,6 +916,7 @@ int RunGame(int argc, char **argv) {
         GameOptionsApply(ConfigGet().options);
         bool event_start = StartEventNo >= 0;
         ModeInit(title_ran, exist_data, skip_title);
+        mods::PrepareDungeonEntry();
 
         NextMapNo = -1;
         // check_now_loading pumps the clock while the loading screen runs.

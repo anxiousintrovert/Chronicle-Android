@@ -24,6 +24,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"dungeon.locations", "game.read", "List retail dungeons and native floor counts.", false},
+    {"dungeon.enter", "game.write", "Queue native dungeon entry with an optional zero-based floor.", true},
     {"world.locations", "game.read", "List supported retail settlement destinations.", false},
     {"world.transition_state", "game.read", "Read native travel readiness and the last queued request.", false},
     {"world.transition", "game.write", "Queue native settlement travel after the current display frame.", true},
@@ -239,7 +241,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "items.quick_slots" || name == "items.quick_slot_select" || name == "items.quick_slot_use") return ValidateQuickItems(name, a);
-    if (name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
+    if (name == "dungeon.locations" || name == "dungeon.enter" || name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
     if (name.starts_with("shops.")) {
@@ -414,6 +416,7 @@ Json ReadStatus(const CUserStatus &s, const World &w, std::string_view op, const
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
+    if (op == "dungeon.locations") return ReadDungeonLocations();
     if (op == "world.locations") return ReadWorldLocations();
     if (retail::Handles(op)) {
         return retail::Read(s, op, a);

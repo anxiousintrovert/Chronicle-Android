@@ -231,6 +231,7 @@ void TickGame() {
         if (operation == "weapons.equip_state") return ReadWeaponEquipState();
         if (operation == "player.combat_state") return ReadPlayerCombat();
         if (operation == "items.quick_slots") return ReadQuickItems();
+        if (operation == "dungeon.locations") return ReadDungeonLocations();
         if (operation == "world.locations") return ReadWorldLocations();
         if (operation == "world.transition_state") return ReadWorldTransition();
         if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
@@ -266,7 +267,7 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
-        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "world.transition"; })) {
+        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "world.transition" || command.operation == "dungeon.enter"; })) {
             return QueueWorldTransition(commands, money, error);
         }
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "party.town_set_active"; })) {

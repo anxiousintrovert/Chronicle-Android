@@ -18,7 +18,7 @@
 
 namespace {
 bool        queued = false, arrived = false;
-bool        from_dungeon = false;
+bool        from_dungeon = false, enter_dungeon = false;
 std::string last_state;
 
 void TravelPump() {
@@ -42,7 +42,14 @@ void TravelPump() {
             }
         }
     }
-    if (queued && MapNo == 1 && mods::TownLoadoutReady()) {
+    if (queued && enter_dungeon && MapNo == 200 && state.value("ready", false)) {
+        arrived = true;
+        EXPECT_EQ(SaveData->GetDngStatus()->cur_floor, 1);
+        EXPECT_EQ(state["request"]["state"], "dispatched");
+        EXPECT_EQ(mods::TakeDungeonEntryFloor(0), -1);
+        GameRequestStop();
+    }
+    if (queued && !enter_dungeon && MapNo == 1 && mods::TownLoadoutReady()) {
         arrived = true;
         EXPECT_EQ(state["request"]["state"], "dispatched");
         EXPECT_EQ(SaveData->GetDngStatus()->cur_chara, 0);
@@ -55,13 +62,14 @@ void TravelPump() {
     }
 }
 
-void RunTravelAudit(bool dungeon) {
+void RunTravelAudit(bool dungeon, bool enter = false) {
     const char *data = std::getenv("DC_DATA"), *audit = std::getenv("DC_WORLD_TRANSITION_AUDIT");
     if (!data || !audit || !*audit) {
         GTEST_SKIP() << "Run alone with DC_DATA and DC_WORLD_TRANSITION_AUDIT (disposable directory)";
     }
     queued = arrived = false;
     from_dungeon = dungeon;
+    enter_dungeon = enter;
     last_state.clear();
     const std::filesystem::path root = audit;
     std::filesystem::create_directories(root / "mods/audit.travel");
@@ -79,6 +87,20 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (enter) {
+        std::ofstream(root / "mods/audit.travel/main.lua") << R"(
+local armed=false
+local requested=false
+assert(chronicle.action('travel','Enter dungeon floor 2','Request native dungeon entry.',function() armed=true end))
+return {on_tick=function()
+ if not armed or requested then return end
+ local state=assert(chronicle.call('world.transition_state'))
+ if not state.ready then return end
+ assert(chronicle.call('dungeon.enter',{dungeon=0,floor=1}))
+ requested=true
+end}
+)";
+    }
     PathsSetDataRoot(data);
     PathsSetSaveRoot(root);
     ConfigLoad();
@@ -112,4 +134,6 @@ end}
 TEST(ModWorldTransitionRetail, SharedActionTravelsFromNoruneToMatataki) { RunTravelAudit(false); }
 
 TEST(ModWorldTransitionRetail, SharedActionLeavesDungeonThroughNativeCleanup) { RunTravelAudit(true); }
+
+TEST(ModWorldTransitionRetail, SharedActionEntersExplicitNativeDungeonFloor) { RunTravelAudit(false, true); }
 } // namespace
