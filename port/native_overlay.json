@@ -1093,6 +1093,31 @@
           "old": "\n                    direction += (float) (map->cells[column + row * 20].parts_no == MAP_PARTS_NONE ? 0 : map->parts[map->cells[column + row * 20].parts_no].collision_turn);\n",
           "new": "\n                    direction += (float) (map->cells[column + row * chronicle::dungeon::GridStride].parts_no == MAP_PARTS_NONE ? 0 : map->parts[map->cells[column + row * chronicle::dungeon::GridStride].parts_no].collision_turn);\n",
           "count": 1
+        },
+        {
+          "old": "#include \"dungeoneventman.hpp\"",
+          "new": "#include \"dungeoneventman.hpp\"\n#include \"chronicle/dungeon_events.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "< 96;",
+          "new": "< this->EventLimit();",
+          "count": 7
+        },
+        {
+          "old": "void CDungeonEventMan::SetupEvent(CDungeonMap *map, int mode) {",
+          "new": "void CDungeonEventMan::SetupEvent(CDungeonMap *map, int mode) {\n    if (mode == 1 && map->GridExtent() == chronicle::dungeon::GridStride) {\n        PrepareExpandedDungeonEvents(*this, *map);\n    } else {\n        this->port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    }",
+          "count": 1
+        },
+        {
+          "old": "< 16;",
+          "new": "< (this->EventLimit() == chronicle::dungeon::RuntimeEventCapacity ? map->GridExtent() : 16);",
+          "count": 2
+        },
+        {
+          "old": "for (i = 0; i < this->EventLimit(); i++) {\n            if (NowColData->active[i] == 0)",
+          "new": "for (i = 0; i < 96; i++) {\n            if (NowColData->active[i] == 0)",
+          "count": 1
         }
       ]
     },
@@ -1148,6 +1173,21 @@
           "old": "for (i = 0; i < 20; i++)",
           "new": "for (i = 0; i < NowDngMap->GridExtent(); i++)",
           "count": 1
+        },
+        {
+          "old": "    for (int i = 0; i < 96; i++) {\n        CDungeonEventData *state = &DngEventMan.event[i];",
+          "new": "    DngEventMan.port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (int i = 0; i < chronicle::dungeon::RuntimeEventCapacity; i++) {\n        CDungeonEventData *state = &DngEventMan.event[i];",
+          "count": 1
+        },
+        {
+          "old": "    for (i = 0; i < 96; i++) {\n        CDungeonEventData *slot = &man->event[i];",
+          "new": "    man->port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (i = 0; i < chronicle::dungeon::RuntimeEventCapacity; i++) {\n        CDungeonEventData *slot = &man->event[i];",
+          "count": 1
+        },
+        {
+          "old": "    for (k = 0; k < 96; k++) {\n        CDungeonEventData *slot = &UraEventMan.event[k];",
+          "new": "    UraEventMan.port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (k = 0; k < chronicle::dungeon::RuntimeEventCapacity; k++) {\n        CDungeonEventData *slot = &UraEventMan.event[k];",
+          "count": 1
         }
       ]
     },
@@ -1162,6 +1202,31 @@
         {
           "old": "\n    parts_no = NowDngMap->cells[row * 20 + column].parts_no;\n",
           "new": "\n    parts_no = NowDngMap->cells[row * chronicle::dungeon::GridStride + column].parts_no;\n",
+          "count": 1
+        },
+        {
+          "old": "    for (int record = 0; record < 96; record++) {\n        CDungeonEventData *data = &DngEventMan.event[record];",
+          "new": "    DngEventMan.port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (int record = 0; record < chronicle::dungeon::RuntimeEventCapacity; record++) {\n        CDungeonEventData *data = &DngEventMan.event[record];",
+          "count": 1
+        }
+      ]
+    },
+    "include/dungeoneventman.hpp": {
+      "sha256": "f1d8f0e1d216b53890e59d1e6c43b267f970dd5215d767dcd0aa71d2c32c8476",
+      "replacements": [
+        {
+          "old": "#pragma once",
+          "new": "#pragma once\n#include \"chronicle/dungeon_limits.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "event[96]",
+          "new": "event[chronicle::dungeon::RuntimeEventCapacity]",
+          "count": 1
+        },
+        {
+          "old": "    /**\n     * Returns a used event slot",
+          "new": "    s32 port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    int EventLimit() const {\n        return port_event_limit == chronicle::dungeon::RuntimeEventCapacity ? chronicle::dungeon::RuntimeEventCapacity : chronicle::dungeon::RetailRuntimeEventCapacity;\n    }\n\n    /**\n     * Returns a used event slot",
           "count": 1
         }
       ]

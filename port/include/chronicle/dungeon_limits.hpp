@@ -7,4 +7,6 @@ inline constexpr int RoomCapacity = 64;
 inline constexpr int GridStride = 48;
 inline constexpr int GridCells = GridStride * GridStride;
 inline constexpr int RetailGridExtent = 20;
+inline constexpr int RuntimeEventCapacity = 384;
+inline constexpr int RetailRuntimeEventCapacity = 96;
 }

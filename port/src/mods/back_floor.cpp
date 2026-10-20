@@ -26,7 +26,8 @@ struct ActiveTransport {
 std::optional<ActiveTransport> transport;
 
 const CDungeonEventData *Transport() {
-    for (const auto &event : DngEventMan.event) {
+    for (int i = 0; i < DngEventMan.EventLimit(); ++i) {
+        const auto &event = DngEventMan.event[i];
         if (event.enabled && event.event && event.event->parts_id == MAP_PARTS_URA_ENTRANCE_NORTH && event.event->script_no == (selectMapNo == 4 ? 201 : 200)) {
             return &event;
         }

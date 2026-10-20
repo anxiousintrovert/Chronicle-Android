@@ -1778,3 +1778,36 @@ passes, 32 skips and one disabled test; all 28 Python checks pass. Both
 3,840-case empty/disabled seed exports retain their prior hashes and match
 pinned upstream except for map size. PS2 sources remain unchanged.
 
+### Expanded runtime event manager
+
+The port runtime event manager now stores 384 records, but its active limit
+remains 96 for retail maps. Expanded grid setup scans all cells and enables the
+larger limit only after preflight counts every matching definition against
+available records and checks placement/trigger frames. Rejection occurs before
+publishing slots or moving frames, avoiding the native exhaustion spin for
+custom floors. The floor adapter still needs to handle such rejection before
+publishing a complete playable map.
+
+Native manager resets clear the full backing storage and reset the active
+limit. Event searches, switches, holds and mod transport lookup use that limit.
+The collision-hit array is independently fixed at 96: its native scan remains
+unchanged, enforced by a source identity test. The added storage has a default
+memory cost; extra runtime slots do not become active without an expanded map.
+
+Three native tests demonstrate retail exclusion of far cells/extra records,
+placement through slot 383 with correct world coordinates and working native
+position/switch/hold queries, and atomic rejection of exhaustion or missing
+frames. All seven separate PAL retail back-floor scenarios pass with the new
+manager layout. These use retail-sized maps, not a complete expanded-floor
+playthrough.
+
+This runtime manager is distinct from `CDungeonMap::events`, whose 48 placed
+map-event records still require their own expansion and active limits.
+Definition slots remain at 64. Transport script coordinates, public layout
+ownership/failure recovery, spawn placement and custom resource validation
+remain outstanding. The public operation count is unchanged.
+Validation: Clang 23.1.2 Windows game/test builds pass; the full suite has
+785 passes, 34 skips and one disabled test. All 29 Python checks pass.
+The empty/disabled 3,840-case exports retain their prior hashes and still
+match pinned upstream except for map size. No PS2 originals were edited.
+

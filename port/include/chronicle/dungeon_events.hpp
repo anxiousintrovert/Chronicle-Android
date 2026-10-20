@@ -1,0 +1,7 @@
+#pragma once
+
+class CDungeonEventMan;
+class CDungeonMap;
+
+// Validate the complete expanded placement before mutating any runtime slot.
+void PrepareExpandedDungeonEvents(CDungeonEventMan &manager, const CDungeonMap &map);

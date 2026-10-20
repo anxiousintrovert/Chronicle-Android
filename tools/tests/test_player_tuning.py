@@ -10,6 +10,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class PlayerTuningSource(unittest.TestCase):
+    def test_event_hit_scan_keeps_independent_native_collision_capacity(self):
+        prepared = overlay.prepare(ROOT / 'ps2', json.loads((ROOT / 'port/native_overlay.json').read_text()))
+        original = (ROOT / 'ps2/src/dungeoneventman.cpp').read_text()
+        signature = 'CDungeonEventData *CDungeonEventMan::CheckCollisionDataHit('
+        self.assertEqual(function(original, signature),
+                         function(prepared['src/dungeoneventman.cpp'].decode(), signature))
+
     def test_native_copies(self):
         native_sources = overlay.prepare(ROOT / 'ps2', json.loads((ROOT / 'port/native_overlay.json').read_text()))
         cases = [
