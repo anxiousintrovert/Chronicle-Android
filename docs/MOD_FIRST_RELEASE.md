@@ -27,3 +27,9 @@ Inspect port texture decode/upload and upstream renderer logical-size handling. 
 The port decoded-texture object can now carry optional logical dimensions independently of physical image dimensions. The registry retains logical texel dimensions and forwards both dimensions to the existing upstream Kazarov TextureDesc. Defaults are zero, preserving original behavior. This is internal groundwork, not an exposed package capability.
 
 Clang 23.1.2 game/test builds pass. A GPU test uploads a 16x8 image addressed as 4x2, verifies full-resolution readback, native full-image and atlas-subrectangle rendering, and registry release. All 15 focused texture/localization checks pass. Full suite: 1,028 passed, 103 skipped and one disabled. PS2 baseline and Kazarov remain unchanged. Package manifest/loading, bounded PNG validation, original-content identity/discovery, conflict handling and retail replacement/disable scenarios remain outstanding.
+
+## Replacement PNG validation groundwork (2026-10-20)
+
+An opt-in PNG loader now checks regular-file status, encoded length and signature, header dimensions and decoded pixel count before image decoding. Defaults are 32 MiB encoded, 8192 pixels per dimension and 16 million output pixels. Failed reads/decodes leave caller outputs unchanged. These bound encoded input and RGBA output, not all transient memory inside the shared decoder; this is not a hardened hostile-file sandbox. Existing UI/localization calls retain their original path.
+
+Clang 23.1.2 game/test builds and all 17 focused PNG, texture and localization tests pass, including exact limit boundaries, huge declared dimensions, truncated data, signature rejection and unchanged outputs. PS2 and Kazarov remain unchanged. This utility is not yet connected to package activation; full texture replacement remains outstanding.

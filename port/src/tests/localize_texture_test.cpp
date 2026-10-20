@@ -10,6 +10,7 @@
 #include "mainselect.hpp"
 #include "platform_fixture.hpp"
 #include "texture_port.hpp"
+#include "platform/png_image.hpp"
 
 namespace {
 
@@ -154,3 +155,29 @@ TEST(LocalizeTexture, LeavesAWrongShapedPictureAndOtherTexturesAlone) {
 }
 
 } // namespace
+
+TEST(PngBounded, DecodesFullImageAndPreservesOutputsOnLimitsAndInvalidInput) {
+    TextureDir folder;folder.Put("bounded.png",kPng,sizeof(kPng));const auto file=folder.dir/"textures/fr_fr/bounded.png";
+    int width=0,height=0;std::vector<uint8_t> pixels;std::string error;
+    ASSERT_TRUE(PngLoadRgbaBounded(file,{},width,height,pixels,error))<<error;
+    EXPECT_EQ(width,4);EXPECT_EQ(height,2);ASSERT_EQ(pixels.size(),32u);EXPECT_EQ(pixels[0],255);EXPECT_EQ(pixels[31],0);
+    const auto before=pixels;
+    for(const PngLimits limits:{PngLimits{sizeof(kPng)-1,8192,16*1024*1024},PngLimits{sizeof(kPng),3,8},PngLimits{sizeof(kPng),4,7},PngLimits{sizeof(kPng),4,0}}) {
+        EXPECT_FALSE(PngLoadRgbaBounded(file,limits,width,height,pixels,error));EXPECT_FALSE(error.empty());
+        EXPECT_EQ(width,4);EXPECT_EQ(height,2);EXPECT_EQ(pixels,before);
+    }
+    ASSERT_TRUE(PngLoadRgbaBounded(file,{sizeof(kPng),4,8},width,height,pixels,error))<<error;
+    auto broken=std::vector<unsigned char>(std::begin(kPng),std::end(kPng));broken[0]=0;
+    folder.Put("broken.png",broken.data(),broken.size());
+    EXPECT_FALSE(PngLoadRgbaBounded(file.parent_path()/"broken.png",{},width,height,pixels,error));EXPECT_EQ(pixels,before);
+    folder.Put("short.png",kPng,40);
+    EXPECT_FALSE(PngLoadRgbaBounded(file.parent_path()/"short.png",{},width,height,pixels,error));EXPECT_EQ(pixels,before);
+    EXPECT_FALSE(PngLoadRgbaBounded(folder.dir,{},width,height,pixels,error));EXPECT_EQ(pixels,before);
+}
+TEST(PngBounded, RejectsHugeDeclaredDimensionsBeforePixelDecode) {
+    TextureDir folder;auto huge=std::vector<unsigned char>(std::begin(kPng),std::end(kPng));
+    huge[16]=0;huge[17]=1;huge[18]=0;huge[19]=0; // Declares 65536 pixels wide, with tiny compressed data.
+    folder.Put("huge.png",huge.data(),huge.size());int w=7,h=9;std::vector<uint8_t> pixels{1,2,3};std::string error;
+    EXPECT_FALSE(PngLoadRgbaBounded(folder.dir/"textures/fr_fr/huge.png",{},w,h,pixels,error));
+    EXPECT_NE(error.find("dimensions"),std::string::npos);EXPECT_EQ(w,7);EXPECT_EQ(h,9);EXPECT_EQ(pixels,(std::vector<uint8_t>{1,2,3}));
+}
