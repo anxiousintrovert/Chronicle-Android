@@ -46,6 +46,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     auto &ordered=state["mods"]["test.quests"]["quest_definitions"]["quest.2"];
     ordered.erase("goal");ordered["objectives"]={{{"id","travel"},{"title","Enter the floor"},{"goal",1}},{{"id","hunt"},{"title","Defeat an enemy"},{"goal",1},{"after",{"travel"}}}};
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",50}}}}};
+    state["mods"]["test.quests"]["quest_failed"]["quest.3"]="Return to the village for supplies.";
     auto &skillTree=state["mods"]["test.quests"]["skill_trees"]["combat"];
     skillTree={{"title","Combat"},{"description","Training"},{"nodes",Json::array()}};
     skillTree["nodes"].push_back({{"id","focus"},{"title","Focus"},{"description","Build focus before learning Power."},{"max_rank",2},{"effects",{{"enemy_damage_per_rank",0.25}}}});
@@ -59,9 +60,9 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     const auto draw=[&](const char *name){graphics.Frame({0,0,0,128},[]{mods::menu::Draw();});
         if(const char *folder=std::getenv("DC_QUEST_MENU_AUDIT")){fs::create_directories(folder);EXPECT_TRUE(gfx::WritePng(fs::path(folder)/name,graphics.pixels.data(),graphics.width,graphics.height));}
         return graphics.pixels;};
-    // Selection brackets pulse with the native UI clock (including x=42 and x=267); compare text/pane content.
+    // Selection brackets pulse with the native UI clock (including x=42 and x=266); compare text/pane content.
     const auto same_content=[](const auto &a,const auto &b){
-        for(int y=90;y<345;++y)for(int x=43;x<595;++x)if(x<267||x>=295)
+        for(int y=90;y<345;++y)for(int x=43;x<595;++x)if(x<266||x>=295)
             for(int c=0;c<4;++c)if(a[(y*640+x)*4+c]!=b[(y*640+x)*4+c])return false;
         return true;
     };
@@ -73,6 +74,8 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     mods::menu::Run(PAD_UP);mods::menu::Run(PAD_UP);
     mods::menu::Run(PAD_SQUARE);const auto ongoing=draw("ongoing.png");EXPECT_TRUE(ongoing!=all);
     mods::menu::Run(PAD_SQUARE);const auto complete=draw("complete.png");EXPECT_TRUE(complete!=ongoing);
+    mods::menu::Run(PAD_SQUARE);const auto failed=draw("failed.png");EXPECT_TRUE(failed!=complete);
+    mods::menu::Run(PAD_RIGHT);draw("failure-reason.png");mods::menu::Run(PAD_LEFT);
     mods::menu::Run(PAD_SQUARE);EXPECT_TRUE(same_content(draw("all-again.png"),all));
     for(int i=0;i<9;++i)mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("scrolled.png")!=all);
     mods::menu::Run(PAD_CIRCLE);EXPECT_TRUE(mods::menu::IsOpen());EXPECT_TRUE(same_content(draw("returned.png"),manager));

@@ -176,7 +176,7 @@ std::vector<QuestStatus> JournalQuests() {
     std::vector<QuestStatus> entries;
     if(skills_page)for(const auto &node:Scripts().Skills())entries.push_back({node.owner,node.tree+" / "+node.id,node.title,node.description,node.rank,node.maximum,node.available?"available":"locked"});
     else entries=Scripts().Quests();
-    std::erase_if(entries,[](const auto &q){return q.owner!=quest_owner||(quest_filter==1&&q.progress>=q.goal)||(quest_filter==2&&q.progress<q.goal);});
+    std::erase_if(entries,[](const auto &q){return q.owner!=quest_owner||(quest_filter==1&&(q.progress>=q.goal||q.status=="failed"))||(quest_filter==2&&q.progress<q.goal)||(quest_filter==3&&q.status!="failed");});
     return entries;
 }
 
@@ -192,7 +192,7 @@ void RunQuests(std::uint16_t pressed) {
     const auto clicked=mouse.buttons&~buttons;buttons=mouse.buttons;
     if(mouse.dx||mouse.dy||clicked||mouse.wheel)pointer=true;
     if((pressed&PAD_CIRCLE)||(clicked&2)||((clicked&1)&&Inside(490,393,100,28))){quest_owner.clear();return;}
-    if((pressed&PAD_SQUARE)||((clicked&1)&&Inside(42,393,305,28))){quest_filter=(quest_filter+1)%3;quest_selected=quest_detail=0;quest_list.Reset();}
+    if((pressed&PAD_SQUARE)||((clicked&1)&&Inside(42,393,305,28))){quest_filter=(quest_filter+1)%(skills_page?3:4);quest_selected=quest_detail=0;quest_list.Reset();}
     const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());const int previous=quest_selected;
     if(pressed&PAD_UP)--quest_selected;
     if(pressed&PAD_DOWN)++quest_selected;
@@ -212,15 +212,15 @@ void RunQuests(std::uint16_t pressed) {
 void DrawQuests() {
     UI::Divider::DrawVertical(282,148,348);
     Text(0,skills_page?"Mod Skills":"Mod Quests",42,94,540,true);
-    const char *filters[]={"All",skills_page?"Below maximum":"In progress",skills_page?"Maximum rank":"Completed"};
+    const char *filters[]={"All",skills_page?"Below maximum":"In progress",skills_page?"Maximum rank":"Completed","Failed"};
     Text(1,Literal(quest_owner)+" - "+filters[quest_filter],42,120,550);
     const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());
     quest_selected=std::clamp(quest_selected,0,std::max(0,count-1));quest_list.SetSelectedIndex(quest_selected,count);
     quest_list.Draw(count,[&](int i,const UI::Rect &rect,bool selected_row,int){
-        Text(10+i-quest_list.FirstRow(),std::string(entries[i].progress>=entries[i].goal?"[+] ":"[ ] ")+Literal(entries[i].title),rect.x,rect.y,rect.w,selected_row);
+        Text(10+i-quest_list.FirstRow(),std::string(entries[i].progress>=entries[i].goal?"[+] ":entries[i].status=="failed"?"[!] ":"[ ] ")+Literal(entries[i].title),rect.x,rect.y,rect.w,selected_row);
     });
     std::string body=skills_page?"No skills match this filter.":"No quests match this filter.";
-    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(skills_page?(q.progress>=q.goal?"Maximum rank":q.status=="available"?"Available":"Prerequisites unmet"):(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":"In progress"))+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
+    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(skills_page?(q.progress>=q.goal?"Maximum rank":q.status=="available"?"Available":"Prerequisites unmet"):(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":q.status=="failed"?"Failed":"In progress"))+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
     if(skills_page&&!training_result.empty())body=training_result+"\n\n"+body;
     const auto lines=Lines(body,298);const int pages=std::max(1,(static_cast<int>(lines.size())+8)/9);
     quest_detail=std::clamp(quest_detail,0,pages-1);

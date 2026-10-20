@@ -4140,3 +4140,22 @@ PAL-backed shared-menu test passed and the prerequisite/reward page screenshot
 was inspected. Tests cover malformed graphs, premature writes, corrupt saved
 progress, same-event non-cascading, multiple prerequisites, persistence, lazy
 death capture, menu reasons and reward-commit rollback. PS2 and Kazarov unchanged.
+
+## Explicit quest failure/resume (2026-10-20)
+
+quests.failure.v1 exposes owner-only quests.fail and quests.resume for started
+incomplete dynamic quests. Failure preserves counters, suppresses progression
+and event demand, persists a bounded reason and follows quest-ID migrations.
+Resume retains progress; completed/rewarded quests cannot reopen. The shared
+quest page displays reasons and adds a Failed filter. No automatic failure policy
+or custom cutscene/item/weapon registry is introduced. Branching stages and
+native story integration remain gaps.
+
+Validation: Clang 23.1.2 game/test builds passed; full regression recorded 1045
+passes, 107 skips and one disabled test. All 53 focused quest/save/migration/menu
+tests and all 73 Python tests passed. PAL-backed menu navigation and read-only
+state checks passed; Failed list and reason screenshots were inspected. The
+comparison excludes the pulsing bracket edge at x=266 after six pixels there
+were identified as animation, not skill text changes. Failure persistence,
+migration, rollback, event suppression and completed-quest rejection are tested.
+PS2 and upstream Kazarov remain unchanged. Other platforms remain unverified.

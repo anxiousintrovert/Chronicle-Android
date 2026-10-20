@@ -128,3 +128,12 @@ The shared quest page names unmet prerequisites; events and scripted advances
 honor the same gates, and save loading rejects impossible progress. This is
 objective sequencing, not a cutscene or branching-dialogue framework. See the
 host API and parity ledger for contracts and regression evidence.
+
+## Explicit quest failure/recovery (2026-10-20)
+
+quests.failure.v1 adds author-requested failure with a saved reason and explicit
+resume retaining progress. Failed dynamic quests stop progression and death-event
+demand. Completed quests cannot fail or resume. The shared quest page adds a
+Failed filter and reason details. No automatic native failure policy is enabled.
+Clang game/test builds, full regression and PAL menu review passed; see the host
+API and coverage ledger for contracts, counts and platform limits.

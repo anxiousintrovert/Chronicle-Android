@@ -88,10 +88,10 @@ class AuthorTools(unittest.TestCase):
         self.assertEqual(tool.validate(folder)['requires_operations'],names)
 
     def test_dynamic_quest_operations_are_explicit_writes(self):
-        names=['quests.register','quests.advance','quests.start'];operations={entry['name']:entry for entry in tool.apis()}
+        names=['quests.register','quests.advance','quests.start','quests.fail','quests.resume'];operations={entry['name']:entry for entry in tool.apis()}
         for name in names:
             self.assertTrue(operations[name]['writes']);self.assertEqual(operations[name]['permission'],'game.write')
-        folder=self.package('test.dynamic',requires_capabilities=['quests.dynamic.v1','quests.objectives.v1','quests.lifecycle.v1','quests.rewards.v1','quests.events.v1','quests.ordering.v1'],requires_operations=names,permissions=['game.write'])
+        folder=self.package('test.dynamic',requires_capabilities=['quests.dynamic.v1','quests.objectives.v1','quests.lifecycle.v1','quests.rewards.v1','quests.events.v1','quests.ordering.v1','quests.failure.v1'],requires_operations=names,permissions=['game.write'])
         self.assertEqual(tool.validate(folder)['requires_operations'],names)
         manifest=folder/'mod.json';value=json.loads(manifest.read_text());value['permissions']=['game.read'];manifest.write_text(json.dumps(value))
         with self.assertRaises(ValueError):tool.validate(folder)

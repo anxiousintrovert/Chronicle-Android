@@ -394,3 +394,39 @@ TEST(ModDynamicQuests, ObjectiveRequiresEveryListedPredecessor) {
     status=mods::CallOwnedQuest(package,state,"quests.get",{{"id","multi"}});EXPECT_EQ(status["objectives"][2]["available"],true);
     EXPECT_EQ(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","finish"},{"amount",1}})["complete"],true);
 }
+
+TEST(ModDynamicQuests, FailureSuspendsProgressAndResumeKeepsCounters) {
+    mods::Package package;Json state=Json::object();auto definition=MultiDefinition();
+    definition["objectives"][1]["event"]="enemy_killed";
+    mods::CallOwnedQuest(package,state,"quests.register",definition);
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",1}});
+    const Json failure={{"id","multi"},{"reason","Return to the village"}};
+    auto result=mods::CallOwnedQuest(package,state,"quests.fail",failure);EXPECT_EQ(result["status"],"failed");EXPECT_EQ(result["progress"],1);
+    EXPECT_FALSE(mods::WantsQuestEvent(state,"enemy_killed"));EXPECT_TRUE(mods::QuestEventAdvances(package,state,"enemy_killed",Json::object()).empty());
+    const auto failed=state;EXPECT_EQ(mods::CallOwnedQuest(package,state,"quests.fail",failure),result);
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.fail",{{"id","multi"},{"reason","Other"}}),std::runtime_error);
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.start",{{"id","multi"}}),std::runtime_error);
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",1}}),std::runtime_error);EXPECT_EQ(state,failed);
+    result=mods::CallOwnedQuest(package,state,"quests.resume",{{"id","multi"}});EXPECT_EQ(result["status"],"active");EXPECT_EQ(result["progress"],1);EXPECT_TRUE(mods::WantsQuestEvent(state,"enemy_killed"));
+    EXPECT_FALSE(state.contains("quest_failed"));EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.resume",{{"id","multi"}}),std::runtime_error);
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",1}});
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","villagers"},{"amount",3}});
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.fail",failure),std::runtime_error);
+    for(const auto &reason:std::vector<Json>{"",true,std::string(257,'x'),"line\nbreak"})EXPECT_FALSE(mods::ValidateQuestOperation("quests.fail",{{"id","multi"},{"reason",reason}}).empty());
+    auto bad=state;bad["quest_failed"]["multi"]="Complete cannot fail";EXPECT_THROW(mods::QuestDefinitions(package,bad),std::runtime_error);
+    bad=failed;bad["quest_failed"]["orphan"]="Unknown";EXPECT_THROW(mods::QuestDefinitions(package,bad),std::runtime_error);
+    bad=failed;bad["quest_failed"]["multi"]=true;EXPECT_THROW(mods::QuestDefinitions(package,bad),std::runtime_error);
+    bad=failed;bad["quest_definitions"]["multi"]["explicit_start"]=true;EXPECT_THROW(mods::QuestDefinitions(package,bad),std::runtime_error);
+}
+TEST_F(ModDynamicQuestRuntime, FailurePersistsMigratesAndRollsBackWithCallbackFailure) {
+    Add("test.mod","return {on_game_enter=function() "+register_code+" assert(chronicle.call('quests.fail',{id='dynamic',reason='Supplies lost'})) end}",
+        Json{{{"from","1"},{"rename_quests",{{"dynamic","renamed"}}}}});
+    Start();runtime.Tick({2,0,0,true,0,1});ASSERT_TRUE(runtime.Diagnostics().empty());
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_EQ(runtime.Quests()[0].status,"failed");EXPECT_NE(runtime.Quests()[0].description.find("Supplies lost"),std::string::npos);
+    const auto failed=runtime.SaveState();runtime.ResetState();std::string error;ASSERT_TRUE(runtime.LoadState(failed,error))<<error;EXPECT_EQ(runtime.SaveState(),failed);
+    auto old=State();old["required"]["test.mod"]="1";ASSERT_TRUE(runtime.LoadState(old.dump(),error))<<error;
+    EXPECT_EQ(State()["mods"]["test.mod"]["quest_failed"]["renamed"],"Supplies lost");EXPECT_FALSE(State()["mods"]["test.mod"]["quest_failed"].contains("dynamic"));
+    Add("test.mod","return {on_tick=function() "+register_code+" assert(chronicle.call('quests.fail',{id='dynamic',reason='Temporary'})); error('rollback') end}");
+    Start();runtime.ResetState();runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_failed"));EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_definitions"));
+}

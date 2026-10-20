@@ -44,6 +44,8 @@ constexpr Operation operations[] = {
     {"skills.unlock", "game.write", "Increase one owned skill rank after prerequisite checks.", true},
     {"skills.set_rank", "game.write", "Set or reset an owned skill rank.", true},
     {"quests.register", "game.write", "Register a persistent objective owned by this package.", true},
+    {"quests.fail", "game.write", "Fail an owned active dynamic quest with a reason; keep progress.", true},
+    {"quests.resume", "game.write", "Resume an owned failed quest without resetting progress.", true},
     {"quests.start", "game.write", "Start an owned registered quest; completed quests cannot restart.", true},
     {"quests.advance", "game.write", "Advance this package's objective progress transactionally.", true},
     {"quests.list", "game.read", "List this package's declared quests and saved objective progress.", false},

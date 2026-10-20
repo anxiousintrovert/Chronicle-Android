@@ -2702,3 +2702,41 @@ native game state. Save loading rejects progress on an objective whose required
 objectives are incomplete. Existing reward transactions, receipts, rollback and
 quest-ID migrations remain applicable. This provides objective sequencing, not
 branching dialogue, cutscenes, failure/restart stages or native story replacement.
+
+## Explicit quest failure and recovery
+
+Require `quests.failure.v1` and `game.write` for `quests.fail` and `quests.resume`.
+These operations apply only to this package's dynamic, started, incomplete quests.
+No automatic player-death, timeout, item-loss or story failure policy is installed.
+The mod decides when to call them, including from its own shared-menu action.
+
+```lua
+assert(chronicle.call("quests.fail", {id = "ordered_hunt", reason = "Return for supplies."}))
+-- Later, after the author's recovery condition:
+assert(chronicle.call("quests.resume", {id = "ordered_hunt"}))
+```
+
+Failure stores a nonempty single-line reason of at most 256 bytes and keeps all
+objective counters. Get/list results report status `failed` and `failure_reason`;
+objectives are unavailable. Scripted progress and `quests.start` fail without
+changing state. Matching events are ignored, with no backlog replay on resume.
+An incomplete death objective in a failed quest no longer requests capture.
+Failing again with the identical reason is idempotent; changing the reason while
+failed is rejected. Resume requires an actual failed quest, removes the failure
+record and restores active status without resetting counters or prerequisites.
+
+Completed, unstarted and manifest quests reject these operations. A completed
+reward quest cannot be reopened to grant its reward again. Neither operation
+writes native money/items or emits rewards. Existing callback transactions cover
+failure/resume state, including rollback if later callback work fails.
+
+The shared quest page marks failed entries with [!] and displays their reasons.
+Its filters are All, In progress, Completed and Failed. In progress retains
+registered quests but excludes failures. Skill filters are unchanged. Browsing
+never fails or resumes a quest.
+
+Reasons persist under the owner's quest_failed map and follow rename_quests
+migrations. Save validation rejects orphan/non-string/empty/oversized reasons,
+failed unstarted quests and failed completed quests. Recovery is a resume, not
+a restart or stage reset; branching stages and native story failure remain outside
+this contract.

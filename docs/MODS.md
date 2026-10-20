@@ -33,7 +33,8 @@ run, even if you have changed the package's next-launch enable selection.
 
 Packages with active manifest or dynamically registered quests show **L1 Quests**. Open the quest page,
 use Up/Down or the mouse wheel to select an objective, and Left/Right to page its
-description. Square or the Filter button cycles All, In progress, and Completed.
+description. Square or the Filter button cycles All, In progress, Completed, and Failed. Failed quests show their authored reason;
+opening the page does not resume them.
 Circle returns to the package list. This view reads existing progress without
 advancing objectives or granting rewards; it uses the same shared UI framework.
 

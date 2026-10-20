@@ -25,6 +25,7 @@ Quest ParseQuest(const std::string &id,const Json &definition) {
 bool ExplicitStart(const std::string &id,const Json &state) {
     return state.contains("quest_definitions")&&state["quest_definitions"].contains(id)&&state["quest_definitions"][id].value("explicit_start",false);
 }
+bool Failed(const std::string &id,const Json &state) {return state.contains("quest_failed")&&state["quest_failed"].contains(id);}
 bool Started(const std::string &id,const Json &state) {
     return !ExplicitStart(id,state)||(state.contains("quest_started")&&state["quest_started"].value(id,false));
 }
@@ -43,7 +44,8 @@ Json Status(const Quest &quest,const Json &state) {
     const int progress=state.contains("quests")?state["quests"].value(quest.id,0):0;
     Json status={{"id",quest.id},{"title",quest.title},{"description",quest.description},
                  {"goal",quest.goal},{"progress",std::min(progress,quest.goal)},{"complete",progress>=quest.goal}};
-    status["status"]=progress>=quest.goal?"completed":Started(quest.id,state)?"active":"registered";
+    status["status"]=progress>=quest.goal?"completed":Failed(quest.id,state)?"failed":Started(quest.id,state)?"active":"registered";
+    if(Failed(quest.id,state))status["failure_reason"]=state["quest_failed"][quest.id];
     if(state.contains("quest_definitions")&&state["quest_definitions"].contains(quest.id)&&state["quest_definitions"][quest.id].contains("objectives")) {
         status["objectives"]=Json::array();
         for(const auto &objective:state["quest_definitions"][quest.id]["objectives"]) {
@@ -51,7 +53,7 @@ Json Status(const Quest &quest,const Json &state) {
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(quest.id)?state["quest_objectives"][quest.id].value(id,0):0;
             auto value=objective;value["progress"]=count;value["complete"]=count>=objective["goal"].get<int>();
             value["blocked_by"]=BlockedBy(state["quest_definitions"][quest.id],objective,state,quest.id);
-            value["available"]=Started(quest.id,state)&&!value["complete"].get<bool>()&&value["blocked_by"].empty();
+            value["available"]=Started(quest.id,state)&&!Failed(quest.id,state)&&!value["complete"].get<bool>()&&value["blocked_by"].empty();
             status["objectives"].push_back(std::move(value));
         }
     }
@@ -67,7 +69,8 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
     if(!a.is_object())return "quest arguments must be an object";
     if(operation=="quests.list")return a.empty()?"":"quests.list takes no arguments";
     if(!a.contains("id")||!Id(a["id"]))return "invalid quest id";
-    if(operation=="quests.get"||operation=="quests.start")return a.size()==1?"":"provide only quest id";
+    if(operation=="quests.get"||operation=="quests.start"||operation=="quests.resume")return a.size()==1?"":"provide only quest id";
+    if(operation=="quests.fail")return a.size()==2&&a.contains("reason")&&Text(a["reason"])?"":"quest failure requires id and a nonempty reason up to 256 bytes";
     if(operation=="quests.register") {
         const auto fields=4u+unsigned(a.contains("explicit_start"))+unsigned(a.contains("rewards"));
         if(a.size()!=fields||(a.contains("explicit_start")&&!a["explicit_start"].is_boolean())||
@@ -165,6 +168,14 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
     }
     for(const auto &quest:result)if(!Started(quest.id,state))
         Require(!state.contains("quests")||state["quests"].value(quest.id,Json(0))==0,"unstarted quest has progress");
+    if(state.contains("quest_failed")) {
+        Require(state["quest_failed"].is_object()&&state["quest_failed"].size()<=64,"invalid quest failure records");
+        for(const auto &[id,reason]:state["quest_failed"].items()) {
+            const auto found=std::ranges::find(result,id,&Quest::id);
+            Require(state.contains("quest_definitions")&&state["quest_definitions"].contains(id)&&found!=result.end()&&Text(reason),"invalid or orphan quest failure record");
+            Require(Started(id,state)&&(!state.contains("quests")||state["quests"].value(id,0)<found->goal),"only active incomplete quests can fail");
+        }
+    }
     if(state.contains("quest_rewarded")) {
         Require(state["quest_rewarded"].is_object()&&state["quest_rewarded"].size()<=64,"invalid reward records");
         for(const auto &[id,claimed]:state["quest_rewarded"].items())
@@ -180,7 +191,7 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
 bool WantsQuestEvent(const Json &state,std::string_view event) {
     if(!state.contains("quest_definitions"))return false;
     for(const auto &[id,definition]:state["quest_definitions"].items()) {
-        if(!definition.contains("objectives")||!Started(id,state))continue;
+        if(!definition.contains("objectives")||!Started(id,state)||Failed(id,state))continue;
         for(const auto &objective:definition["objectives"])if(objective.value("event",std::string{})==event) {
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
             if(count<objective["goal"].get<int>()&&BlockedBy(definition,objective,state,id).empty())return true;
@@ -192,7 +203,7 @@ std::vector<Json> QuestEventAdvances(const Package &package,const Json &state,st
     QuestDefinitions(package,state);std::vector<Json> advances;
     if(!state.contains("quest_definitions"))return advances;
     for(const auto &[id,definition]:state["quest_definitions"].items()) {
-        if(!definition.contains("objectives")||!Started(id,state))continue;
+        if(!definition.contains("objectives")||!Started(id,state)||Failed(id,state))continue;
         for(const auto &objective:definition["objectives"]) {
             if(objective.value("event",std::string{})!=event)continue;
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
@@ -227,7 +238,21 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
         const auto result=Status(quest,staged);state.swap(staged);return result;
     }
     Require(found!=quests.end(),"quest is not declared or registered by this package");
+    if(operation=="quests.fail"||operation=="quests.resume") {
+        Require(state.contains("quest_definitions")&&state["quest_definitions"].contains(id),"failure lifecycle requires an owned dynamic quest");
+        Require(Started(id,state)&&!Status(*found,state)["complete"].get<bool>(),"failure lifecycle requires a started incomplete quest");
+        auto staged=state;
+        if(operation=="quests.fail") {
+            Require(!Failed(id,state)||state["quest_failed"][id]==arguments["reason"],"quest already failed with another reason");
+            staged["quest_failed"][id]=arguments["reason"];
+        } else {
+            Require(Failed(id,state),"quest is not failed");staged["quest_failed"].erase(id);
+            if(staged["quest_failed"].empty())staged.erase("quest_failed");
+        }
+        const auto result=Status(*found,staged);state.swap(staged);return result;
+    }
     if(operation=="quests.start") {
+        Require(!Failed(id,state),"failed quest requires quests.resume");
         Require(!Status(*found,state)["complete"].get<bool>(),"completed quest cannot be restarted");
         auto staged=state;
         if(ExplicitStart(id,staged))staged["quest_started"][id]=true;
@@ -235,6 +260,7 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
     }
     if(operation=="quests.advance") {
         Require(Started(id,state),"quest must be started before advancing");
+        Require(!Failed(id,state),"failed quest cannot advance");
         auto staged=state;
         if(!staged.contains("quests"))staged["quests"]=Json::object();
         Require(staged["quests"].is_object()&&(staged["quests"].contains(id)||staged["quests"].size()<64),"quest progress limit reached");
