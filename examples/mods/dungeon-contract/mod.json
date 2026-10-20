@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "api_version": 1,
+  "id": "example.dungeon-contract",
+  "name": "Dungeon Contract",
+  "version": "1.0.0",
+  "game": "chronicle",
+  "requires_capabilities": [
+    "scripts.lua.v1",
+    "host.calls.v1",
+    "menu.actions.v1",
+    "quests.dynamic.v1",
+    "quests.objectives.v1",
+    "quests.lifecycle.v1",
+    "quests.events.v1",
+    "quests.rewards.v1",
+    "save.metadata.v1"
+  ],
+  "permissions": [
+    "game.read",
+    "game.write",
+    "economy.write"
+  ],
+  "script": "main.lua",
+  "files": {}
+}

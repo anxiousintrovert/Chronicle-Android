@@ -183,3 +183,11 @@ targets. `extract` produces framework mesh JSON and `export-obj` produces an
 editable OBJ. See [mesh discovery and formats](MOD_MESH_FORMAT.md#discovering-real-model-targets)
 for commands, limits and normal/degenerate-triangle adjustments. Declare edited geometry in `meshes` and require `assets.mesh_replace.v1`. Enable
 the package through Options > Mods and restart; packages remain disabled by default.
+
+## Event-driven quest starter
+
+Copy [Dungeon Contract](../examples/mods/dungeon-contract/README.md) for a complete
+disabled package with shared-menu start, two named event objectives and a single
+transactional reward. Its walkthrough includes install, enable/restart, quest
+browsing and save/reload behavior. The native integration test reads the shipped
+manifest and Lua directly; use it when adapting the example.

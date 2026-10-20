@@ -55,3 +55,16 @@ Clang 23.1.2 game/test builds passed. Full suite: 1,036 passed, 105 skipped, one
 Added a repeatable isolated PAL texture smoke runner and native gameplay fixture. Baseline, 512x512 diagnostic body replacement, 4096x4096 upscaled original, disabled and conflict cases all passed. Native logical dimensions stayed 256x256; GPU physical dimensions matched 512/4096 only when enabled. The full 4K GPU readback hash matched all 64 MiB of generated source RGBA. Screenshots verified visible diagnostic replacement and normal appearance of the upscaled original. No gameplay-script modules were active. Disabled/conflicting packs restored native pixels in new sessions.
 
 Clang 23.1.2 test builds and all 71 Python tests passed. PS2 and Kazarov remain unchanged. Retail evidence remains local. Broader palette/copy/platform scenarios and first-release documentation/quest workflow review remain to be audited; this is not a claim of complete framework or vanilla playthrough certification.
+
+## Runnable quest author example (2026-10-20)
+
+Dungeon Contract is a separate, default-disabled example using the shared action
+and quest pages. Its integration test loads the exact shipped manifest/Lua and
+verifies disabled startup, deferred explicit start, named floor/death objectives,
+scripted-kill filtering, partial save restoration, a native 50 Gilda commit and
+completed-save restoration without replaying rewards. Repeating Start after
+completion is harmless. No custom item/weapon/cutscene registry is introduced.
+
+Clang 23.1.2 test build, all 25 focused quest/menu tests, all 71 Python tests and
+offline package validation passed. PS2 and upstream Kazarov are unchanged. This
+is runtime integration evidence, not a retail playthrough of the authored quest.

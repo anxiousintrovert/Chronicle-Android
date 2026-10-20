@@ -304,3 +304,34 @@ TEST_F(ModDynamicQuestRuntime, EventRewardFailureRollsBackAllMatchingQuestsAndDi
 }
 
 }
+
+TEST_F(ModDynamicQuestRuntime, ShippedContractStartsFromMenuAndRestoresWithoutRewardReplay) {
+    const auto source=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path()/"examples/mods/dungeon-contract";
+    std::filesystem::create_directories(root/"contract");
+    for(const auto *file:{"mod.json","main.lua"})std::filesystem::copy_file(source/file,root/"contract"/file);
+    Start();EXPECT_FALSE(runtime.HasGameplay()); // New example packages remain disabled.
+    enabled["example.dungeon-contract"]=true;Start();ASSERT_TRUE(runtime.Diagnostics().empty());
+    const mods::World floor1{2,0,0,true,0,1},floor2{2,0,0,true,0,2};
+    auto save=std::make_unique<CSaveData>();save->GetDngStatus()->money=0;int grants=0;
+    mods::CommitGame commit=[&](const auto &commands,int money,std::string &error){
+        ++grants;EXPECT_EQ(commands.size(),1u);return mods::ApplySave(*save,commands,money,error);
+    };
+    runtime.Tick(floor1,{},{},{},commit);
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_EQ(runtime.Quests()[0].progress,0);
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    std::string error;ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","start",error))<<error;
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());runtime.Tick(floor1,{},{},{},commit);
+    EXPECT_TRUE(runtime.WantsEnemyDeaths());EXPECT_EQ(grants,0);
+    runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    const auto partial=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(partial,error))<<error;
+    runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    std::array<mods::EnemyDeath,1> death{{{16,0,2,0,10,20,5,true}}};
+    runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    death[0].scripted=false;runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(runtime.Quests()[0].progress,2);
+    runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(runtime.Quests()[0].progress,3);
+    EXPECT_EQ(grants,1);EXPECT_EQ(save->GetDngStatus()->money,50);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    const auto completed=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(completed,error))<<error;
+    runtime.Tick(floor2,{},{},{},commit);ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","start",error))<<error;
+    runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(grants,1);EXPECT_EQ(save->GetDngStatus()->money,50);
+    EXPECT_EQ(runtime.SaveState(),completed);EXPECT_TRUE(runtime.Diagnostics().empty());
+}
