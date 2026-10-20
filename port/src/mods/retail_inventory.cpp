@@ -1,6 +1,7 @@
 #include "retail_inventory.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -249,7 +250,7 @@ void Synthesize(CUserStatus &s, const Json &a) {
 } // namespace
 
 bool Handles(std::string_view op) {
-    return op == "inventory.count" || op == "inventory.give" || op == "inventory.remove" ||
+    return op == "items.use" || op == "inventory.count" || op == "inventory.give" || op == "inventory.remove" ||
            op == "weapons.give" || op == "weapons.equip" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
            op == "weapons.attachment_set" || op == "weapons.attachment_remove" || op == "weapons.attachments_get" || op == "items.native_definition" ||
            op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
@@ -262,7 +263,10 @@ std::string Validate(std::string_view op, const Json &a) {
     }
     std::map<std::string, std::pair<double, double>> fields;
     const bool                                       item = op.starts_with("inventory.") || op == "weapons.give" || op == "items.native_definition";
-    if (op == "attachments.give") {
+    if (op == "items.use") {
+        fields["item"] = {132, 256};
+        fields["character"] = {0, 5};
+    } else if (op == "attachments.give") {
         fields["item"] = {81, 130};
         fields["quantity"] = {1, 40};
         fields["level"] = {1, 3};
@@ -574,6 +578,75 @@ void Equip(CUserStatus &s, const Json &a) {
 }
 
 void Apply(CUserStatus &s, std::string_view op, const Json &a, bool equipped) {
+    if (op == "items.use") {
+        const int item = a.at("item");
+        const int character = Character(s, a);
+        const auto *data = GetItemData(item);
+        const bool heal = data && data->kind_flags == ITEMKINDF_CONSUMABLE && data->use_flags == ITEMUSE_HEAL_HP;
+        const bool drink = data && data->kind_flags == ITEMKINDF_CONSUMABLE && data->use_flags == ITEMUSE_DRINK;
+        int cure = 0;
+        if (data && data->kind_flags == 1) {
+            switch (data->use_flags) {
+                case 0x4000: cure = AILMENT_FREEZE; break;
+                case 0x8000: cure = AILMENT_POISON; break;
+                case 0x10000: cure = AILMENT_CURSE; break;
+                case 0x20000: cure = AILMENT_GOO; break;
+                case 0x3c000:
+                    if (item == ITEM_MIGHTY_HEALING) {
+                        cure = AILMENT_FREEZE | AILMENT_POISON | AILMENT_CURSE | AILMENT_GOO;
+                    }
+                    break;
+            }
+        }
+        if (!heal && !drink && !cure) {
+            throw std::runtime_error("item use supports retail HP/water consumables and ailment cures");
+        }
+        if (s.party_size < 1 || s.party_size > 6 || s.item_pack.num < 0 || s.item_pack.num > 100) {
+            throw std::runtime_error("invalid native party or bag capacity");
+        }
+        Held(s); // Validate quick-slot quantities before selecting a source.
+        int bag = -1, quick = -1;
+        for (int i = 0; i < s.item_pack.num; ++i) {
+            if (s.item_pack.item[i] == item) { bag = i; break; }
+        }
+        for (int i = 0; i < 3; ++i) {
+            if (s.item_pack.quick_item_slot[i] == item && s.item_pack.quick_item_qty[i] > 0) { quick = i; break; }
+        }
+        if (bag < 0 && quick < 0) {
+            throw std::runtime_error("no usable owned item in the regular bag or quick slots");
+        }
+        if (heal) {
+            const int target = static_cast<int>(s.hp[character]) + data->vol;
+            if (s.hp[character] <= 0 || s.hp[character] >= s.max_hp[character] || target > 32767 || data->vol <= 0) {
+                throw std::runtime_error("character cannot receive HP from this item");
+            }
+            s.SetNextLife(character, static_cast<s16>(target), 5.0f);
+        } else if (drink) {
+            const float water = s.water_now[character], maximum = s.water_max[character];
+            if (!std::isfinite(water) || !std::isfinite(maximum) || water < 0 || maximum > 32767 ||
+                water > maximum || 2.0f + static_cast<int>(water) >= maximum || data->vol <= 0) {
+                throw std::runtime_error("character cannot receive water from this item");
+            }
+            s.water_now[character] = std::min(maximum, water + data->vol);
+        } else {
+            if (s.hp[character] <= 0 || (s.ailments[character] & AILMENT_KNOCKED_OUT) || !(s.ailments[character] & cure)) {
+                throw std::runtime_error("character has no curable ailment for this item");
+            }
+            if (item == ITEM_MIGHTY_HEALING) {
+                s.ailments[character] &= AILMENT_STAMINA;
+            } else {
+                s.ailments[character] &= ~cure;
+            }
+        }
+        // Match DeleteItemAfterUseItem: regular bag first, then quick slots.
+        // Native use preserves item_vol, item_count and the ailment timer.
+        if (bag >= 0) {
+            s.item_pack.item[bag] = -1;
+        } else if (--s.item_pack.quick_item_qty[quick] == 0) {
+            s.item_pack.quick_item_slot[quick] = -1;
+        }
+        return;
+    }
     if (op == "weapons.equip") {
         throw std::runtime_error("equipping requires a ready town loadout context through the save host");
     }

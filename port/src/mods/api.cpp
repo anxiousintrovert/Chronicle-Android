@@ -103,6 +103,7 @@ constexpr Operation operations[] = {
     {"weapons.abs_add",           "game.write",    "Grant ABS and synthesis points without automatic level-up.",                   true },
     {"weapons.attachments_get",   "game.read",     "Inspect fitted native attachment sockets.",                                    false},
     {"items.native_definition",   "game.read",     "Inspect an existing retail definition; does not register content.",            false},
+    {"items.use",                 "game.write",    "Consume owned retail healing, water or ailment-cure items atomically.",         true },
     {"attachments.list",          "game.read",     "Inspect the retail attachment bag and overflow slots.",                        false},
     {"attachments.give",          "game.write",    "Grant existing retail attachments into free regular bag slots.",               true },
     {"attachments.remove",        "game.write",    "Discard one owned attachment by its current bag slot.",                        true },

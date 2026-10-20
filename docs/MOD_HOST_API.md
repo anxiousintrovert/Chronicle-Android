@@ -91,6 +91,7 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `weapons.build_up` | `slot`, `target`, optional `character` | `game.write` | Evolve a retail weapon after rechecking requirements; active model changes remain gated |
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
+| `items.use` | `item`, optional `character` | `game.write` | Consume one owned retail healing, water or ailment-cure item atomically |
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
 Status add/remove target only the controlled character and require its native
@@ -1267,3 +1268,33 @@ Stock, prices, ownership and other supported save/entity writes commit together.
 Any validation, ownership, capacity or later batch failure publishes none of them.
 No new engine hook, native RNG draw or default gameplay package is introduced.
 Without claims, lifecycle cleanup does not scan or rewrite native shop tables.
+
+### Retail item use
+
+`items.use {item, character?}` requires `game.write`. The item is an existing
+retail numeric ID; character is a joined index 0–5 and defaults to the active
+character. Queue it through `chronicle.call`, including from an action registered
+with the shared menu framework. The effect and consumption commit with the
+callback's other writes; a failed command publishes neither.
+
+Supported definitions are the native HP-only food and water-only consumables,
+single-ailment cures with native character-use flags, and Mighty Healing.
+Bread, Premium Chicken, Cheese, the three waters, Antidote Drink, Soap and
+Mighty Healing are supported. Holy Water has different native use flags and is
+not included. Random foods, revival, stamina, throwable items, Mellow Banana,
+permanent stat foods and weapon-targeted effects are not handled by this API.
+Custom-item registration remains reserved for the contributor's framework.
+
+HP healing uses the native SetNextLife interpolation, including its existing
+pending-heal behavior. Water uses the native integer-truncated two-point
+threshold and caps at maximum water. Cures preserve the native timer; Mighty
+Healing clears ailments while preserving stamina. Ineffective use fails without
+consumption. Cures reject knocked-out characters. Water follows native rules
+and does not require a living target.
+
+Consumption takes the first matching regular bag slot, otherwise the first
+nonempty matching quick slot. Overflow bag slots are not usable sources. Native
+item volume and cached item count are preserved, as in DeleteItemAfterUseItem.
+This is a one-shot saved effect: disabling the mod does not refund the item or
+undo healing. No polling, new menu, engine hook, native RNG draw or custom
+registration is introduced.

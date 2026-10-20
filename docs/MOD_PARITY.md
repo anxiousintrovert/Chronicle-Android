@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 90 implemented operations, native plugins and author
+a real host-call boundary, 91 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and quick-slot use/selection; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
@@ -1090,3 +1090,28 @@ Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
 optional PAL town-to-dungeon test passed separately. All 18 Python checks and
 all 3,840 empty/disabled seed comparisons passed. CLI discovery lists both new
 operations. PS2 files remain unchanged.
+
+### Transactional retail item use
+
+`items.use` covers the pinned Chronicle reference's supported healing, water and
+ailment-cure definitions through our existing host transaction boundary. It
+stages native-equivalent effects without mutating the native menu-volume global
+or invoking random, sound or live-resource branches. The shared menu action host
+can queue it like other game writes; no separate menu implementation is added.
+
+Four focused tests compare complete saves against ItemUseFunc followed by
+DeleteItemAfterUseItem for every supported retail definition, all six characters,
+and regular-bag versus quick-slot sources. They include pending HP interpolation,
+water clamping, combined ailments, stamina and existing timers. They also check
+native RNG/menu-volume preservation, callback rollback, grant/use ordering,
+invalid schemas, ineffective effects, malformed water/capacity values and
+unusable overflow-only items. This is native-function differential evidence,
+not a new interactive retail or cross-platform test.
+
+Broader consumable effects and native quick-slot selection/use remain open.
+Contributor-owned custom item, weapon and cutscene contracts remain untouched.
+
+Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
+765 registered, 747 passed, 17 skipped and one disabled, with no failures. All
+18 Python checks passed; CLI discovery includes items.use. The 3,840 seed cases
+match pinned upstream with empty and disabled mods. No PS2 files changed.
