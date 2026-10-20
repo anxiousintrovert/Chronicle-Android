@@ -17,6 +17,8 @@ SUITES = {
                'ShipwreckTransport', 'TempleTransport', 'MoonSeaTransport', 'GalleryTransport', 'DemonShaftTransport'],
     'population': ['PublicMaximum' + name + 'Population' for name in
                    ('Cave', 'Forest', 'Shipwreck', 'Temple', 'MoonSea', 'Gallery', 'DemonShaft')],
+    'chests': ['OwnedChestLootPreservesMapAndCrystal'] + ['OwnedChestLoot' + name for name in
+               ('Forest', 'Shipwreck', 'Temple', 'MoonSea', 'Gallery', 'DemonShaft')],
     'lifecycle': ['MaximumPopulationReturnsToRetailLimits', 'QuitWithMaximumPopulation',
                   'ExceptionWithMaximumPopulation', 'PartialPopulationIsReported', 'RejectedManagedLayoutUsesRetail'],
 }

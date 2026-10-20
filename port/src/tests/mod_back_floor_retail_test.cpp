@@ -50,12 +50,28 @@ bool               high_slot_seen = false;
 bool               quit_with_population = false;
 bool               fail_with_population = false;
 bool               audit_partial_population = false;
+bool               audit_chest_loot = false;
 std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
 std::string        last_state;
 ITEM_PACK          inventory_before{};
 std::array<s8, 50> flags_before{};
+
+void AuditChestLoot(const CDungeonMap &map, bool back) {
+    int replaced = 0, maps = 0, crystals = 0;
+    for (const auto &box : map.boxes) {
+        if (!box.used) continue;
+        // A native locked-door key is placed outside the random loot selector.
+        if (box.item_no == selectMapNo + ITEM_BONE_KEY) continue;
+        if (!back && box.item_no == ITEM_MAP) { ++maps; continue; }
+        if (!back && box.item_no == ITEM_MAGICAL_CRYSTAL) { ++crystals; continue; }
+        EXPECT_EQ(box.item_no, box.kind == TREASURE_BOX_LARGE ? ITEM_WEAPON_DAGGER : (back ? ITEM_REPAIR_POWDER : ITEM_BREAD));
+        ++replaced;
+    }
+    EXPECT_GT(replaced, 0);
+    if (!back) { EXPECT_EQ(maps, 1); EXPECT_EQ(crystals, 1); }
+}
 
 void AuditMonsterTerrain() {
     ASSERT_NO_THROW(chronicle::monsters::ValidateExpandedCollisionResources(*NowDngMap, NowMonstorUnit->collision, 256));
@@ -121,6 +137,7 @@ void BackPump() {
                     return;
                 }
                 ASSERT_NO_THROW(AuditMonsterTerrain());
+                if (audit_chest_loot) { AuditChestLoot(MainDungeonMap, false); AuditChestLoot(UraDungeonMap, true); }
                 if (managed_layout && !population_injected) {
                     const auto state = mods::ReadLayout({
                         {"dungeon", selectMapNo}
@@ -290,7 +307,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -305,6 +322,7 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool manage
     quit_with_population = quit;
     fail_with_population = fail;
     audit_partial_population = partial;
+    audit_chest_loot = chest;
     population_injected = false;
     high_slot_seen = false;
     population_frame = 0;
@@ -335,7 +353,16 @@ end}
         std::string   source((std::istreambuf_iterator<char>(input_script)), {});
         input_script.close();
         const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12,monsters=" + std::to_string(monsters) : ",area=8,room_min=6,room_max=6";
-        const std::string init = "return {on_game_enter=function() assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
+        std::string chest_init;
+        if (chest) {
+            for (bool back : {false, true}) for (bool weapon : {false, true}) {
+                const int item = weapon ? ITEM_WEAPON_DAGGER : (back ? ITEM_REPAIR_POWDER : ITEM_BREAD);
+                chest_init += "assert(chronicle.call('dungeon.chest_loot_set',{dungeon=" + std::to_string(dungeon) +
+                    ",back=" + (back ? "true" : "false") + ",kind='" + (weapon ? "weapon" : "small") +
+                    "',entries={{item=" + std::to_string(item) + ",weight=1}}})) ";
+            }
+        }
+        const std::string init = "return {on_game_enter=function() " + chest_init + "assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
         source.replace(source.find("return {on_tick="), std::string("return {on_tick=").size(), init);
         std::ofstream(script_path) << source;
     }
@@ -464,4 +491,11 @@ TEST(ModBackFloorRetail, PublicMaximumTemplePopulation) { RunBackAudit(3, true, 
 TEST(ModBackFloorRetail, PublicMaximumMoonSeaPopulation) { RunBackAudit(4, true, 64, true, 256); }
 TEST(ModBackFloorRetail, PublicMaximumGalleryPopulation) { RunBackAudit(5, true, 64, true, 256); }
 TEST(ModBackFloorRetail, PublicMaximumDemonShaftPopulation) { RunBackAudit(6, true, 64, true, 256); }
+TEST(ModBackFloorRetail, OwnedChestLootPreservesMapAndCrystal) { RunBackAudit(0, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootForest) { RunBackAudit(1, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootShipwreck) { RunBackAudit(2, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootTemple) { RunBackAudit(3, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootMoonSea) { RunBackAudit(4, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootGallery) { RunBackAudit(5, true, 64, true, 5, 0, false, false, false, true); }
+TEST(ModBackFloorRetail, OwnedChestLootDemonShaft) { RunBackAudit(6, true, 64, true, 5, 0, false, false, false, true); }
 } // namespace

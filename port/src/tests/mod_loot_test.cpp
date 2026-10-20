@@ -4,6 +4,8 @@
 #include <cstring>
 
 #include "itemdata.hpp"
+#include "dungeonparts.hpp"
+#include "chronicle/mod_chest_loot.hpp"
 #include "mods/api.hpp"
 #include "mods/entities.hpp"
 #include "mods/loot.hpp"
@@ -208,5 +210,66 @@ TEST_F(ModLoot, NativePickupCapacityBoundariesRemainVisible) {
                                                            {"rare_item", ITEM_WEAPON_DAGGER}
     })
                     .empty());
+}
+mods::GameCommand Chest(std::string owner = "test.a", bool back = false, std::string kind = "small") {
+    return {"dungeon.chest_loot_set", {{"dungeon", 0}, {"back", back}, {"kind", kind},
+        {"entries", {{{"item", kind == "small" ? ITEM_BREAD : ITEM_WEAPON_DAGGER}, {"weight", 1}}}}}, owner};
+}
+
+TEST_F(ModLoot, ChestPoolsAreOwnedAtomicAndRetiredWithoutNativeTableWrites) {
+    const Json selector = {{"dungeon", 0}, {"back", false}, {"kind", "small"}};
+    int item = -100;
+    srand(42); const auto next = rand(); srand(42);
+    EXPECT_FALSE(mods::TryOwnedChestLoot(0, 0, 1, item));
+    EXPECT_EQ(item, -100);
+    EXPECT_EQ(rand(), next);
+    { mods::LootTransaction tx; ASSERT_TRUE(tx.Stage({Chest()}, false, error)); }
+    EXPECT_FALSE(mods::ReadChestLoot(selector)["enabled"]);
+    ASSERT_TRUE(Apply({Chest()}, false)) << error;
+    EXPECT_EQ(mods::ReadChestLoot(selector)["owner"], "test.a");
+    // An unrelated save failure must not commit a second pool.
+    EXPECT_FALSE(Apply({Chest("test.b", true), {"economy.spend", {{"amount", 65535}}, "test.b"}}, false));
+    EXPECT_FALSE(mods::TryOwnedChestLoot(0, 1, 1, item));
+    EXPECT_FALSE(Apply({Chest("test.b")}));
+    EXPECT_NE(error.find("test.a"), std::string::npos);
+    ASSERT_TRUE(Apply({Chest("test.b", true), Chest("test.c", false, "weapon")}));
+    // Call the native function, not just the bridge: it must choose the owned pool.
+    EXPECT_EQ(PresetSmallItemNo_Get(0, 0, 0, 1), ITEM_BREAD);
+    EXPECT_EQ(PresetSmallItemNo_Get(0, 98, 1, 1), ITEM_BREAD);
+    EXPECT_EQ(PresetSmallItemNo_Get(0, 0, 0, 0), ITEM_WEAPON_DAGGER);
+    EXPECT_EQ(std::memcmp(original.data(), MonstorTable, sizeof(MonstorTable)), 0);
+    EXPECT_FALSE(Apply({{"dungeon.chest_loot_reset", selector, "test.b"}}));
+    ASSERT_TRUE(Apply({{"dungeon.chest_loot_reset", selector, "test.a"}}));
+    EXPECT_FALSE(mods::TryOwnedChestLoot(0, 0, 1, item));
+    mods::RetainOwnedLoot({});
+    EXPECT_FALSE(mods::HasOwnedLoot());
+    EXPECT_FALSE(mods::TryOwnedChestLoot(0, 1, 1, item));
+}
+
+TEST_F(ModLoot, ChestWeightsUseOneDeterministicRollAndValidateKinds) {
+    auto command = Chest();
+    command.arguments["entries"].push_back({{"item", ITEM_REPAIR_POWDER}, {"weight", 3}});
+    ASSERT_TRUE(Apply({command}));
+    srand(51);
+    const auto roll = std::uint64_t(rand()) * 4 / 2147483648ULL;
+    const int next = rand();
+    srand(51);
+    EXPECT_EQ(PresetSmallItemNo_Get(0, 0, 0, 1), roll < 1 ? ITEM_BREAD : ITEM_REPAIR_POWDER);
+    EXPECT_EQ(rand(), next);
+    for (const auto &entry : std::vector<Json>{
+        {{"item", ITEM_BREAD}, {"weight", 0}}, {{"item", ITEM_BREAD}, {"weight", 10001}},
+        {{"item", ITEM_WEAPON_DAGGER}, {"weight", 1}}, {{"item", ITEM_ATTACH_SYNTHESIS_SPHERE}, {"weight", 1}},
+        {{"item", -1}, {"weight", 1}}, {{"item", ITEM_BREAD}, {"weight", 1.5}}}) {
+        auto invalid = Chest(); invalid.arguments["entries"] = Json::array({entry});
+        EXPECT_FALSE(mods::ValidateOperation(invalid.operation, invalid.arguments).empty());
+    }
+    auto invalid = Chest(); invalid.arguments["entries"].push_back(invalid.arguments["entries"][0]);
+    EXPECT_FALSE(mods::ValidateOperation(invalid.operation, invalid.arguments).empty());
+    invalid = Chest(); invalid.arguments["entries"] = Json::array();
+    EXPECT_FALSE(mods::ValidateOperation(invalid.operation, invalid.arguments).empty());
+    invalid = Chest(); invalid.arguments["dungeon"] = 7;
+    EXPECT_FALSE(mods::ValidateOperation(invalid.operation, invalid.arguments).empty());
+    invalid = Chest(); invalid.arguments["back"] = 1;
+    EXPECT_FALSE(mods::ValidateOperation(invalid.operation, invalid.arguments).empty());
 }
 } // namespace

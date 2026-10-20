@@ -443,9 +443,10 @@ Supply your extracted PAL data and a **new** output directory:
 python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../smoke-results
 ```
 
-The default runs nineteen built-in scenarios: seven retail back-floor transitions,
-seven public 256-monster layouts, and five population lifecycle/rejection cases.
-Use repeatable `--suite retail`, `--suite population`, or `--suite lifecycle` to
+The default runs twenty-six built-in scenarios: seven retail back-floor transitions,
+seven public 256-monster layouts, seven owned chest-loot scenarios, and five
+population lifecycle/rejection cases.
+Use repeatable `--suite retail`, `--suite population`, `--suite chests`, or `--suite lifecycle` to
 select a subset. `--timeout 120` controls the per-process deadline in seconds.
 
 Each scenario runs sequentially in a fresh process with its own save profile,
@@ -1644,3 +1645,44 @@ definition override is not a guarantee that a generated pickup grants an item.
 Authors should account for weapon capacity; this API does not change the retail
 pickup path or overflow behavior. No ownership table entries, definition writes
 or additional drop hooks exist without explicit calls.
+
+
+## Owned chest loot pools
+
+`dungeon.chest_loot_get {dungeon=0,back=false,kind="small"}` (`game.read`)
+returns that selector plus `enabled`, `owner`, `entries`, and
+`scope="future_chest_generation"`. Dungeon IDs are 0..6. `back` selects front
+or back-floor generation; `kind` is `"small"` or `"weapon"`.
+
+`dungeon.chest_loot_set` (`game.write`) takes the selector and a nonempty
+`entries` array of 1..64 unique `{item,weight}` records. Weights are positive
+integers up to 10000. Small pools accept valid retail items/attachments;
+weapon pools accept valid retail weapon IDs. Synthesis spheres requiring a
+payload are excluded. Example, using bread (148) and repair powder (177):
+
+```lua
+assert(chronicle.call("dungeon.chest_loot_set", {
+  dungeon=0, back=false, kind="small",
+  entries={{item=148,weight=1},{item=177,weight=3}}
+}))
+```
+
+One package owns each selector. Other packages can own disjoint selectors;
+conflicting claims and resets return the owner's ID. Writes participate in
+callback transactions, so another failing command prevents pool publication.
+Configuration can be declared in `on_game_enter`; it needs no loaded floor.
+Declare the operations used in `requires_operations` and the corresponding
+permissions in the package manifest.
+
+`dungeon.chest_loot_reset` (`game.write`) takes the selector and releases only
+the caller's pool. Runtime reset or owner retirement removes claims. Claims are
+not persisted; declare them again each session. Already generated chest contents
+are unchanged by setting, resetting or retiring a pool.
+
+An active matching pool replaces random item selection with one weighted draw
+from Chronicle's RNG. It bypasses native item rejection and held-weapon rate
+adjustments for that selector. Native chest type, traps, placement, front-floor
+map/crystal guarantees and separately placed door keys remain in use. Clown
+rewards and other scripted rewards are outside this API. A pool does not
+increase chest capacity. With no matching active claim, native selection and
+RNG consumption are unchanged. No gameplay package is enabled by this API.

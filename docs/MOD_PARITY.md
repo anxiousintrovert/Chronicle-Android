@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 109 implemented operations, native plugins and author
+a real host-call boundary, 112 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -17,7 +17,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
-| World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, chest-loot/floor-rule overrides, extra floors |
+| World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
@@ -2485,3 +2485,29 @@ compiler, output, timeout, launch-error and result-classification cases. This
 change is tooling/docs only and does not change the game binary or no-mod path.
 PS2 unchanged. Other platforms, arbitrary package certification and broader
 API/content-tool coverage remain unfinished.
+
+
+### Owned weighted chest loot (2026-10-20)
+
+dungeon.chest_loot_get/set/reset add weighted retail item pools per dungeon,
+front/back selector and small/weapon chest kind. One owner holds each selector;
+claims participate in callback rollback and retire with owner/runtime lifetime.
+They apply only to future random chest generation. Item kinds, payload needs,
+unique IDs, list lengths and weights are validated. Active claims consume one
+weighted RNG draw; absent claims return directly to the existing port selection
+without consuming RNG. Native map/crystal guarantees, separately placed door
+keys, chest types, traps and placement remain in their existing paths. No new
+PS2 overlays or PS2 source edits are needed: the hook is in the existing port
+chest-selection override.
+
+Two focused tests cover native selector calls, deterministic weighting, strict
+validation, disjoint ownership/conflicts, rollback and retirement. Seven fresh
+PAL Lua-package scenarios cover both floors of every procedural dungeon and
+preserve map/crystal/key chests. The smoke runner now exposes a chests suite
+and defaults to 26 scenarios. Docs cover all three operations and limitations.
+
+Clang 23.1.2 game/test builds pass. The full CTest run plus the corrected generic
+query-fixture rerun has 823 passing tests, 85 skipped and one disabled. All 35
+Python checks pass. Both 3,840-case seed exports retain their prior hashes and
+differ from pinned upstream only by map storage size. Other platforms, larger
+chest capacity and the remaining coverage ledger are still open.

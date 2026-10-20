@@ -8,6 +8,7 @@ namespace mods {
 bool           IsLootWrite(std::string_view operation);
 std::string    ValidateLoot(std::string_view operation, const nlohmann::json &arguments);
 nlohmann::json ReadLoot(const nlohmann::json &arguments);
+nlohmann::json ReadChestLoot(const nlohmann::json &arguments);
 bool           HasOwnedLoot();
 void           RetainOwnedLoot(std::span<const std::string> owners);
 

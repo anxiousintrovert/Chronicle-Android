@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "dungeonparts.hpp"
+#include "chronicle/mod_chest_loot.hpp"
 #include "editmenu.hpp"
 #include "itemdata.hpp"
 
@@ -19,6 +20,8 @@ extern int  floorNum[7];
    depends on the executable's layout and the floor, and differs between the NTSC and PAL discs.
    The port reads the dungeon's list, as GetPieroItem does for the clown's boxes. */
 PORT_OVERRIDE int PresetSmallItemNo_Get(int map_no, int floor_no, int special, int small) {
+    int port_item;
+    if (mods::TryOwnedChestLoot(map_no, special, small, port_item)) return port_item;
     int           candidate[144];
     s16           rate[400];
     ITEM_PUT_SET *list = ItemPutListPtr[map_no + special * 7];

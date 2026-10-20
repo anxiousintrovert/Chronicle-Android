@@ -2,6 +2,10 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
+#include <tuple>
+#include <cstdlib>
+#include "chronicle/mod_chest_loot.hpp"
 
 #include "itemdata.hpp"
 #include "monstorunit.hpp"
@@ -17,6 +21,16 @@ struct Claim {
 };
 
 std::map<Key, Claim> claims;
+using ChestKey = std::tuple<int, bool, bool>;
+struct ChestClaim {
+    std::string owner;
+    std::uint64_t epoch;
+    std::vector<std::pair<int, unsigned>> entries;
+};
+std::map<ChestKey, ChestClaim> chest_claims;
+bool ChestWrite(std::string_view op) { return op == "dungeon.chest_loot_set" || op == "dungeon.chest_loot_reset"; }
+ChestKey ChestSelector(const Json &a) { return {a.at("dungeon").get<int>(), a.at("back").get<bool>(), a.at("kind") == "small"}; }
+
 
 s16 &Value(Key key) {
     auto &model = MonstorTable[key.first];
@@ -38,11 +52,32 @@ bool ValidItem(int item) {
     }
     return item >= ITEM_ATTACH_START && item <= 130 && GetAttachData(item) != nullptr;
 }
+std::string ValidateChest(std::string_view op, const Json &a) {
+    if (!a.is_object() || a.size() != (op == "dungeon.chest_loot_set" ? 4u : 3u) ||
+        !a.contains("dungeon") || !a["dungeon"].is_number_integer() || a["dungeon"].get<double>() < 0 || a["dungeon"].get<double>() > 6 ||
+        !a.contains("back") || !a["back"].is_boolean() || !a.contains("kind") ||
+        (a["kind"] != "small" && a["kind"] != "weapon")) return "provide dungeon 0..6, boolean back and kind small/weapon";
+    if (op != "dungeon.chest_loot_set") return {};
+    if (!a.contains("entries") || !a["entries"].is_array() || a["entries"].empty() || a["entries"].size() > 64)
+        return "entries must contain 1..64 weighted retail items";
+    std::set<int> items;
+    for (const auto &entry : a["entries"]) {
+        if (!entry.is_object() || entry.size() != 2 || !entry.contains("item") || !entry["item"].is_number_integer() ||
+            entry["item"].get<double>() < static_cast<int>(ITEM_ATTACH_START) || entry["item"].get<double>() >= static_cast<int>(ITEM_WEAPON_END) ||
+            !entry.contains("weight") || !entry["weight"].is_number_integer() || entry["weight"].get<double>() < 1 || entry["weight"].get<double>() > 10000)
+            return "each entry requires a retail item and integer weight 1..10000";
+        const int item = entry["item"];
+        if (!ValidItem(item) || ((item >= ITEM_WEAPON_START) != (a["kind"] == "weapon")) || !items.insert(item).second)
+            return "chest items must be unique, match the chest kind and need no synthesis payload";
+    }
+    return {};
+}
 } // namespace
 
-bool IsLootWrite(std::string_view op) { return op == "dungeon.loot_set" || op == "dungeon.loot_reset"; }
+bool IsLootWrite(std::string_view op) { return op == "dungeon.loot_set" || op == "dungeon.loot_reset" || ChestWrite(op); }
 
 std::string ValidateLoot(std::string_view op, const Json &a) {
+    if (op == "dungeon.chest_loot_get" || ChestWrite(op)) return ValidateChest(op, a);
     if (op != "dungeon.loot_get" && !IsLootWrite(op)) {
         return "unknown loot operation";
     }
@@ -98,9 +133,40 @@ Json ReadLoot(const Json &a) {
     };
 }
 
-bool HasOwnedLoot() { return !claims.empty(); }
+Json ReadChestLoot(const Json &a) {
+    const auto error = ValidateChest("dungeon.chest_loot_get", a);
+    if (!error.empty()) throw std::runtime_error(error);
+    Json result = a;
+    result.update({{"enabled", false}, {"owner", ""}, {"entries", Json::array()}, {"scope", "future_chest_generation"}});
+    const auto found = chest_claims.find(ChestSelector(a));
+    if (found == chest_claims.end() || found->second.epoch != Scripts().Epoch()) return result;
+    result["enabled"] = true;
+    result["owner"] = found->second.owner;
+    for (auto [item, weight] : found->second.entries) result["entries"].push_back({{"item", item}, {"weight", weight}});
+    return result;
+}
+
+bool TryOwnedChestLoot(int dungeon, int back, int small, int &item) {
+    if (chest_claims.empty()) return false;
+    if (dungeon < 0 || dungeon > 6 || (back != 0 && back != 1) || (small != 0 && small != 1)) return false;
+    const auto found = chest_claims.find({dungeon, back != 0, small != 0});
+    if (found == chest_claims.end() || found->second.epoch != Scripts().Epoch()) return false;
+    unsigned total = 0;
+    for (auto entry : found->second.entries) total += entry.second;
+    unsigned roll = (std::uint64_t(rand()) * total) / 2147483648ULL;
+    for (auto [candidate, weight] : found->second.entries) {
+        if (roll < weight) { item = candidate; return true; }
+        roll -= weight;
+    }
+    return false;
+}
+
+bool HasOwnedLoot() { return !claims.empty() || !chest_claims.empty(); }
 
 void RetainOwnedLoot(std::span<const std::string> owners) {
+    std::erase_if(chest_claims, [&](const auto &pair) {
+        return pair.second.epoch != Scripts().Epoch() || std::ranges::find(owners, pair.second.owner) == owners.end();
+    });
     for (auto it = claims.begin(); it != claims.end();) {
         if (std::ranges::find(owners, it->second.owner) != owners.end()) {
             ++it;
@@ -115,6 +181,7 @@ void RetainOwnedLoot(std::span<const std::string> owners) {
 
 struct LootTransaction::Impl {
     std::map<Key, Claim> owners = claims;
+    std::map<ChestKey, ChestClaim> chests = chest_claims;
     std::map<Key, s16>   values;
 };
 
@@ -129,6 +196,27 @@ bool LootTransaction::Stage(const std::vector<GameCommand> &commands, bool writa
         }
         for (const auto &command : commands) {
             if (!IsLootWrite(command.operation)) {
+                continue;
+            }
+            if (ChestWrite(command.operation)) {
+                const auto reason = ValidateChest(command.operation, command.arguments);
+                if (!reason.empty()) throw std::runtime_error(reason);
+                if (command.owner.empty()) throw std::runtime_error("chest loot writes require a runtime package owner");
+                if (!staged_) staged_ = std::make_unique<Impl>();
+                const auto key = ChestSelector(command.arguments);
+                auto found = staged_->chests.find(key);
+                if (found != staged_->chests.end() && found->second.epoch != Scripts().Epoch()) {
+                    staged_->chests.erase(found);
+                    found = staged_->chests.end();
+                }
+                if (found != staged_->chests.end() && found->second.owner != command.owner)
+                    throw std::runtime_error("chest loot pool is already owned by " + found->second.owner);
+                if (command.operation == "dungeon.chest_loot_reset") staged_->chests.erase(key);
+                else {
+                    ChestClaim claim{command.owner, Scripts().Epoch(), {}};
+                    for (const auto &entry : command.arguments.at("entries")) claim.entries.emplace_back(entry.at("item").get<int>(), entry.at("weight").get<unsigned>());
+                    staged_->chests[key] = std::move(claim);
+                }
                 continue;
             }
             if (!writable) {
@@ -192,6 +280,7 @@ void LootTransaction::Commit() noexcept {
         Value(key) = value;
     }
     claims.swap(staged_->owners);
+    chest_claims.swap(staged_->chests);
     staged_.reset();
 }
 } // namespace mods

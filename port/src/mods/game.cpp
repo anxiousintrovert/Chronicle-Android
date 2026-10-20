@@ -236,6 +236,7 @@ void TickGame() {
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
         if (operation == "dungeon.layout_get") return ReadLayout(arguments);
+        if (operation == "dungeon.chest_loot_get") return ReadChestLoot(arguments);
         if (operation == "dungeon.loot_get") {
             auto result = ReadLoot(arguments);
             result["writable"] = ShopWritesReady();

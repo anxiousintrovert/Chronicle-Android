@@ -54,6 +54,9 @@ constexpr Operation operations[] = {
     {"party.town_set_active", "game.write", "Own the visible retail town character until released or disabled.", true},
     {"party.switch_state", "game.read", "Inspect native party-switch readiness and the last request.", false},
     {"party.set_active", "game.write", "Request a native character switch after the current frame.", true},
+    {"dungeon.chest_loot_get", "game.read", "Inspect an owned front/back small/weapon chest loot pool.", false},
+    {"dungeon.chest_loot_set", "game.write", "Own a weighted retail item pool for future chest generation.", true},
+    {"dungeon.chest_loot_reset", "game.write", "Release an owned chest loot pool.", true},
     {"dungeon.loot_get", "game.read", "Inspect retail monster loot definitions and per-field owners.", false},
     {"dungeon.loot_set", "game.write", "Own rare or stolen loot for future monster model loads.", true},
     {"dungeon.loot_reset", "game.write", "Release one owned loot field with conditional restoration.", true},
@@ -261,7 +264,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
     if (name == "dungeon.layout_get" || IsLayoutWrite(name)) return ValidateLayout(name, a);
-    if (name == "dungeon.loot_get" || IsLootWrite(name)) return ValidateLoot(name, a);
+    if (name == "dungeon.loot_get" || name == "dungeon.chest_loot_get" || IsLootWrite(name)) return ValidateLoot(name, a);
     if (name.starts_with("shops.")) {
         return ValidateShop(name, a);
     }
