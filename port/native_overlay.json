@@ -1328,6 +1328,36 @@
           "old": "void BtCleatRandomMap() {",
           "new": "void BtCleatRandomMap() {\n    if (mods::BuildOwnedDungeonLayout()) return;",
           "count": 1
+        },
+        {
+          "old": "#include \"chronicle/mod_dungeon_layout.hpp\"",
+          "new": "#include \"chronicle/mod_dungeon_layout.hpp\"\n#include \"chronicle/monster_scripts.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "    for (int i = 0; i < 16; i++) {\n        MainMonstorUnit.script[i] = &MonstorScriptBuffer[i];\n    }",
+          "new": "    chronicle::monsters::BindScripts(MainMonstorUnit);",
+          "count": 1
+        },
+        {
+          "old": "            for (int i = 0; i < 16; i++) {\n                unit->script[i] = &MonstorScriptBuffer[i];\n            }",
+          "new": "            chronicle::monsters::BindScripts(*unit);",
+          "count": 3
+        },
+        {
+          "old": "                for (int i = 0; i < 16; i++) {\n                    unit_now->script[i] = &MonstorScriptBuffer[i];\n                }",
+          "new": "                chronicle::monsters::BindScripts(*unit_now);",
+          "count": 1
+        },
+        {
+          "old": "                for (int i = 0; i < 16; i++) {\n                    MainMonstorUnit.script[i] = &MonstorScriptBuffer[i];\n                }",
+          "new": "                chronicle::monsters::BindScripts(MainMonstorUnit);",
+          "count": 1
+        },
+        {
+          "old": "    for (slot = 0; slot < 16; slot++) {\n        unit->script[slot] = &MonstorScriptBuffer[slot];\n    }",
+          "new": "    chronicle::monsters::BindScripts(*unit);",
+          "count": 1
         }
       ]
     },

@@ -1,3 +1,4 @@
+#include "chronicle/monster_scripts.hpp"
 #include "mods/player_tuning_native.hpp"
 #include "mods/quick_items.hpp"
 #include "mods/world_transition.hpp"
@@ -148,7 +149,6 @@ extern ENEMY_LIFE_GAGE EnemyLifeGage;
 extern GAME_ENV GameEnv;
 extern CRandomItem MainRandomItem;
 extern s32 MonstorNameOff;
-extern CDataAlloc2<1> MonstorScriptBuffer[16];
 extern CHitPointMark MyHitPointMark[16];
 extern CCharacter NewChangeFx;
 extern s32 NewChangeFxFlag;
@@ -1893,9 +1893,7 @@ PORT_OVERRIDE void DunMoveChara() {
             unit->model_count = 0;
             unit->current_monster = 0;
 
-            for (int i = 0; i < 16; i++) {
-                unit->script[i] = &MonstorScriptBuffer[i];
-            }
+            chronicle::monsters::BindScripts(*unit);
 
             unit->requested_event = -1;
             unit->CleanViewMonstor(ura);
@@ -1915,9 +1913,7 @@ PORT_OVERRIDE void DunMoveChara() {
                 unit_now->model_count = 0;
                 unit_now->current_monster = 0;
 
-                for (int i = 0; i < 16; i++) {
-                    unit_now->script[i] = &MonstorScriptBuffer[i];
-                }
+                chronicle::monsters::BindScripts(*unit_now);
 
                 unit_now->requested_event = -1;
                 unit_now->CleanViewMonstor(ura);
@@ -1940,9 +1936,7 @@ PORT_OVERRIDE void DunMoveChara() {
                 MainMonstorUnit.model_count = 0;
                 MainMonstorUnit.current_monster = 0;
 
-                for (int i = 0; i < 16; i++) {
-                    MainMonstorUnit.script[i] = &MonstorScriptBuffer[i];
-                }
+                chronicle::monsters::BindScripts(MainMonstorUnit);
 
                 MainMonstorUnit.requested_event = -1;
                 MainMonstorUnit.CleanViewMonstor(ura);
@@ -2074,9 +2068,7 @@ PORT_OVERRIDE void DunMoveChara() {
             unit->model_count = 0;
             unit->current_monster = 0;
 
-            for (int i = 0; i < 16; i++) {
-                unit->script[i] = &MonstorScriptBuffer[i];
-            }
+            chronicle::monsters::BindScripts(*unit);
 
             unit->requested_event = -1;
             unit->CleanViewMonstor(ura);
@@ -2094,9 +2086,7 @@ PORT_OVERRIDE void DunMoveChara() {
             unit->model_count = 0;
             unit->current_monster = 0;
 
-            for (int i = 0; i < 16; i++) {
-                unit->script[i] = &MonstorScriptBuffer[i];
-            }
+            chronicle::monsters::BindScripts(*unit);
 
             unit->requested_event = -1;
             unit->CleanViewMonstor(ura);

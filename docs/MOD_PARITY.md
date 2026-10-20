@@ -2095,3 +2095,26 @@ map-size difference remains the only difference from pinned upstream.
 
 Clang 23.1.2 Windows game/test builds pass. Full suite: 798 passed, 59
 skipped, 1 disabled. Other platforms remain unverified.
+
+
+### On-demand extra monster script arenas
+
+A common loading/transition binder preserves native sixteen-buffer binding.
+Explicit internal requests up to 256 allocate only the extra requested arenas
+through upstream SetDataBuffer/guarded arena storage, with native 1875-quad
+sizing and host headroom. Default binding neither constructs extra descriptors
+nor maps their backing storage. The arenas are shared across the active unit,
+like retail script buffers, and retain upstream clear/reuse semantics.
+All native and port loading/transition binding sites now use the helper.
+
+This does not activate additional monsters. Public population limits remain
+unchanged pending lifecycle, iteration and model-resource budget work. Tests
+verify every extra buffer through slot 255 is distinct and aligned, invalid
+requests publish nothing, retail binding preserves allocation count and
+existing cursors, and arena clear/rebinding resets extra cursors without
+changing active limits. Seven retail and two managed PAL replays pass.
+
+Clang 23.1.2 builds pass: 800 tests passed, 59 skipped, 1 disabled.
+All 29 Python checks pass. Both 3,840-case empty/disabled exports retain
+their hashes and match pinned upstream except map memory size. PS2 source
+is unchanged; other platforms remain unverified.
