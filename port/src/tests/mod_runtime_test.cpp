@@ -8,6 +8,10 @@
 #include "mods/api.hpp"
 #include "audio/mixer.hpp"
 #include "mod_audio_decode_fixture.hpp"
+#include "mods/retail_sound.hpp"
+#include "audio_retail_fixture.hpp"
+#include "data_fixture.hpp"
+#include "sound.hpp"
 #include "mods/native.hpp"
 #include "mods/runtime.hpp"
 #include "mods/save.hpp"
@@ -2311,4 +2315,48 @@ TEST_F(ModNativeV2, NativeAudioActionsRenderStopAndRollbackWithoutLuaPlayback) {
             EXPECT_EQ(render(), 0);
         }
     }
+}
+
+TEST_F(ModRuntime, RetailSoundMenuActionCommitsThroughNativeDriverWithCustomAudioLoaded) {
+    auto manifest = Manifest();
+    manifest["permissions"] = {"resources.read", "game.write"};
+    manifest["audio"] = {{"tone", "tone.flac"}};
+    Add(R"(assert(chronicle.action('se','Play effect','Play loaded retail effect',function()
+        assert(chronicle.call('audio.se_play',{se=1,volume=127}))
+    end)); return {})", manifest);
+    Write(root / "mods/test.mod/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    const auto hd = chronicle_audio::fixture::MakeHd({});
+    const auto bd = chronicle_audio::fixture::SquareVag(2);
+    const std::string list = "test_g.hd\n";
+    auto pack = datafix::MakePack({{"sound.txt", {list.begin(), list.end()}}, {"test_g.hd", hd}, {"test_g.bd", bd}});
+    CSound sound;
+    auto &mixer = audio::DefaultMixer();
+    sound.Step(); mixer.Reset();
+    char name[] = "sound.txt";
+    sound.LoadSoundFileFromPack(name, reinterpret_cast<unsigned int *>(pack.data()));
+    mixer.SetVolume(10, audio::kFullPortVolume);
+    const auto original = se_info[1];
+    struct Restore { SND_SE_INFO row; ~Restore() { se_info[1] = row; } } restore{original};
+    se_info[1] = {0, 0, 0, 10, -1}; // synthetic table fixture, never saved
+    int commits = 0;
+    const auto commit = [&](const auto &commands, int money, std::string &error) {
+        ++commits;
+        return mods::ApplyRetailEffect(commands, money, -1, -1, -1, error);
+    };
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "se", error));
+    EXPECT_EQ(commits, 0);
+    runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+    ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+    EXPECT_EQ(commits, 1); // custom AudioStreams must not intercept this domain
+    EXPECT_EQ(mixer.ActiveVoices(), 0);
+    sound.Step();
+    std::array<float, 8192> output{};
+    mixer.Render(output.data(), 4096);
+    EXPECT_GT(mixer.ActiveVoices(), 0);
+    EXPECT_TRUE(std::ranges::any_of(output, [](float sample) { return sample != 0; }));
+    sound.SE_Stop(10, 0, 0, 0); sound.Step(); mixer.Reset();
 }

@@ -1413,7 +1413,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         if (!world.playing || (impl_->observed && (world.mode != impl_->previous.mode || world.map != impl_->previous.map || world.dungeon != impl_->previous.dungeon || world.floor != impl_->previous.floor))) impl_->audio->StopVoices();
         impl_->audio->Retain(ActiveOwners());
         commit_game = [&](const auto &commands, int money, std::string &error) {
-            if (std::ranges::any_of(commands, [](const auto &command) { return command.operation.starts_with("audio."); })) {
+            if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.play" || command.operation == "audio.stop"; })) {
                 if (!world.playing) { error = "audio playback requires gameplay"; return false; }
                 return impl_->audio->Apply(commands, money, error);
             }

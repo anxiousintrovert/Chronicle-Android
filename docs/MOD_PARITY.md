@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 128 implemented operations, native plugins and author
+a real host-call boundary, 129 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -2961,3 +2961,26 @@ used: Windows places the test image above 4 GiB. Clang 23.1.2 builds pass; nine
 focused retail/monster audio tests pass and one disc-data test is skipped.
 PS2 diff is empty. Public API dispatch and shared-menu gameplay validation
 remain next; the public operation count stays 128.
+
+
+### Retail SE host operation (2026-10-20)
+
+The public audio.se_play operation adds Chronicle IDs 0..2799 and optional
+volume 0..127 behind game.write. It requires one owned SE command with no other
+engine writes or currency delta. The live game bridge requires stable town or
+dungeon gameplay, no transition and no pending sound/voice load. Bounded table
+lookup and loaded-bank/sample validation precede queue publication. The runtime
+custom-audio interceptor now handles only audio.play/stop, forwarding retail SE
+to the game bridge even when the same package has custom audio.
+
+The shared-menu runtime test uses a synthetic retail sound pack and detached
+table fixture, proves one commit reaches the retail bridge with custom audio
+loaded, no voice starts before native Step, and PCM renders afterward. This is
+not a PAL gameplay/device listening replay; that live readiness-path validation
+is still outstanding. BGM play/stop and music replacement remain unimplemented.
+Public operation count is 129.
+
+Clang 23.1.2 builds passed; 868 native tests passed, 92 skipped and one
+disabled; 38 Python checks passed. Fresh 3840-case empty/disabled comparisons
+against pinned upstream 50eaff63 again show only map allocation size differences,
+not a non-size generation difference. PS2 is unchanged.

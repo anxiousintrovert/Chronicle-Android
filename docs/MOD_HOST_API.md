@@ -1940,3 +1940,31 @@ This supports custom sound playback. Retail SE/BGM control, owned sequence music
 replacement, device listening tests and broader platform
 validation remain separate work. Existing retail playback is unchanged when no
 mod requests audio.
+
+### Retail sound effects
+
+`audio.se_play {se, volume?}` requires `game.write`. `se` is an integer
+0..2799; `volume`, when present, is an integer 0..127. The operation uses the
+currently selected native sound tables and loaded banks. Out-of-table IDs,
+terminators, unused rows and unavailable samples reject instead of reporting a
+successful silent no-op. It does not load sound banks on demand.
+
+Use it as the sole engine write in a shared-menu action or gameplay callback,
+with no currency change. It commits only after the callback succeeds, then the
+normal sound-driver `Step` dispatches it. The live adapter rejects transitions,
+events/menus and pending sound/voice-bank loads.
+
+```lua
+assert(chronicle.action('effect', 'Play effect', 'Play a loaded retail sound', function()
+  assert(chronicle.call('audio.se_play', {se=1}))
+end))
+```
+
+Sound IDs depend on the current native tables; the example ID is not guaranteed
+to be available in every scene. Omitted volume uses the native default table.
+As in native `SndSePlay`, a row without a volume mapping forces full volume even
+if an explicit volume was given. Native voice zero is used and may replace the
+same existing effect. Retail sounds have no custom voice handle, and
+`audio.stop` applies only to custom audio. The game controls retail effect
+lifetimes; this operation does not add persistent gameplay changes or install
+any sound modification by default.

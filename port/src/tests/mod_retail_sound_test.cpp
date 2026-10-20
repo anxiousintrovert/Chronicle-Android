@@ -92,3 +92,14 @@ TEST(ModRetailSound, ExplicitDispatchWaitsForNativeStepAndRejectsMissingProgram)
     EXPECT_EQ(mixer.ActiveVoices(), 0);
     mixer.Reset();
 }
+
+TEST(ModRetailSound, HostValidationRejectsMixedWritesAndInvalidValuesBeforeDispatch) {
+    std::string error;
+    for (const auto &args : {nlohmann::json{{"se", 2800}}, nlohmann::json{{"se", -1}}, nlohmann::json{{"se", 1.5}}, nlohmann::json{{"se", 0}, {"volume", 128}}, nlohmann::json{{"se", 0}, {"owner", "other"}}})
+        EXPECT_FALSE(mods::ValidateRetailEffect(args).empty());
+    EXPECT_TRUE(mods::ValidateRetailEffect({{"se", 0}, {"volume", 0}}).empty());
+    const mods::GameCommand command{"audio.se_play", {{"se", 0}}, "test"};
+    EXPECT_FALSE(mods::ApplyRetailEffect({command, command}, 0, -1, -1, -1, error));
+    EXPECT_FALSE(mods::ApplyRetailEffect({command}, 1, -1, -1, -1, error));
+    EXPECT_FALSE(mods::ApplyRetailEffect({{"audio.se_play", {{"se", 0}}, ""}}, 0, -1, -1, -1, error));
+}

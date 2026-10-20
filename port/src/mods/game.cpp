@@ -37,6 +37,9 @@
 #include "world_transition.hpp"
 #include "back_floor.hpp"
 #include "snd.hpp"
+#include "retail_sound.hpp"
+extern int basic_se_table_no, se_table_no, now_voice_set, load_snd_set, load_voice_set;
+extern s32 NextMapNo, existFlag;
 extern s32 mode;
 extern s32 gameTask;
 
@@ -301,6 +304,12 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.se_play"; })) {
+            if (!ShopWritesReady() || NextMapNo >= 0 || existFlag || load_snd_set >= 0 || load_voice_set >= 0) {
+                error = "retail sound requires stable gameplay and loaded sound banks"; return false;
+            }
+            return ApplyRetailEffect(commands, money, basic_se_table_no, se_table_no, now_voice_set, error);
+        }
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "dungeon.lighting_set" || command.operation == "dungeon.lighting_reset"; })) return ApplyDungeonLighting(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "render.camera_set" || command.operation == "render.camera_reset"; })) return ApplyDungeonCamera(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "georama.place" || command.operation == "georama.remove"; })) return ApplyGeoramaPlacement(commands, money, error);

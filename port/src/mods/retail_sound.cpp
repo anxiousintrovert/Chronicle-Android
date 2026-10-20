@@ -157,3 +157,26 @@ bool RetailEffectHasSamples(const audio::Bank *bank, int program, int effect) {
     return false;
 }
 }
+
+namespace mods {
+std::string ValidateRetailEffect(const nlohmann::json &a) {
+    if (!a.is_object() || !a.contains("se")) return "audio.se_play requires a retail se ID";
+    for (const auto &[key, value] : a.items()) {
+        if (key != "se" && key != "volume") return "unknown audio.se_play argument";
+        const auto limit = key == "se" ? 2799 : 127;
+        if (!value.is_number_integer() || value.get<double>() < 0 || value.get<double>() > limit)
+            return "se must be an integer 0..2799 and volume an integer 0..127";
+    }
+    return {};
+}
+bool ApplyRetailEffect(const std::vector<GameCommand> &commands, int money, int basic, int chapter, int voice, std::string &error) {
+    if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.se_play") {
+        error = "retail sound requires one owned SE command and no other engine writes"; return false;
+    }
+    const auto &a = commands[0].arguments;
+    error = ValidateRetailEffect(a);
+    if (!error.empty()) return false;
+    const auto row = ResolveRetailEffect(a["se"].get<int>(), basic, chapter, voice, error);
+    return row && QueueRetailEffect(*row, a.value("volume", -1), error);
+}
+}
