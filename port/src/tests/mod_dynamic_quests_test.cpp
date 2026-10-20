@@ -323,6 +323,11 @@ TEST_F(ModDynamicQuestRuntime, ShippedContractStartsFromMenuAndRestoresWithoutRe
     EXPECT_FALSE(runtime.WantsEnemyDeaths());runtime.Tick(floor1,{},{},{},commit);
     EXPECT_TRUE(runtime.WantsEnemyDeaths());EXPECT_EQ(grants,0);
     runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","stop",error))<<error;
+    runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,0);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","start",error))<<error;
+    runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,0);
+    runtime.Tick(floor1,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,1);
     const auto partial=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(partial,error))<<error;
     runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(runtime.Quests()[0].progress,1);
     std::array<mods::EnemyDeath,1> death{{{16,0,2,0,10,20,5,true}}};
@@ -330,9 +335,13 @@ TEST_F(ModDynamicQuestRuntime, ShippedContractStartsFromMenuAndRestoresWithoutRe
     death[0].scripted=false;runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(runtime.Quests()[0].progress,2);
     runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(runtime.Quests()[0].progress,3);
     EXPECT_EQ(grants,1);EXPECT_EQ(save->GetDngStatus()->money,50);EXPECT_FALSE(runtime.WantsEnemyDeaths());
-    const auto completed=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(completed,error))<<error;
+    const auto completed=runtime.SaveState();auto legacy=Json::parse(completed);
+    legacy["required"]["example.dungeon-contract"]="1.0.0";
+    runtime.ResetState();ASSERT_TRUE(runtime.LoadState(legacy.dump(),error))<<error;
     runtime.Tick(floor2,{},{},{},commit);ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","start",error))<<error;
     runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(grants,1);EXPECT_EQ(save->GetDngStatus()->money,50);
+    ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","stop",error))<<error;
+    runtime.Tick(floor2,{},{},{},commit);EXPECT_EQ(grants,1);
     EXPECT_EQ(runtime.SaveState(),completed);EXPECT_TRUE(runtime.Diagnostics().empty());
 }
 

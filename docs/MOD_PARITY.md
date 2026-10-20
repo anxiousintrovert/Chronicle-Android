@@ -4298,3 +4298,16 @@ Clang 23.1.2 game/test builds passed. Full regression: 1,062 passed, 105
 skipped, one disabled; all 81 Python author-tool tests passed. No PS2 files or
 upstream renderer changes. Validation is automated runtime/native-plugin coverage,
 not a new retail quest playthrough.
+
+## Shared-menu quest cancellation example (2026-10-20)
+
+The Dungeon Contract starter is now version 1.1.0, with an explicit Abandon
+contract action and a direct state-preserving migration from 1.0.0. The action
+only abandons active/failed contracts; registered/completed contracts are no-ops.
+The author CLI's quest template inherits the shipped script and manifest.
+
+Clang runtime checks execute cancellation, restart, event progress and completion
+without replaying rewards. The shipped completed-save migration preserves its
+receipt. Shared-menu, disk-save and migration checks passed (10 tests), along
+with all 81 Python author-tool tests. No engine behavior or PS2 source changed;
+no new retail playthrough is claimed.

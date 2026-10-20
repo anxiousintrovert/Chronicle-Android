@@ -22,4 +22,12 @@ assert(chronicle.action("start", "Start contract",
         end
     end))
 
+assert(chronicle.action("stop", "Abandon contract",
+    "Discard unfinished progress. Start again later; completed contracts stay closed.", function()
+        local quest = register_contract()
+        if quest.status == "active" or quest.status == "failed" then
+            assert(chronicle.call("quests.abandon", {id = "contract"}))
+        end
+    end))
+
 return {on_game_enter = function() register_contract() end}

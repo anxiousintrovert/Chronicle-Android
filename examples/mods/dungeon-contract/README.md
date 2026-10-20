@@ -10,6 +10,14 @@ assets and does not create custom items, weapons or cutscenes.
 4. Defeat two enemies through normal gameplay. Scripted kills do not count.
 5. Both objectives must finish before the single 50 Gilda reward commits.
 
+Use Abandon contract on the shared Actions page to discard unfinished progress.
+Return to gameplay to apply it, then use Start contract to begin again from zero.
+Abandoning a completed or not-started contract is harmless and changes nothing.
+Cancellation does not refund costs or undo other world changes.
+
+Version 1.1.0 adds this action and declares a direct state-preserving migration
+from 1.0.0. Existing quest definitions, progress and reward receipts are unchanged.
+
 The order of objectives does not matter. Opening the quest page never advances
 progress. Repeating Start after completion is harmless and grants nothing.
 Loading on a floor does not count as entering it. Progress, the start flag and
