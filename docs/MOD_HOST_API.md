@@ -2212,3 +2212,81 @@ orientation, not an AI lock. The shared loaded model's stats, existing actors an
 subsequent untuned spawns are unchanged. These values become this actor's baseline
 for later owned stat overrides and restoration. No persistent gameplay tuning
 or custom content registration is installed.
+
+
+### Owned native damage rules
+
+Declare `combat.rules.v1`, `host.calls.v1`, and the required operations.
+`combat.rules_get {}` requires `game.read` and returns detached `outgoing` and
+`incoming` arrays, runtime `epoch`, and the simulation `frame` used by ramps.
+Entries include the runtime-assigned `owner`, definition, priority and random
+`draws` where applicable. Reads show committed rules; queued changes become
+visible on the next callback after successful commit.
+
+`combat.rule_set {direction, rule}` and `combat.rule_remove {direction, id}`
+require `game.write`. Direction is exactly `outgoing` or `incoming`. Rule IDs
+contain 1..64 ASCII letters, digits, dots, underscores or hyphens. Setting the
+same owner/direction/ID replaces that definition; removing an absent owned ID is
+idempotent. Another package's same local ID is independent. Rules are composed
+in ascending `(priority, owner, id)` order. Priority defaults to zero and must be
+an integer from -1000 to 1000. There are at most 32 rules per owner and 128 total
+**per direction**. All rules are removed when their owner stops or the runtime
+epoch changes; they are not serialized. Re-register them from gameplay callbacks
+after loading a save. Removing/replacing rules never rewrites native stat tables.
+
+A callback can atomically register/remove multiple rules in both directions.
+It cannot combine rule changes with other engine writes or currency grants:
+use a subsequent callback for those. Any validation, capacity or callback error
+leaves the committed definitions and random/ramp state unchanged. Repeating an
+identical definition preserves its random/ramp state; changing it resets that
+rule's state. Unknown fields and caller-supplied owner fields are rejected.
+
+The `rule` object accepts `id`, `operation`, optional `priority`, and:
+
+| Operation | Required fields and bounds |
+|---|---|
+| `add` | `value` from -1000000 to 1000000 |
+| `multiply` | `value` from 0 to 100 |
+| `set` | `value` from 0 to 1000000 |
+| `chance_multiply` | `value` from 0 to 100; `chance` from 0 to 100 percent; optional uint32 `seed` |
+| `random_multiply` | `min_value` and `max_value`, with 0 <= min <= max <= 100; optional uint32 `seed`; no `value` |
+| `ramp_multiply` | `value` maximum multiplier from 1 to 100; `rate_per_second` from 0 to 10; integer `reset_after_frames` from 1 to 36000 |
+
+Optional filters are integer `weapon_id` (0..1000000), `character_id` (0..5),
+`native_model_id` (0..166, outgoing only), and `target_hp_below_percent` (0..100,
+strictly below). All filters must match. Weapon means the attacker's equipped
+weapon for outgoing rules and the recipient's equipped weapon for incoming
+rules. Unknown identities do not match filters. Model IDs are the exact retail
+IDs reported by `entities.models`, not floor-local model indices. Incoming HP
+deductions do not identify an attacker model, so that filter is rejected there.
+These APIs do not define or reserve custom item, weapon or model registries.
+
+Outgoing rules run after native defense/element/block calculations, before
+integer rounding. Poison and the later native instant-kill handling retain their
+existing paths. Incoming rules affect negative `AddNowLife` deductions on the
+active save's status while in dungeon mode, including thirst and other native
+non-collision deductions. Healing is unaffected. Incoming HP filters use pending
+HP when interpolation is active. Changed incoming positive magnitudes round to
+the nearest integer and clamp to 1..32767. An explicit zero blocks the deduction
+without settling or starting HP interpolation.
+
+Rules only transform positive damage. After each applied rule the result clamps
+to 0..1000000; zero cannot be revived by a later rule. Random draws are deterministic
+per owner/ID/seed and never consume native RNG. Filter misses consume no draws.
+Ramps begin at 1, rise at the requested rate using 60 simulation ticks per second,
+and reset after an inactivity gap greater than `reset_after_frames` or backward
+time. No rules means the original damage passes through unchanged.
+
+```lua
+-- Run inside a gameplay callback, including an existing shared-manager action.
+assert(chronicle.call('combat.rule_set', {
+  direction='outgoing',
+  rule={id='boost', operation='multiply', value=1.25, character_id=0}
+}))
+-- In a later callback, inspect or remove the committed rule.
+local rules = assert(chronicle.call('combat.rules_get'))
+assert(chronicle.call('combat.rule_remove', {direction='outgoing', id='boost'}))
+```
+
+Native ABI 1/2 plugins use the same host operations, permission checks, ownership
+and transaction limits. No gameplay package is installed or enabled by this API.

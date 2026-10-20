@@ -7,6 +7,7 @@
 #include "api.hpp"
 #include "actor_runtime.hpp"
 #include "combat_damage.hpp"
+#include "combat_rules.hpp"
 #include "owned_actors.hpp"
 #include "atla.hpp"
 #include "character.hpp"
@@ -252,6 +253,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "combat.rules_get") return ReadCombatRules(OwnedCombatDamage(), Scripts().Epoch());
         if (operation == "entities.owned" || operation == "entities.spawn_check") return ReadActorOperation(operation, arguments);
         if (operation == "audio.bgm_state") return ReadRetailBgm();
         if (operation == "georama.placement_state") return ReadGeoramaPlacement();
@@ -312,6 +314,7 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto &c) { return IsCombatRuleWrite(c.operation); })) return ApplyCombatRules(OwnedCombatDamage(), commands, money, Scripts().Epoch(), error);
         if (std::ranges::any_of(commands, [](const auto &c) { return c.operation == "entities.spawn" || c.operation == "entities.despawn"; })) return ApplyActorCommands(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.bgm_stop" || command.operation == "audio.bgm_play" || command.operation == "audio.bgm_load"; })) {
             if (!ShopWritesReady() || NextMapNo >= 0 || existFlag) { error = "BGM control requires stable gameplay"; return false; }

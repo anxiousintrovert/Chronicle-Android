@@ -1,3 +1,4 @@
+#include "mods/combat_rules.hpp"
 #include <SDL3/SDL.h>
 #include <gtest/gtest.h>
 
@@ -44,6 +45,7 @@ extern CDungeonMap MainDungeonMap, UraDungeonMap;
 
 namespace {
 bool               queued = false, arrived = false;
+bool audit_combat = false, combat_probed = false;
 bool               expected_expanded = false, road_captured = false;
 int                expected_rooms = 6;
 int                expected_monsters = 5;
@@ -112,6 +114,25 @@ void BackPump() {
     WindowPollEvents();
     InputPoll();
     InputScriptApply(GameFrameCount());
+    if (audit_combat && queued && !combat_probed && UserStatus && NowMonstorUnit) {
+        const auto rules = mods::ReadCombatRules(mods::OwnedCombatDamage(), mods::Scripts().Epoch());
+        if (!rules["incoming"].empty() && !rules["outgoing"].empty()) {
+            const int character = UserStatus->cur_chara;
+            ASSERT_GE(character, 0); ASSERT_LT(character, 6);
+            const auto hp = UserStatus->hp[character], next = UserStatus->next_hp[character], step = UserStatus->life_step[character];
+            UserStatus->life_step[character] = 0;
+            EXPECT_GE(hp, 4);
+            UserStatus->AddNowLife(character, -4, 0);
+            EXPECT_EQ(UserStatus->hp[character], hp - 2);
+            UserStatus->hp[character] = hp; UserStatus->next_hp[character] = next; UserStatus->life_step[character] = step;
+            bool found = false;
+            for (unsigned i = 0; i < NowMonstorUnit->SlotLimit(); ++i) if (NowMonstorUnit->monster[i].state != -1) {
+                EXPECT_EQ(mods::ModifyOutgoingDamage(NowMonstorUnit, i, character, 10), 20);
+                found = true; break;
+            }
+            EXPECT_TRUE(found); combat_probed = true;
+        }
+    }
     if (audit_lighting_write && queued) {
         const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
         const auto values = saved.at("mods").at("audit.back").value("values", nlohmann::json::object());
@@ -348,7 +369,8 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false, bool actor_spawn = false, bool actor_fail = false, bool actor_leave = false, bool actor_tuning = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false, bool actor_spawn = false, bool actor_fail = false, bool actor_leave = false, bool actor_tuning = false, bool combat_rules = false) {
+    audit_combat = combat_rules; combat_probed = false;
     actor_spawn = actor_spawn || actor_fail || actor_leave || actor_tuning;
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
@@ -391,6 +413,40 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (combat_rules) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input(script_path); std::string source((std::istreambuf_iterator<char>(input)), {}); input.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local phase=chronicle.get('combat_phase') or 0
+ if phase==0 then
+  assert(chronicle.call('combat.rule_set',{direction='outgoing',rule={id='boost',operation='multiply',value=2}}))
+  assert(chronicle.call('combat.rule_set',{direction='incoming',rule={id='guard',operation='multiply',value=0.5}}))
+  chronicle.set('combat_phase',1)
+  return
+ elseif phase==1 then
+  local rules=assert(chronicle.call('combat.rules_get'))
+  assert(#rules.outgoing==1 and #rules.incoming==1)
+  assert(rules.outgoing[1].owner=='audit.back' and rules.incoming[1].value==0.5)
+  local hold=chronicle.get('combat_hold') or 0
+  if hold<3 then chronicle.set('combat_hold',hold+1); return end
+  assert(chronicle.call('combat.rule_remove',{direction='outgoing',id='boost'}))
+  assert(chronicle.call('combat.rule_remove',{direction='incoming',id='guard'}))
+  chronicle.set('combat_phase',2)
+  return
+ end
+ local rules=assert(chronicle.call('combat.rules_get'))
+ assert(#rules.outgoing==0 and #rules.incoming==0)
+ chronicle.set('combat_verified',true)
+)");
+        std::ofstream(script_path) << source;
+        const auto manifest_path = root / "mods/audit.back/mod.json";
+        std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
+        manifest["requires_capabilities"].push_back("combat.rules.v1");
+        for (const auto *op : {"combat.rule_set", "combat.rule_remove", "combat.rules_get"}) manifest["requires_operations"].push_back(op);
+        std::ofstream(manifest_path) << manifest.dump();
+    }
     if (actor_spawn) {
         const auto script_path = root / "mods/audit.back/main.lua";
         std::ifstream input(script_path); std::string source((std::istreambuf_iterator<char>(input)), {}); input.close();
@@ -850,6 +906,12 @@ end}
             EXPECT_EQ(mods::ReadEntities(NowMonstorUnit, "entities.get", {{"entity", entity}})["status"], "expired");
         }
     }
+    if (combat_rules) {
+        EXPECT_TRUE(combat_probed);
+        EXPECT_TRUE(mods::OwnedCombatDamage().Empty());
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("combat_verified"), true);
+    }
     if (actor_models) {
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("actor_models_verified"), true);
@@ -1002,3 +1064,5 @@ TEST(ModBackFloorRetail, ActorOwnerFailureCleansUpBeforeBackTransition) { RunBac
 TEST(ModBackFloorRetail, ActorLifetimeEndsAtNativeBackFloorReset) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
 
 TEST(ModBackFloorRetail, ActorSpawnTuningPreservesLoadedTemplateAndBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, CombatRulesThroughSharedActionRestoreBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }

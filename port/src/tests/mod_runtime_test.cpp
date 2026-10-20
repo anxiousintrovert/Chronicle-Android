@@ -6,6 +6,7 @@
 #include <fstream>
 
 #include "mods/api.hpp"
+#include "mods/combat_rules.hpp"
 #include "audio/mixer.hpp"
 #include "mod_audio_decode_fixture.hpp"
 #include "mods/retail_sound.hpp"
@@ -2400,4 +2401,28 @@ TEST_F(ModRuntime, FailedMusicActionDoesNotPublishReplacement) {
     Start(); runtime.Tick({1, 0, 0, true});
     EXPECT_FALSE(runtime.Diagnostics().empty());
     EXPECT_FALSE(runtime.BindMusic(0, "test_a.sq", {}));
+}
+
+TEST_F(ModRuntime, SharedCombatActionCommitsOwnedRulesAndCallbackFailurePublishesNothing) {
+    auto manifest=Manifest(); manifest["permissions"]={"game.read","game.write"};
+    manifest["requires_capabilities"]={"combat.rules.v1","menu.actions.v1"};
+    manifest["requires_operations"]={"combat.rule_set","combat.rule_remove","combat.rules_get"};
+    Add(R"(assert(chronicle.action('apply','Apply','Register damage rules',function()
+        assert(chronicle.call('combat.rule_set',{direction='outgoing',rule={id='boost',operation='multiply',value=2}}))
+        assert(chronicle.call('combat.rule_set',{direction='incoming',rule={id='guard',operation='multiply',value=0.5}}))
+    end))
+    assert(chronicle.action('fail','Fail','Do not publish failed callback',function()
+        assert(chronicle.call('combat.rule_set',{direction='outgoing',rule={id='boost',operation='multiply',value=7}}))
+        error('intentional combat callback failure')
+    end))
+    return {})",manifest);
+    Start(); runtime.Tick({1,0,0,true}); mods::CombatDamage state; std::string error; int commits=0;
+    auto commit=[&](const auto &commands,int money,std::string &failure) { ++commits; return mods::ApplyCombatRules(state,commands,money,runtime.Epoch(),failure); };
+    ASSERT_TRUE(runtime.QueueAction("test.mod","apply",error)) << error;
+    runtime.Tick({1,0,0,true},{},{},{},commit);
+    EXPECT_EQ(commits,1); EXPECT_EQ(state.outgoing.Apply(10,{}),20); EXPECT_EQ(state.incoming.Apply(10,{}),5);
+    EXPECT_EQ(state.outgoing.State()[0]["owner"],"test.mod");
+    ASSERT_TRUE(runtime.QueueAction("test.mod","fail",error)) << error;
+    runtime.Tick({1,0,0,true},{},{},{},commit);
+    EXPECT_EQ(commits,1); EXPECT_EQ(state.outgoing.Apply(10,{}),20);
 }

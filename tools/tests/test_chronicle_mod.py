@@ -29,6 +29,21 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_combat_rules_are_discoverable_and_permission_checked(self):
+        names = ['combat.rules_get', 'combat.rule_set', 'combat.rule_remove']
+        operations = {entry['name']: entry for entry in tool.apis()}
+        self.assertFalse(operations[names[0]]['writes'])
+        self.assertTrue(operations[names[1]]['writes'])
+        folder = self.package('test.combat', requires_capabilities=['combat.rules.v1'],
+                              requires_operations=names, permissions=['game.read', 'game.write'])
+        self.assertEqual(tool.validate(folder)['requires_operations'], names)
+        manifest = folder / 'mod.json'
+        data = json.loads(manifest.read_text())
+        data['permissions'] = ['game.read']
+        manifest.write_text(json.dumps(data))
+        with self.assertRaises(ValueError):
+            tool.validate(folder)
+
     def test_starter_is_disabled_and_archive_contains_only_declared_files(self):
         folder = self.package('test.one')
         self.assertNotIn('enabled', tool.validate(folder))

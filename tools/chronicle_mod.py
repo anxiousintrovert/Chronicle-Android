@@ -12,7 +12,7 @@ import uuid
 import zipfile
 
 CAPABILITIES = {
-    "entities.spawn_tuning.v1",
+    "combat.rules.v1", "entities.spawn_tuning.v1",
     "assets.replace.v1", "scripts.lua.v1", "quests.progress.v1", "save.metadata.v1",
     "economy.write.v1", "events.map.v1", "events.tick.v1", "player.read.v1",
     "party.read.v1", "inventory.read.v1", "resources.read.v1", "logging.v1", "host.calls.v1", "plugins.native.v1", "plugins.native.v2", "events.custom.v1", "events.lifecycle.v1", "events.enemy_killed.v1", "services.native.v1", "services.command.v1", "services.query.v1", "menu.actions.v1", "menu.native.v1",

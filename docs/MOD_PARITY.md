@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 140 implemented operations, native plugins and author
+a real host-call boundary, 143 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup | Deterministic damage modifiers and broader actor lifecycle/platform scenarios |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -3527,3 +3527,33 @@ Public operation count remains 140: package registration/inspection APIs and
 transactional publication are the next step. No package can register these rules
 yet, so the newly wired registries remain dormant in ordinary gameplay. This
 is progress toward combat coverage, not a claim of completed capability parity.
+
+
+## Public owned combat rules (2026-10-20)
+
+combat.rules.v1 now exposes combat.rules_get, combat.rule_set and
+combat.rule_remove through the shared Lua/native host boundary. The catalog has
+143 operations. Author discovery checks the capability, required operations and
+read/write permissions. Definitions are strict and direction-scoped; incoming
+rules reject an unavailable attacker-model selector. No custom item, weapon,
+cutscene or model registry is defined or reserved.
+
+Rule-only callbacks stage both registries and publish atomically after complete
+validation. Capacity failure, invalid fields, mixed engine writes or currency
+changes reject the batch without altering live rules or random/ramp history.
+Runtime-assigned owners cannot remove another package's same local ID. Stale
+epoch reads expose no old rules, and first publication in a new epoch replaces
+old state. Documentation covers all six formulas, filters, ordering, limits,
+deterministic randomness, simulation ramps, interpolation and unload semantics.
+
+Validation: Clang 23.1.2 game/test builds, 22 focused native/API/Lua-action tests,
+full CTest (927 passed, 104 skipped, one disabled benchmark), and 41 Python checks
+passed. An isolated PAL shared-manager action registered both directions, read
+committed ownership, applied a native AddNowLife deduction and an outgoing
+adapter probe against a real loaded dungeon actor, removed both rules, and
+completed native back-floor travel. Evidence: combat-api-7006e0d274b848d785a8c13a2e33fc34/report.json
+under the external expansion evidence directory. The smoke runner now has 44
+scenarios, including the combat suite. This replay does not synthesize a full
+native collision hit or cover every weapon/character/platform. PS2 is unchanged;
+no gameplay mod is installed or enabled by default. Remaining ledger work stays
+open.

@@ -1,4 +1,5 @@
 #include "api.hpp"
+#include "combat_rules.hpp"
 #include "atla.hpp"
 
 #include <algorithm>
@@ -35,6 +36,9 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"combat.rules_get", "game.read", "Inspect ordered owned incoming and outgoing damage rules.", false},
+    {"combat.rule_set", "game.write", "Register or replace an owned native damage rule.", true},
+    {"combat.rule_remove", "game.write", "Remove this package's named native damage rule.", true},
     {"dungeon.layout_get", "game.read", "Read future-floor layout ownership and last build result.", false},
     {"dungeon.layout_set", "game.write", "Own procedural dimensions for future dungeon floor loads.", true},
     {"dungeon.layout_reset", "game.write", "Release owned future-floor dimensions without rebuilding the live floor.", true},
@@ -290,6 +294,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (!FindOperation(name)) {
         return "unsupported host operation";
     }
+    if (name == "combat.rules_get" || IsCombatRuleWrite(name)) return ValidateCombatRule(name, a);
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "items.quick_slots" || name == "items.quick_slot_select" || name == "items.quick_slot_use") return ValidateQuickItems(name, a);
