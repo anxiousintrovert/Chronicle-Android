@@ -2290,3 +2290,10 @@ assert(chronicle.call('combat.rule_remove', {direction='outgoing', id='boost'}))
 
 Native ABI 1/2 plugins use the same host operations, permission checks, ownership
 and transaction limits. No gameplay package is installed or enabled by this API.
+
+
+### Mesh preparation tooling
+
+The offline [mesh authoring format](MOD_MESH_FORMAT.md) documents OBJ conversion,
+structural validation and inspection with `tools/chronicle_mesh.py`. This is an
+authoring intermediate; runtime mesh replacement is not yet implemented.

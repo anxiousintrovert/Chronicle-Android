@@ -24,7 +24,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
-| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
+| Author tooling | Bounded offline OBJ conversion/mesh inspection (runtime import pending); new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
@@ -3557,3 +3557,28 @@ scenarios, including the combat suite. This replay does not synthesize a full
 native collision hit or cover every weapon/character/platform. PS2 is unchanged;
 no gameplay mod is installed or enabled by default. Remaining ledger work stays
 open.
+
+
+## Mesh authoring preparation (2026-10-20)
+
+The pinned reference's MODEL_REPLACEMENTS.md and model_replacer.py cover mesh
+import in addition to native assets. Chronicle's existing port visual upload
+boundary is in port/src/visualvu1.cpp; extending it does not require a private
+Kazarov fork or PS2 edits. Integration is still pending.
+
+Added tools/chronicle_mesh.py and MOD_MESH_FORMAT.md: bounded UTF-8 OBJ to
+geometry-schema-1 conversion, strict structural inspection, numbered native
+material strips, negative indices, seam-preserving deduplication, normalized or
+flat normals, winding retention and bounds reporting. No external material file
+is read. Invalid geometry, non-triangle primitives, unknown fields, duplicate
+JSON keys, nonfinite values, bad indices and size/count overflows are rejected.
+Publication is exclusive and atomic via a completed temporary file and hard link;
+existing files and PS2 paths are protected. Eight focused author-tool tests and
+all 49 Python tests pass. No native source or compiler configuration changed.
+
+This is an offline authoring intermediate, not a working runtime mesh importer.
+No capability or successful engine operation was added. Runtime target matching,
+conflict handling, renderer integration, skinning, GLB/DAE and retail visual
+validation remain outstanding. Native integration must keep using documented
+Clang and the upstream renderer, with dormant behavior when no replacement is
+requested. Contributor cutscene/item/weapon registries remain untouched.
