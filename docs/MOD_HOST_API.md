@@ -21,6 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `weapons.equip_state` | none | `game.read` | Town loadout readiness/reason and saved equipped slots for joined characters |
+| `weapons.equip` | `slot`, optional `character` | `game.write` | Select an owned retail weapon slot while walking outdoors in town |
 | `player.combat_state` | none | `game.read` | Native dungeon-player readiness, invincibility/recoil timers and action gauge |
 | `player.invincible` | `frames` | `game.write` | Extend the native one-shot invincibility timer to at least 1–600 frames |
 | `player.tuning_state` | none | `game.read` | Effective dungeon tuning and owners per control |
@@ -182,6 +184,34 @@ Goro's unavailable motion 32 uses idle for the corresponding town motion.
 Retail tests exercise all six bodies through a shared-manager action, runtime
 shutdown/restoration and native map-transition retirement. Full movement,
 conversation, interior and cross-platform coverage remains outstanding.
+
+### Town weapon loadouts
+
+`weapons.equip` takes `slot` (integer 0–10) and optional `character` (integer 0–5,
+defaulting to the saved active dungeon character). The character must have joined;
+the exact slot must contain a compatible native weapon. Duplicate copies are
+unambiguous because the slot is mandatory. Empty/incompatible slots, invalid
+existing equipped indices and malformed native weapon records fail validation.
+Selecting the already equipped slot leaves the save unchanged.
+
+`weapons.equip_state` returns `ready`, `reason` and `slots`, an array of saved
+`{character, slot, item}` entries. Those entries describe the save even when the
+scene cannot accept an equip request. Readiness requires a loaded retail town,
+outdoor walking, no menu/event/interior, and valid party state. It uses the current
+native mode and map, not potentially stale dungeon-floor fields in the save.
+
+The operation changes the saved loadout transactionally. Earlier writes in the
+same callback are visible, so granting and equipping a known free slot can be one
+batch. A later failure rolls back the slot change along with currency and other
+save writes. It does not transfer weapons between characters, grant unowned
+weapons, reset weapon stats or request a resource reload while walking in town.
+The normal dungeon-entry loader uses the selected slot for the model/effects.
+The selection persists as an ordinary save change after the mod is disabled.
+
+Dungeon equipping is explicitly rejected, as in the pinned reference. Live
+model/effect switching remains separate work. Offer the command using an existing
+shared-manager action and wait for `weapons.equip_state.ready` after the menu
+closes. No loadout gameplay mod is installed or enabled by the framework.
 
 ### One-shot player protection
 

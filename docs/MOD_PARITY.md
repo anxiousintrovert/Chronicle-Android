@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 88 implemented operations, native plugins and author
+a real host-call boundary, 90 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
@@ -1046,3 +1046,47 @@ Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
 optional PAL host-call/countdown scenario passed separately. All 18 Python
 checks passed, and all 3,840 empty/disabled generator cases match pinned upstream.
 No PS2 files changed.
+
+## Transactional town weapon loadouts (2026-10-19)
+
+The pinned reference's `weapons.equip` changes the saved loadout only in town;
+it explicitly rejects dungeon equipping. Our `weapons.equip` now covers that
+capability with required slot selection (0–10) and optional numeric character
+(0–5), validating joined membership, native weapon ownership and the existing
+equipped index. `weapons.equip_state` reports scene readiness/reason and saved
+slots. Catalog count is 90. Live dungeon equipping remains separate unfinished
+resource-loading work, along with the other weapon/content integration gaps.
+
+The native bridge supplies an explicit town context to detached save staging.
+Ordinary status-only writes and dungeon equipment contexts cannot use it. No
+model/cache reload occurs in town; normal dungeon entry reads the selected slot.
+Requests share transaction ordering and rollback with other save/domain writes;
+a grant followed by equip can see the newly staged weapon. Same-slot selection
+preserves every save byte. No change occurs unless a mod requests this write.
+
+Retail validation found that a fresh Norune save retains cur_georama=-1, so
+using saved dungeon fields as a town-readiness gate prevented the request. The
+adapter instead checks current native mode/map, walking, events/interiors,
+loaded town resources and valid party state. It does not rewrite those stale or
+uninitialized dungeon fields. This also keeps current-scene readiness separate
+from saved equipment data.
+
+Six Clang tests cover schema, all six characters, duplicate copies, slot 10,
+whole-save/RNG preservation, unsupported contexts, live dungeon rejection,
+empty/incompatible/unjoined selections, invalid native indices, mixed-write
+rollback and grant/equip ordering. A fresh PAL run grants a Bone Rapier through
+Lua, selects its exact owned slot via a shared-manager action, queues the native
+town-to-dungeon transition, and verifies synchronized selected-slot/weapon state
+and a loaded weapon frame. The native loader log records `[290] c01w33.chr`.
+The test uses ordinary native loading, with no custom weapon or content registry.
+
+This covers one real model-loading transition, not every weapon/effect variant,
+all six members in retail play, battle-menu behavior or other platforms. Existing
+unsupported native event logs remain in the retail run. Contributor-owned custom
+item/weapon/cutscene registration contracts remain untouched.
+
+Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
+761 registered, 743 passed, 17 skipped and one disabled, with no failures. The
+optional PAL town-to-dungeon test passed separately. All 18 Python checks and
+all 3,840 empty/disabled seed comparisons passed. CLI discovery lists both new
+operations. PS2 files remain unchanged.

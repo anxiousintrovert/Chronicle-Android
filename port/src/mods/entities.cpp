@@ -103,7 +103,7 @@ bool IsEntityWrite(std::string_view operation) {
 }
 
 bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<GameCommand> &commands,
-                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool shops_writable) {
+                        int money, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool shops_writable, bool town_loadout) {
     if (effects) {
         *effects = {};
     }
@@ -131,7 +131,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
     }
     const auto &batch = has_shops || has_tuning || has_player ? filtered : commands;
     if (!std::ranges::any_of(batch, [](const auto &command) { return IsEntityWrite(command.operation); })) {
-        if (!ApplySave(save, batch, money, error, effects, georama, equipment)) {
+        if (!ApplySave(save, batch, money, error, effects, georama, equipment, town_loadout)) {
             return false;
         }
         shops.Commit();
@@ -152,7 +152,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
             save_commands.push_back(command);
         }
     }
-    if (!ApplySave(save, save_commands, money, error, effects, georama, equipment)) {
+    if (!ApplySave(save, save_commands, money, error, effects, georama, equipment, town_loadout)) {
         return false;
     }
     entities.Commit();

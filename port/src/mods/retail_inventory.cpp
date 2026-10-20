@@ -250,7 +250,7 @@ void Synthesize(CUserStatus &s, const Json &a) {
 
 bool Handles(std::string_view op) {
     return op == "inventory.count" || op == "inventory.give" || op == "inventory.remove" ||
-           op == "weapons.give" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
+           op == "weapons.give" || op == "weapons.equip" || op == "weapons.abs_get" || op == "weapons.abs_add" ||
            op == "weapons.attachment_set" || op == "weapons.attachment_remove" || op == "weapons.attachments_get" || op == "items.native_definition" ||
            op == "attachments.list" || op == "attachments.give" || op == "attachments.remove" ||
            op == "weapons.build_up_list" || op == "weapons.build_up" || op == "weapons.upgrade" || op == "weapons.synthesize";
@@ -561,7 +561,22 @@ void Upgrade(CUserStatus &s, const Json &a, bool equipped) {
 }
 } // namespace
 
+void Equip(CUserStatus &s, const Json &a) {
+    if (s.party_size < 1 || s.party_size > 6) {
+        throw std::runtime_error("invalid native party size");
+    }
+    const int character = Character(s, a);
+    Owned(s, a);
+    if (s.equipped_weapon_slot[character] < 0 || s.equipped_weapon_slot[character] > 10) {
+        throw std::runtime_error("saved equipped weapon slot is invalid");
+    }
+    s.equipped_weapon_slot[character] = static_cast<s8>(a.at("slot").get<int>());
+}
+
 void Apply(CUserStatus &s, std::string_view op, const Json &a, bool equipped) {
+    if (op == "weapons.equip") {
+        throw std::runtime_error("equipping requires a ready town loadout context through the save host");
+    }
     if (op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
         MoveAttachment(s, op, a, equipped);
         return;

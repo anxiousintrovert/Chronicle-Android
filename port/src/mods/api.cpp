@@ -22,6 +22,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"weapons.equip", "game.write", "Select an owned retail weapon slot for the saved town loadout.", true},
+    {"weapons.equip_state", "game.read", "Read town loadout readiness and equipped slots.", false},
     {"player.combat_state", "game.read", "Read current dungeon player timers, action gauge and readiness.", false},
     {"player.invincible", "game.write", "Grant one-shot native invincibility without shortening an existing timer.", true},
     {"player.tuning_state", "game.read", "Inspect effective dungeon player tuning and per-field owners.", false},
@@ -225,6 +227,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (!FindOperation(name)) {
         return "unsupported host operation";
     }
+    if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
@@ -701,7 +704,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     return ReadStatus(*save.GetDngStatus(), world, op, a);
 }
 
-bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment) {
+bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool town_loadout) {
     if (effects) {
         *effects = {};
     }
@@ -736,7 +739,12 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 error = "query cannot be committed";
                 return false;
             }
-            if (op == "weapons.build_up") {
+            if (op == "weapons.equip") {
+                if (!town_loadout || equipment) {
+                    throw std::runtime_error("equipping requires a ready town loadout context; dungeon resource switching is unavailable");
+                }
+                retail::Equip(*staged->GetDngStatus(), a);
+            } else if (op == "weapons.build_up") {
                 retail::BuildUp(*staged, a, equipment != nullptr);
             } else if (op == "weapons.upgrade" || op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
                 retail::Apply(*staged->GetDngStatus(), op, a, equipment != nullptr);

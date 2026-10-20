@@ -24,6 +24,7 @@
 #include "town.hpp"
 #include "player_tuning_native.hpp"
 #include "player_combat.hpp"
+#include "weapon_loadout.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -224,6 +225,7 @@ void TickGame() {
             result["writable"] = ShopWritesReady();
             return result;
         }
+        if (operation == "weapons.equip_state") return ReadWeaponEquipState();
         if (operation == "player.combat_state") return ReadPlayerCombat();
         if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
         if (operation == "party.town_state") return ReadTownSelection();
@@ -279,9 +281,10 @@ void TickGame() {
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation.starts_with("weapons."); })) {
             equipment = CurrentEquipment();
         }
+        const bool town_loadout = std::ranges::any_of(commands, [](const auto &command) { return command.operation == "weapons.equip"; }) && TownLoadoutReady();
         CommitEffects effects;
         if (!ApplyEntityAndSave(*SaveData, mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr,
-                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr, ShopWritesReady())) { return false; }
+                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr, ShopWritesReady(), town_loadout)) { return false; }
         if (georama){ georama->Commit();
 }
         if (effects.refresh_weapon) {
