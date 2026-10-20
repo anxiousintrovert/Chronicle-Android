@@ -4294,7 +4294,7 @@ Tests cover owner/type/lifecycle restrictions, objective/failure cleanup, saved
 registered state, event-demand cleanup, callback rollback and native ABI 2 calls.
 Broader branching/stage lifecycle remains planned rather than implied complete.
 
-Clang 23.1.2 game/test builds passed. Full regression: 1,060 passed, 107
+Clang 23.1.2 game/test builds passed. Full regression: 1,062 passed, 105
 skipped, one disabled; all 81 Python author-tool tests passed. No PS2 files or
 upstream renderer changes. Validation is automated runtime/native-plugin coverage,
 not a new retail quest playthrough.
