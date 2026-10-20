@@ -2062,3 +2062,15 @@ Clang 23.1.2 game/test builds pass: 797 passed, 59 skipped, one disabled.
 All 29 Python checks pass. Empty/disabled 3,840-case seed exports retain
 their hashes and differ from pinned upstream only in map memory size.
 PS2 source remains unchanged; other platforms remain unverified.
+
+
+### Monster capacity contract groundwork
+
+Framework handles, transactional actor values, owned stats/scales, death
+bounds and the two-unit reaction queue now share one slot-capacity constant.
+Compile-time checks require all thirteen native per-monster arrays to match
+it. Per-monster sound/collision dimensions are separate and unchanged.
+Capacity is still sixteen: native allocation, lifecycle and active iteration
+must be extended together before larger populations can be exposed.
+Clang 23.1.2 game/test builds pass, all 44 affected entity/combat/physics
+tests pass, and all 29 Python checks pass. No PS2 files changed.

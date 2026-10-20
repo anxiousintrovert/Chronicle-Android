@@ -7,6 +7,7 @@
 #include "dun/gameloop.hpp"
 #include "entity_events.hpp"
 #include "monstorunit.hpp"
+#include "chronicle/monster_limits.hpp"
 
 namespace mods {
 namespace {
@@ -16,7 +17,7 @@ struct Reaction {
     int           result = MONSTER_DMG_NONE;
 };
 
-std::array<Reaction, 32> pending;
+std::array<Reaction, 2 * chronicle::monsters::SlotCapacity> pending;
 unsigned                 count = 0;
 } // namespace
 
@@ -30,11 +31,11 @@ bool CanQueueEntityReactions(CMonstorUnit *unit) {
             ++available;
         }
     }
-    return available >= 16;
+    return available >= chronicle::monsters::SlotCapacity;
 }
 
 void QueueEntityReaction(CMonstorUnit *unit, unsigned slot, int result) noexcept {
-    assert(unit && slot < 16 && (result == MONSTER_DMG_HIT || result == MONSTER_DMG_KILLED));
+    assert(unit && slot < chronicle::monsters::SlotCapacity && (result == MONSTER_DMG_HIT || result == MONSTER_DMG_KILLED));
     for (auto &entry : pending) {
         if (entry.unit == unit && entry.slot == slot) {
             if (result == MONSTER_DMG_KILLED) {
@@ -82,7 +83,7 @@ void ClearEntityReactions(CMonstorUnit *unit, int slot) noexcept {
 }
 
 int ConsumeEntityDamage(CMonstorUnit *unit, int slot) noexcept {
-    if (!count || !unit || slot < 0 || slot >= 16) {
+    if (!count || !unit || slot < 0 || static_cast<unsigned>(slot) >= chronicle::monsters::SlotCapacity) {
         return MONSTER_DMG_NONE;
     }
     const int result = TakeEntityReaction(unit, static_cast<unsigned>(slot));

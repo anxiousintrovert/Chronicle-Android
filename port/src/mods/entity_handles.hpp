@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include "chronicle/monster_limits.hpp"
 
 namespace mods {
 // Session-local identities for the retail monster slots. This registry is dormant
@@ -11,7 +12,7 @@ namespace mods {
 // native slot construction and floor clear before handles may be exposed.
 class EntityHandles {
 public:
-    static constexpr unsigned Capacity = 16;
+    static constexpr unsigned Capacity = chronicle::monsters::SlotCapacity;
     using Handle = std::uint64_t;
 
     void Activate() { active_ = true; }

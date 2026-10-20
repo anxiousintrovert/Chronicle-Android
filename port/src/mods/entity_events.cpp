@@ -16,7 +16,7 @@ void CaptureEnemyDeath(CMonstorUnit *unit, int slot, bool scripted) {
     if (!deaths.Enabled()) {
         return;
     }
-    if (!unit || slot < 0 || slot >= 16 || !UserStatus || UserStatus->cur_georama < 0 ||
+    if (!unit || slot < 0 || static_cast<unsigned>(slot) >= EntityHandles::Capacity || !UserStatus || UserStatus->cur_georama < 0 ||
         UserStatus->cur_georama >= 6 || UserStatus->cur_floor < 0 || UserStatus->cur_floor >= 100) {
         return;
     }

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "owned_stat.hpp"
+#include "chronicle/monster_limits.hpp"
 
 class CMonstorUnit;
 struct MONSTOR;
@@ -14,7 +15,7 @@ namespace mods {
 // owned independently by different packages. No native layout is extended.
 using EnemyStatValues = std::array<int, 6>;
 using EnemyStatClaims = std::array<OwnedStat, 6>;
-using EnemyStatOwners = std::map<CMonstorUnit *, std::array<EnemyStatClaims, 16>>;
+using EnemyStatOwners = std::map<CMonstorUnit *, std::array<EnemyStatClaims, chronicle::monsters::SlotCapacity>>;
 inline constexpr std::array<std::string_view, 6> EnemyStatNames{
     "hp", "max_hp", "defense", "reward_exp", "reward_money", "drop_item"};
 EnemyStatValues  ReadEnemyStats(const MONSTOR &actor);

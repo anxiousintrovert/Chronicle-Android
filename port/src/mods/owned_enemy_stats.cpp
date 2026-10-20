@@ -52,7 +52,7 @@ void ReleaseEnemyStats(EnemyStatClaims &c, EnemyStatValues &v, std::string_view 
 }
 
 namespace {
-bool Empty(const std::array<EnemyStatClaims, 16> &slots) {
+bool Empty(const EnemyStatOwners::mapped_type &slots) {
     for (const auto &claims : slots) {
         for (const auto &claim : claims) {
             if (!claim.owner.empty()) {

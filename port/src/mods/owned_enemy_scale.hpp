@@ -4,6 +4,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include "chronicle/monster_limits.hpp"
 
 class CCharacter;
 class CMonstorUnit;
@@ -18,7 +19,7 @@ struct OwnedEnemyScale {
     bool        Release(std::string_view caller, EnemyScale &current);
 };
 
-using EnemyScaleOwners = std::map<CMonstorUnit *, std::array<OwnedEnemyScale, 16>>;
+using EnemyScaleOwners = std::map<CMonstorUnit *, std::array<OwnedEnemyScale, chronicle::monsters::SlotCapacity>>;
 EnemyScale        ReadEnemyScale(const CCharacter &character);
 void              WriteEnemyScale(CCharacter &character, const EnemyScale &scale) noexcept;
 EnemyScaleOwners &OwnedEnemyScales();

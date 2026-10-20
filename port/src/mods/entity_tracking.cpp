@@ -5,9 +5,25 @@
 #include "monstorunit.hpp"
 #include "owned_enemy_scale.hpp"
 #include "owned_enemy_stats.hpp"
+#include <type_traits>
 
 namespace mods {
 namespace {
+// Fail compilation if native storage and framework indexing drift apart.
+// Inner per-monster collision/sound dimensions are deliberately independent.
+static_assert(std::extent_v<decltype(CMonstorUnit::monster)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::script)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::script_state)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::chara)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::interpreter)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect2)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect3)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::sound)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event2)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::guard)> == EntityHandles::Capacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event_flags)> == EntityHandles::Capacity);
 EntityHandles handles;
 CMonstorUnit *tracked = nullptr;
 } // namespace

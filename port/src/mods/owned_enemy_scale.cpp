@@ -74,7 +74,7 @@ EnemyScaleOwners &OwnedEnemyScales() {
 }
 
 namespace {
-bool Empty(const std::array<OwnedEnemyScale, 16> &slots) {
+bool Empty(const EnemyScaleOwners::mapped_type &slots) {
     return std::ranges::all_of(slots, [](const auto &record) { return record.owner.empty(); });
 }
 

@@ -44,7 +44,7 @@ private:
     };
 
     CMonstorUnit                   *unit_ = nullptr;
-    std::array<Values, 16>          values_{};
+    std::array<Values, chronicle::monsters::SlotCapacity> values_{};
     std::optional<EnemyStatOwners>  owners_;
     std::optional<EnemyScaleOwners> scales_;
 };
