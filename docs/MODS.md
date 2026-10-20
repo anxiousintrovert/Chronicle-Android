@@ -177,10 +177,13 @@ State keys use lowercase ASCII letters, digits, dots and underscores, at most
 package may define 64 quests with goals from 1 to 1,000,000. Omit `map` for a
 script-managed objective. IDs are local to their package. Quest titles and
 descriptions appear in the manager; there is not yet a separate native journal
-tab. Capabilities currently implemented are `assets.replace.v1`, `scripts.lua.v1`,
-`quests.progress.v1`, `save.metadata.v1`, `economy.write.v1`, `events.map.v1`, and
-`events.tick.v1`. Unknown required capabilities block the whole package before
-activation. Permissions currently accept only `economy.write`.
+tab. For complete capability and operation contracts, see [the host API](MOD_HOST_API.md)
+and [package format](MOD_FORMAT.md). Unknown required capabilities block activation.
+Supported permissions are `game.read`, `game.write`, `economy.write`,
+`resources.read`, and `native.extension`; request only those used by the package.
+Dynamic quests support named objectives, explicit start, event bindings and
+transactional rewards. Register them through host calls rather than adding fields
+to the simpler manifest quest declarations.
 
 Each Lua state is limited to 8 MiB and each chunk/callback to 100,000 Lua
 instructions. No OS, filesystem, native loader, debug, coroutine, dynamic-code
@@ -192,8 +195,10 @@ Script errors stop that script and its dependent scripts, while independent mods
 continue. Per-callback state writes and currency requests roll back on callback
 failure. Asset replacements from that package remain fixed for the session.
 Currency is clamped to the native 0–65,535 range; deltas are limited to +/-32,767
-per callback. Scripts must store reward guards with `chronicle.set` to avoid
-granting a reward every tick. No script receives raw native pointers or offsets.
+per callback. Scripts that manually grant rewards must store guards with `chronicle.set` to avoid
+granting a reward every tick. Prefer dynamic quest reward declarations when they
+fit: completion and the one-time receipt commit together and persist in the same
+save. See [declarative quest rewards](MOD_HOST_API.md#declarative-quest-rewards). No script receives raw native pointers or offsets.
 
 ## Save compatibility
 
@@ -215,21 +220,27 @@ are explicitly rejected rather than silently discarded.
 
 ## Current boundaries and intended scope
 
-Conflict detection covers declared incompatibilities and exact file ownership.
+Conflict detection covers declared incompatibilities, dependency constraints,
+exact file ownership, and matching mesh/texture replacement targets.
 It cannot infer semantic conflicts between different game assets or undeclared
-script interactions. The offline author CLI can install or replace packaged ZIPs with backups. The runtime has no hot reload,
-dependency version ranges, foreign native-plugin ABI compatibility, or importer for other
-frameworks' quest formats. Save compatibility is not certified by a successful
+script interactions. The offline author CLI can install or replace packaged ZIPs with backups. Dependency version constraints are supported through `dependency_versions`; see
+[the package format](MOD_FORMAT.md) for syntax. The runtime has no hot reload,
+foreign native-plugin ABI compatibility, or importer for other frameworks' quest
+formats. Save compatibility is not certified by a successful
 package scan.
 
 The goal is a general framework supporting substantial gameplay mods such as the
 separate NG+ project. See [host capability scope](MOD_FRAMEWORK_SCOPE.md) for the
 required native integrations and their acceptance criteria. Selected-save
 branching, native save-list extensions, inventory/weapon/party transfer,
-recruitment lifecycle hooks, owned enemy-stat modifiers, and damage-source hooks
-are not implemented in API 1. Do not claim that the NG+ package can run yet.
-Asset-format validation and larger replacements require caller-specific buffer
-knowledge.
+and recruitment lifecycle hooks remain outside the completed scope. Owned enemy
+stat modifiers and damage rules are available; their contracts and validation
+boundaries are documented in [the coverage ledger](MOD_PARITY.md). Do not claim that the NG+ package can run yet.
+Raw native asset replacements remain the same byte length. Full-resolution PNG
+texture replacements use a separate upload path that preserves native logical
+coordinates; see [texture authoring](MOD_TEXTURES.md) for discovery, target hashes,
+limits, conflicts and fallback. Other larger native assets still require
+caller-specific buffer knowledge.
 
 ## Validation
 

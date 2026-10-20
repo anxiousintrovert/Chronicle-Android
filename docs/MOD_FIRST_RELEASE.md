@@ -7,7 +7,7 @@ The first release prioritizes quests, texture replacements and a reliable author
 - Folder packages, strict manifests, new mods disabled by default, dependency/version checks and deterministic activation.
 - Shared-framework mod manager with enable/disable, restart requirements, conflict reasons and useful diagnostics. No bundled enabled gameplay mods.
 - Same-size compatible native asset replacements without modifying extracted originals.
-- Full texture replacement: independently decoded replacement images with different resolutions/file sizes, preserving native logical coordinates and UV behavior. Use a dedicated texture path, not arbitrary larger reads into native asset buffers. Validate dimensions, memory limits, target identity and conflicts; retain original texture fallback. The initial package path exists; discovery tooling and retail/fallback acceptance remain outstanding.
+- Full texture replacement: independently decoded replacement images with different resolutions/file sizes, preserving native logical coordinates and UV behavior. Use a dedicated texture path, not arbitrary larger reads into native asset buffers. Validate dimensions, memory limits, target identity and conflicts; retain original texture fallback. The package path, discovery/export tools, upload fallback and Windows retail 4K validation are implemented; broader palette/copy/platform scenarios remain unverified.
 - Owned quests with named objectives, explicit start, progress, supported events, one-time transactional rewards, save/load and manager browsing. Document precisely which events/content can be authored; foreign quest formats and native story replacement are not implied.
 - Author documentation, valid disabled examples, package creation/check/pack/install tooling and diagnostic reports.
 - Regression evidence for empty/disabled packages, conflict fallback, restart/disable, quest persistence/rewards and representative retail texture rendering. Use Clang; leave every PS2 directory read-only; keep upstream Kazarov.
@@ -20,7 +20,7 @@ The first release must state the platforms actually validated. A Windows build d
 
 ## Next implementation priority
 
-Inspect port texture decode/upload and upstream renderer logical-size handling. Add package-owned full-resolution texture declarations and target discovery that can distinguish textures reliably, then exercise conflicting packs, original fallback, atlas/UV behavior and disable/restart on real assets. Do not silently downscale a purported high-resolution replacement to satisfy old buffer sizes.
+Audit the quest authoring workflow and examples against the implemented host contracts, including explicit start, named objectives, event delivery, one-time rewards and save/reload. Texture discovery, full-resolution replacement, conflict/disable cases and a real 4096x4096 GPU upload have Windows evidence below. Palette/copy behavior and other platforms need separate validation. The dated sections below record historical milestones; outstanding statements in older entries describe their state at that milestone.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 
