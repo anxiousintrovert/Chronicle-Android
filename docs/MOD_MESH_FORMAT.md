@@ -234,3 +234,32 @@ resolution and ambiguity checks still need runtime integration.
 files. Packing includes only declared files and existing permitted metadata;
 installation does not enable a package. `check-set` also reports the temporary
 activation gate, so an offline-valid draft cannot be mistaken for a runnable mod.
+
+
+## Internal decoded catalog
+
+`MeshCatalog` stages an immutable geometry snapshot per active owner. Loading
+rechecks path containment and file size, decodes all declarations and publishes
+the owner snapshot only after every asset succeeds. Failed loads preserve the
+previous snapshot; startup integration must retire failed owners before native
+construction. Inactive packages perform no filesystem work. Removing an owner's
+last declaration removes its cached definitions on successful reload.
+
+The catalog caps all owners together at 256 definitions, 64 MiB encoded source,
+one million vertices and one million triangles. Replacing an owner excludes its
+previous snapshot from the new budget. These are framework cache limits and do
+not enlarge native model arrays.
+
+Selection uses case-insensitive names from all strips of a native visual and its
+native vertex count. Repeated occurrences of one texture match a declaration only
+once. Different declarations matching different textures on the same model are
+ambiguous, even if manifest-level target checks could not detect the overlap.
+Callers must require `Match::Unique()` before attachment; the two retained matches
+provide owner/target information for diagnostics. Never choose a winner by package
+or strip order. An ambiguous match must keep the original visual.
+
+Selected definitions are shared immutable snapshots. Retiring an owner or clearing
+the catalog removes it from future selection without invalidating a selection
+already in use. Selection performs no filesystem access, geometry copying or GPU
+allocation. The catalog does not itself attach visuals or activate packages; that
+integration and retail evidence remain pending.

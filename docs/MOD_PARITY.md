@@ -3758,3 +3758,27 @@ disabled benchmark. All 55 Python checks passed, including archive/install and
 conflict cases. The isolated PAL combat/shared-manager/back-floor replay passed.
 PS2 and Kazarov remain unchanged. Runtime mesh attachment, target discovery and
 retail replacement visual evidence remain outstanding; full parity is unfinished.
+
+
+## Decoded mesh catalog and runtime target selection (2026-10-20)
+
+Added internal MeshCatalog for atomic per-owner geometry snapshots and matching
+native strip texture names/counts. Startup loading rechecks containment/size and
+decodes all assets before publishing; failed updates retain the complete previous
+snapshot. Inactive packages perform no I/O. Owner retirement and immutable leases
+separate future selection from geometry already in use. Global limits are 256
+definitions, 64 MiB encoded source, one million vertices and one million triangles.
+
+Selection detects the runtime-only ambiguity where distinct declarations match
+different textures on the same model. It does not pick a package/strip-order
+winner. Repeated texture names do not duplicate a match, exact native counts stay
+independent, and selection needs no filesystem work or GPU allocations.
+
+Clang 23.1.2 game/test builds passed. The mesh/manager/runtime suite passed 118
+tests with one platform symlink check skipped. Six new catalog cases cover
+inactive/missing roots, immutable snapshots after file removal, owner retirement,
+multi-texture ambiguity, atomic failed reloads, target/path rejection and actual
+cumulative geometry-budget exhaustion without evicting existing owners. PS2 and
+Kazarov diffs remain empty. No catalog is published to native construction yet;
+mesh package activation remains explicitly blocked. Native attachment, diagnostic
+plumbing, target discovery and retail replacement rendering remain outstanding.
