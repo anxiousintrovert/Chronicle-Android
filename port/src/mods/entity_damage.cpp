@@ -1,3 +1,4 @@
+#include "combat_damage.hpp"
 // Retail damage path, with queued committed mod reactions only.
 #include "monstorunit.hpp"
 
@@ -538,6 +539,7 @@ PORT_OVERRIDE int CMonstorUnit::CheckDmg() {
                         damage = 0;
                     }
 
+                    damage = mods::ModifyOutgoingDamage(this, current_monster, owner, damage);
                     int amount = (int) damage;
 
                     if (!(damage - (float) amount <= 0.0f)) {

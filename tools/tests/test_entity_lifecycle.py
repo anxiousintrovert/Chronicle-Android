@@ -25,9 +25,21 @@ class EntityLifecycleSource(unittest.TestCase):
                 "    if (scripted != MONSTER_DMG_NONE) return scripted;\n")
         adapter = function(port, signature)
         self.assertEqual(adapter.count(hook), 1)
+        formula = "                    damage = mods::ModifyOutgoingDamage(this, current_monster, owner, damage);\n"
+        self.assertEqual(adapter.count(formula), 1)
+        adapter = adapter.replace(formula, "")
         capture = "mods::CaptureEnemyDeath(this, current_monster, false);"
         self.assertEqual(adapter.count(capture), 2)
         adapter = "\n".join(line for line in adapter.split("\n") if capture not in line)
+        self.assertEqual(adapter.replace(hook, ""), function(native, signature))
+
+    def test_player_damage_preserves_native_statements(self):
+        native = (ROOT / "ps2/src/dngstatusdata.cpp").read_text()
+        port = (ROOT / "port/src/mods/player_damage_native.cpp").read_text()
+        signature = "void CUserStatus::AddNowLife(int chara_no, s16 amount, float ratio)"
+        adapter = function(port, signature)
+        hook = "    if (mods::ModifyIncomingDamage(this, chara_no, amount)) return;\n"
+        self.assertEqual(adapter.count(hook), 1)
         self.assertEqual(adapter.replace(hook, ""), function(native, signature))
 
     def test_model_loader_preserves_every_native_statement(self):

@@ -3496,3 +3496,34 @@ actor scenarios passed through shared-manager actions, including numeric model
 IDs, spawn/despawn, failed-owner cleanup, native floor reset and spawn tuning.
 The PS2 diff against the framework baseline is empty. These focused results are
 not full no-mod gameplay equivalence or cross-platform validation.
+
+
+## Native combat-rule hooks (2026-10-20)
+
+Outgoing rules now have a hook after retail defense/element/slayer/weight/block
+calculations and before retail integer rounding in CheckDmg. Existing poison and
+later instant-kill handling remain native. Context uses the exact loaded model
+ID, target HP, attacker character and bounded equipped weapon slot. Unknown IDs
+remain unknown. Incoming rules hook negative AddNowLife deductions on the active
+UserStatus in dungeon mode; this includes native non-collision deductions such
+as thirst, not solely collision hits. Healing and other status objects bypass
+the hook. HP filters use the pending HP when interpolation is already active.
+
+Both registries are framework-owned, empty by default, epoch-bound and retained
+against active owners before/after callbacks. Empty paths do not read native
+context, allocate or consume RNG. Stale epochs and non-dungeon modes bypass rules.
+Incoming changed positive magnitudes round and clamp to 1..32767; an explicit
+zero result suppresses the deduction without starting or settling interpolation.
+Unchanged magnitudes preserve the native short exactly. Simulation tick time
+drives deterministic ramps; no wall clock or native RNG is used.
+
+Validation: Clang 23.1.2 game/test builds passed, 15 focused tests passed, and all
+40 Python tests passed including exact native-source preservation guards for
+both damage methods. Full CTest: 923 passed, 103 skipped, one disabled benchmark.
+Tests exercise the real AddNowLife override and outgoing context adapter; a
+shared-menu retail combat replay is still required. PS2 remains unchanged.
+
+Public operation count remains 140: package registration/inspection APIs and
+transactional publication are the next step. No package can register these rules
+yet, so the newly wired registries remain dormant in ordinary gameplay. This
+is progress toward combat coverage, not a claim of completed capability parity.

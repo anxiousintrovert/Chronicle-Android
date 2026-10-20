@@ -6,6 +6,7 @@
 
 #include "api.hpp"
 #include "actor_runtime.hpp"
+#include "combat_damage.hpp"
 #include "owned_actors.hpp"
 #include "atla.hpp"
 #include "character.hpp"
@@ -185,6 +186,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    RetainCombatDamageOwners(true);
     RetainGameActors();
     RetainDungeonLighting();
     RetainDungeonCamera();
@@ -380,6 +382,7 @@ void TickGame() {
         return true; }, deaths, dropped_deaths);
     RetainGameActors();
     RetainPlayerTuningOwners();
+    RetainCombatDamageOwners();
     if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();
     if (HasOwnedLoot()) RetainOwnedLoot(Scripts().ActiveOwners());
