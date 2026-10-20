@@ -66,7 +66,7 @@ Native visual construction connects through the package bridge described below.
 
 The format stores geometry only. Texture pixels, external material definitions,
 vertex colors, skin weights, animation, attachments and transforms are not
-imported. GLB/DAE import remains follow-up work. Importing an OBJ
+imported. GLB geometry import is described below; DAE import remains follow-up work. Importing an OBJ
 successfully does not establish that it fits a particular retail skeleton,
 material layout, allocation budget or model.
 
@@ -350,8 +350,48 @@ same package disabled and enabled. These are Windows llvm-mingw Clang/Vulkan
 checks, not proof for every model or platform.
 
 Replacements inherit existing skeletons, materials and animation. New skeletons,
-animations, character registries, GLB/DAE imports and contributor-owned custom
+animations, character registries, DAE import and contributor-owned custom
 item/weapon/cutscene frameworks are outside this feature. Discovery exports the
 currently built geometry; inspect its pose before using it as a rest-shape authoring
 reference. A malformed or unsupported runtime match falls back to native rendering
 with a diagnostic in the shared manager.
+
+
+## GLB geometry import
+
+```powershell
+python tools/chronicle_mesh.py glb path/to/model.glb path/to/model.mesh.json --mesh 0
+```
+
+This offline converter reads the selected glTF mesh in local coordinates. The
+zero-based `--mesh` defaults to 0. Scene/node transforms, units and axes are not
+baked or converted: export coordinates already fitted to the target native rest
+shape. It uses the same validated geometry schema, budgets and exclusive output
+publication as OBJ, without installing or enabling a package.
+
+Supported input is GLB 2 with exactly JSON and BIN chunks, one embedded buffer,
+and triangle primitives. POSITION and optional NORMAL use float32; optional
+TEXCOORD_0 supports float32 or normalized unsigned byte/short components. Indexed
+triangles use unsigned byte/short/int indices; nonindexed triangles are accepted.
+Accessors support offsets and interleaved vertex strides with checked alignment
+and buffer bounds. Missing UVs become zero, explicit normals are normalized, and
+missing normals become per-face normals. Complete vertices are deduplicated while
+retaining triangle winding and UV/normal seams.
+
+Name materials `strip0` through `strip255` to select existing native material
+strips; no material means strip0. Material shading parameters and images are not
+imported: the existing model's materials remain in use. No external or data-URI
+buffer is opened, no image is read, and no remote resource is fetched.
+
+Skin/animation data, morph targets, sparse accessors, extension-based geometry,
+extra vertex attributes and nontriangle primitives are rejected explicitly. This
+is existing-model geometry authoring, not full glTF scene or skeleton import.
+The source is bounded to 16 MiB, with at most 256 primitives and a combined 100000
+source vertices across primitives, in addition to the existing output limits.
+Shared accessors count once per primitive toward that source-work budget.
+
+The binary layout follows the [Khronos glTF 2.0 specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html).
+Validation includes interleaved/normalized synthetic fixtures, malformed ranges,
+unsupported-feature rejection and an actual captured PAL mesh round trip (750
+triangles across 58 native strips). The round trip compares geometry to five
+decimal places; it does not establish arbitrary third-party GLB scene fidelity.

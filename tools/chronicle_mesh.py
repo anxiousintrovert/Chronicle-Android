@@ -131,6 +131,134 @@ def from_obj(path):
     return validate({'schema_version':1,'vertices':vertices,'triangles':triangles})
 
 
+def from_glb(path, mesh_index=0):
+    """Import selected mesh-local geometry, never scene transforms or external files."""
+    with Path(path).open('rb') as stream:
+        raw = stream.read(MAX_BYTES + 1)
+    require(20 <= len(raw) <= MAX_BYTES, 'GLB source must be 20 bytes..16 MiB')
+    magic, version, length = struct.unpack_from('<III', raw)
+    require(magic == 0x46546c67 and version == 2 and length == len(raw), 'invalid GLB 2 header/length')
+    chunks = []
+    offset = 12
+    while offset < len(raw):
+        require(offset + 8 <= len(raw), 'truncated GLB chunk header')
+        size, kind = struct.unpack_from('<II', raw, offset)
+        offset += 8
+        require(size % 4 == 0 and offset + size <= len(raw), 'invalid GLB chunk length/alignment')
+        chunks.append((kind, raw[offset:offset + size])); offset += size
+    require(len(chunks) == 2 and chunks[0][0] == 0x4e4f534a and chunks[1][0] == 0x004e4942,
+            'GLB requires exactly JSON then BIN chunks')
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, 'duplicate GLB JSON field: ' + key)
+            result[key] = value
+        return result
+    doc = json.loads(chunks[0][1].decode('utf-8'), object_pairs_hook=unique)
+    require(isinstance(doc, dict) and isinstance(doc.get('asset'), dict) and doc['asset'].get('version') == '2.0', 'GLB requires glTF 2.0')
+    require(doc['asset'].get('minVersion', '2.0') == '2.0', 'unsupported minimum glTF version')
+    require(not doc.get('extensionsRequired') and not doc.get('extensionsUsed'), 'GLB extensions are unsupported')
+    require(not doc.get('skins') and not doc.get('animations'), 'GLB skin/animation import is unsupported; export geometry only')
+    def integer(value, low, high, label):
+        require(type(value) is int and low <= value <= high, 'invalid GLB ' + label)
+        return value
+    def entry(values, index, label):
+        require(isinstance(values, list), 'invalid GLB ' + label + ' array')
+        index = integer(index, 0, len(values)-1, label + ' index')
+        require(isinstance(values[index], dict), 'invalid GLB ' + label)
+        require(not values[index].get('extensions'), 'GLB extensions are unsupported')
+        return values[index]
+    buffers = doc.get('buffers')
+    buffer = entry(buffers, 0, 'buffer')
+    require(len(buffers) == 1 and 'uri' not in buffer, 'GLB requires one embedded buffer; external/data URIs are unsupported')
+    binary = chunks[1][1]
+    size = integer(buffer.get('byteLength'), 1, len(binary), 'buffer length')
+    require(len(binary)-size <= 3, 'invalid GLB BIN padding')
+    binary = binary[:size]
+    def accessor(index, shape, types, limit, attribute=False):
+        item = entry(doc.get('accessors'), index, 'accessor')
+        require('sparse' not in item, 'sparse GLB accessors are unsupported')
+        require(item.get('type') == shape, 'unexpected GLB accessor shape')
+        component = item.get('componentType')
+        require(type(component) is int and component in types, 'unsupported GLB component type')
+        normalized = item.get('normalized', False)
+        require(type(normalized) is bool and (not normalized or component in (5121,5123)), 'invalid GLB normalization')
+        count = integer(item.get('count'), 1, limit, 'accessor count')
+        view = entry(doc.get('bufferViews'), item.get('bufferView'), 'buffer view')
+        require(type(view.get('buffer')) is int and view['buffer'] == 0, 'invalid GLB buffer reference')
+        start = integer(view.get('byteOffset', 0), 0, len(binary), 'view offset')
+        length = integer(view.get('byteLength'), 1, len(binary)-start, 'view length')
+        local = integer(item.get('byteOffset', 0), 0, length, 'accessor offset')
+        fmt, width = {5121:('B',1),5123:('H',2),5125:('I',4),5126:('f',4)}[component]
+        dimensions = {'SCALAR':1,'VEC2':2,'VEC3':3}[shape]
+        packed = width*dimensions
+        stride = view.get('byteStride', packed)
+        integer(stride, packed, 252 if 'byteStride' in view else packed, 'stride')
+        require('byteStride' not in view or (attribute and stride % 4 == 0), 'invalid GLB interleaved stride')
+        require(local % width == 0 and (start+local) % width == 0 and (not attribute or (local % 4 == 0 and stride % 4 == 0)), 'misaligned GLB accessor')
+        require(local+(count-1)*stride+packed <= length, 'GLB accessor exceeds buffer view')
+        result = [list(struct.unpack_from('<'+fmt*dimensions, binary, start+local+i*stride)) for i in range(count)]
+        if normalized:
+            divisor = 255 if component == 5121 else 65535
+            result = [[v/divisor for v in row] for row in result]
+        return result
+    selected = entry(doc.get('meshes'), mesh_index, 'mesh')
+    require('weights' not in selected, 'GLB morph weights are unsupported')
+    primitives = selected.get('primitives')
+    require(isinstance(primitives, list) and 1 <= len(primitives) <= 256, 'GLB needs 1..256 primitives')
+    vertices, triangles, known = [], [], {}
+    source_vertices = 0
+    for primitive in primitives:
+        require(isinstance(primitive, dict), 'invalid GLB primitive')
+        require(not primitive.get('extensions') and 'targets' not in primitive, 'GLB primitive extensions/morph targets are unsupported')
+        require(type(primitive.get('mode',4)) is int and primitive.get('mode',4) == 4, 'GLB requires triangle primitives')
+        attributes = primitive.get('attributes')
+        require(isinstance(attributes, dict) and 'POSITION' in attributes and set(attributes) <= {'POSITION','NORMAL','TEXCOORD_0'}, 'unsupported GLB vertex attributes')
+        positions = accessor(attributes['POSITION'], 'VEC3', (5126,), MAX_VERTICES, True)
+        source_vertices += len(positions)
+        require(source_vertices <= MAX_VERTICES, 'GLB source exceeds vertex budget')
+        normals = accessor(attributes['NORMAL'], 'VEC3', (5126,), MAX_VERTICES, True) if 'NORMAL' in attributes else None
+        uvs = accessor(attributes['TEXCOORD_0'], 'VEC2', (5126,5121,5123), MAX_VERTICES, True) if 'TEXCOORD_0' in attributes else None
+        for values in (normals, uvs):
+            require(values is None or len(values) == len(positions), 'GLB attribute counts differ')
+        require(all(all(finite(x) for x in row) for values in (positions,normals,uvs) if values is not None for row in values), 'GLB attributes must be bounded and finite')
+        if 'TEXCOORD_0' in attributes:
+            uv_accessor = entry(doc.get('accessors'), attributes['TEXCOORD_0'], 'accessor')
+            require(uv_accessor['componentType'] == 5126 or uv_accessor.get('normalized') is True, 'integer GLB UVs must be normalized')
+        indices = [x[0] for x in accessor(primitive['indices'], 'SCALAR', (5121,5123,5125), MAX_TRIANGLES*3)] if 'indices' in primitive else list(range(len(positions)))
+        if 'indices' in primitive:
+            require(not entry(doc.get('accessors'), primitive['indices'], 'accessor').get('normalized',False), 'GLB indices cannot be normalized')
+        require(len(indices) % 3 == 0 and len(triangles)+len(indices)//3 <= MAX_TRIANGLES, 'GLB triangle count invalid/exceeds budget')
+        require(all(type(i) is int and 0 <= i < len(positions) for i in indices), 'GLB index outside vertex data')
+        strip = 0
+        if 'material' in primitive:
+            material = entry(doc.get('materials'), primitive['material'], 'material')
+            name = material.get('name','')
+            require(isinstance(name,str) and re.fullmatch(r'strip(?:0|[1-9][0-9]{0,2})',name) is not None, 'GLB materials must be named strip0..strip255')
+            strip = integer(int(name[5:]),0,255,'material strip')
+        for offset in range(0,len(indices),3):
+            face_indices = indices[offset:offset+3]
+            a,b,c = [positions[i] for i in face_indices]
+            u,v = [[p[k]-a[k] for k in range(3)] for p in (b,c)]
+            face = [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
+            length = math.sqrt(sum(x*x for x in face))
+            require(length > 1e-10, 'degenerate GLB triangle')
+            face = [x/length for x in face]
+            triangle = [strip]
+            for i in face_indices:
+                normal = normals[i] if normals is not None else face
+                length = math.sqrt(sum(x*x for x in normal))
+                require(length > 1e-10, 'zero GLB normal')
+                vertex = positions[i]+[x/length for x in normal]+(uvs[i] if uvs is not None else [0.0,0.0])
+                key = tuple(vertex)
+                if key not in known:
+                    require(len(vertices)<MAX_VERTICES, 'GLB converted vertex budget exceeded')
+                    known[key]=len(vertices);vertices.append(vertex)
+                triangle.append(known[key])
+            triangles.append(triangle)
+    return validate({'schema_version':1,'vertices':vertices,'triangles':triangles})
+
+
 def write_new(mesh, output):
     payload = (json.dumps(validate(mesh),allow_nan=False,separators=(',',':'))+'\n').encode('utf-8')
     return write_payload(payload, output)
@@ -217,14 +345,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command',required=True)
     convert = commands.add_parser('obj'); convert.add_argument('input',type=Path); convert.add_argument('output',type=Path)
+    glb = commands.add_parser('glb'); glb.add_argument('input',type=Path); glb.add_argument('output',type=Path); glb.add_argument('--mesh',type=int,default=0)
     check = commands.add_parser('inspect'); check.add_argument('input',type=Path)
     listing = commands.add_parser('targets'); listing.add_argument('directory', type=Path)
     for name in ('extract', 'export-obj'):
         command = commands.add_parser(name); command.add_argument('input', type=Path); command.add_argument('output', type=Path)
     args = parser.parse_args()
     try:
-        if args.command == 'obj':
-            output = write_new(from_obj(args.input),args.output)
+        if args.command in ('obj', 'glb'):
+            geometry = from_obj(args.input) if args.command == 'obj' else from_glb(args.input, args.mesh)
+            output = write_new(geometry,args.output)
             print(json.dumps({'output':str(output),**inspect(output)},indent=2))
         elif args.command == 'targets':
             print(json.dumps(targets(args.directory), indent=2))
