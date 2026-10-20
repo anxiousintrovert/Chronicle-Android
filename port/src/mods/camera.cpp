@@ -4,9 +4,27 @@
 #include "dun/gameloop.hpp"
 #include "gamemode.hpp"
 #include "main.hpp"
+#include "camera_orbit.hpp"
+#include "savedata.hpp"
+#include <algorithm>
 
-extern s32 mode;
+extern s32 mode, gameTask, NextMapNo, existFlag;
 namespace mods {
+namespace {
+CameraOrbit orbit;
+std::uint64_t orbit_epoch = 0;
+int orbit_dungeon = -1, orbit_floor = -1;
+const void *orbit_map = nullptr;
+std::string Unavailable() {
+    if (mode != GAME_MODE_DUNGEON || gameTask != GAME_TASK_PLAY ||
+        BtGameModeFlag != BT_GAME_MODE_PLAY || BtEventMode || NextMapNo >= 0 || existFlag)
+        return "camera writes require stable dungeon play outside events and transitions";
+    if (!SaveData || UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus()) || !NowDngMap ||
+        NowCamera__3 != &MainCamera__4 || !MainCamera__4.follow_on)
+        return "the primary native dungeon follow camera is unavailable";
+    return {};
+}
+}
 nlohmann::json ReadCameraSnapshot(CCameraFollow &camera) {
     float eye[4]{}, target[4]{};
     camera.GetPos(eye);
@@ -28,6 +46,43 @@ nlohmann::json ReadCameraSnapshot(CCameraFollow &camera) {
 nlohmann::json ReadDungeonCamera() {
     if (mode != GAME_MODE_DUNGEON || !NowCamera__3)
         throw std::runtime_error("there is no active dungeon camera");
-    return ReadCameraSnapshot(*NowCamera__3);
+    auto result = ReadCameraSnapshot(*NowCamera__3);
+    const auto reason = Unavailable();
+    result["writable"] = reason.empty();
+    result["reason"] = reason;
+    result["owners"] = orbit.Owners();
+    return result;
+}
+void ReleaseDungeonCamera() {
+    // The primary camera is a process-lifetime global, never an arena pointer.
+    if (!orbit.Active()) return;
+    orbit.Retain(MainCamera__4, {});
+    orbit.Forget();
+}
+void RetainDungeonCamera() {
+    if (!orbit.Active()) return;
+    if (!Unavailable().empty() || orbit_epoch != Scripts().Epoch() ||
+        orbit_dungeon != UserStatus->cur_georama || orbit_floor != UserStatus->cur_floor ||
+        orbit_map != NowDngMap) {
+        ReleaseDungeonCamera();
+        return;
+    }
+    orbit.Retain(MainCamera__4, Scripts().ActiveOwners());
+}
+bool ApplyDungeonCamera(const std::vector<GameCommand> &commands, int money, std::string &error) {
+    if (money || commands.empty() || std::ranges::any_of(commands, [](const auto &command) {
+            return command.operation != "render.camera_set" && command.operation != "render.camera_reset";
+        })) {
+        error = "camera writes cannot share a callback with other engine writes, including currency";
+        return false;
+    }
+    error = Unavailable();
+    if (!error.empty()) return false;
+    if (!orbit.Apply(MainCamera__4, commands, error)) return false;
+    orbit_epoch = Scripts().Epoch();
+    orbit_dungeon = UserStatus->cur_georama;
+    orbit_floor = UserStatus->cur_floor;
+    orbit_map = NowDngMap;
+    return true;
 }
 }

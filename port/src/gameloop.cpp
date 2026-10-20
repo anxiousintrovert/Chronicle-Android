@@ -1,4 +1,5 @@
 #include "gameloop.hpp"
+#include "chronicle/mod_camera.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -233,6 +234,7 @@ s32 *ConfigWords() {
 }
 
 void ModeInit(int &title_ran, int &exist_data, bool &skip_title) {
+    mods::ReleaseDungeonCamera();
     if (mode == GAME_MODE_MENU && !g_developer_return_pending) {
         g_developer_return_mode = GAME_MODE_TITLE;
     }
@@ -947,6 +949,7 @@ static int RunGameImpl(int argc, char **argv) {
             PolyCount = 0;
             old_main_mode = mode;
 
+            mods::RetainDungeonCamera();
             mods::RetainPlayerTuningOwners();
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
@@ -1013,12 +1016,15 @@ static int RunGameImpl(int argc, char **argv) {
 }
 
 int RunGame(int argc, char **argv) {
+    mods::ReleaseDungeonCamera();
     chronicle::monsters::FinishExpandedPopulationRun();
     try {
         const int result = RunGameImpl(argc, argv);
+        mods::ReleaseDungeonCamera();
         chronicle::monsters::FinishExpandedPopulationRun();
         return result;
     } catch (...) {
+        mods::ReleaseDungeonCamera();
         chronicle::monsters::FinishExpandedPopulationRun();
         throw;
     }

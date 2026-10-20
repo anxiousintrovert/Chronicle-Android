@@ -1,3 +1,4 @@
+#include "chronicle/mod_camera.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -610,6 +611,7 @@ void TrialStart__Fv() {
 }
 
 void func_01DAC1C0() {
+    mods::ReleaseDungeonCamera();
     GameInit();
 }
 

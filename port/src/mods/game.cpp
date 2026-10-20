@@ -178,6 +178,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    RetainDungeonCamera();
     if (mode != GAME_MODE_DUNGEON) chronicle::monsters::ResetExpandedPopulation();
     if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();
@@ -296,6 +297,7 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "render.camera_set" || command.operation == "render.camera_reset"; })) return ApplyDungeonCamera(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "georama.place" || command.operation == "georama.remove"; })) return ApplyGeoramaPlacement(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "georama.atla_collect"; })) return ApplyAtla(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "dungeon.back_floor_enter"; })) return QueueBackFloor(commands, money, error);
@@ -351,6 +353,7 @@ void TickGame() {
         RetainOwnedShops(Scripts().ActiveOwners());
     }
     EnemyDeaths().Enable(playing && mode == GAME_MODE_DUNGEON && Scripts().WantsEnemyDeaths());
+    RetainDungeonCamera();
     if (!OwnedEnemyStats().empty() || !OwnedEnemyScales().empty()) {
         const auto owners = Scripts().ActiveOwners();
         RetainOwnedEnemyStats(owners);

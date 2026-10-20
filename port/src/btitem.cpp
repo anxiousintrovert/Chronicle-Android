@@ -1,3 +1,4 @@
+#include "chronicle/mod_camera.hpp"
 #include "common.h"
 
 #include <libvu0.h>
@@ -223,6 +224,7 @@ PORT_OVERRIDE int BtGetTreasureboxBig_Loop() {
             itemOpenBig.motion.unk_78 = 10.0f;
             itemOpenBigFx.motion.state.time = 10.0f;
             itemOpenBigFlag = 1;
+            mods::ReleaseDungeonCamera();
             SubCamera = MainCamera__4;
             NowCamera__3 = &SubCamera;
             NowCamera__3->FollowOff();
@@ -454,6 +456,7 @@ PORT_OVERRIDE int BtGetTreasureboxSmall_Loop() {
             itemOpenSmall.motion.state.time = 10.0f;
             itemOpenSmallFx.motion.state.time = 10.0f;
             itemOpenSmallFlag = 1;
+            mods::ReleaseDungeonCamera();
             SubCamera = MainCamera__4;
             NowCamera__3 = &SubCamera;
             NowCamera__3->FollowOff();
@@ -668,6 +671,7 @@ PORT_OVERRIDE int BtGetGateKey_Loop() {
             CEffectHold = 1;
             CEffectHyde = 1;
             BtActStatus.motion_no = 0x22;
+            mods::ReleaseDungeonCamera();
             SubCamera.FollowOff();
             sceVu0CopyVector(ref, CharaMain.pos);
             ref[1] += 12.0f;

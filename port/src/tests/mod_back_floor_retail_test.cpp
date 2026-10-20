@@ -26,6 +26,7 @@
 #include "main.hpp"
 #include "itemdata.hpp"
 #include "mods/back_floor.hpp"
+#include "mods/camera.hpp"
 #include "mods/dungeon_layout.hpp"
 #include "monstorunit.hpp"
 #include "mods/world_transition.hpp"
@@ -51,6 +52,7 @@ bool               quit_with_population = false;
 bool               fail_with_population = false;
 bool               audit_partial_population = false;
 bool               audit_chest_loot = false;
+bool audit_camera_write = false, camera_applied = false, camera_released = false;
 std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
@@ -105,6 +107,24 @@ void BackPump() {
     WindowPollEvents();
     InputPoll();
     InputScriptApply(GameFrameCount());
+    if (audit_camera_write && queued) {
+        const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
+        const auto values = saved.at("mods").at("audit.back").value("values", nlohmann::json::object());
+        const int phase = values.value("camera_phase", 0);
+        if (phase == 1 && !camera_applied) {
+            const auto c = mods::ReadDungeonCamera();
+            EXPECT_EQ(c["distance"], 85); EXPECT_EQ(c["height"], 25);
+            EXPECT_EQ(c["owners"]["distance"], "audit.back");
+            camera_applied = true;
+        }
+        if (phase == 2 && !camera_released) {
+            const auto c = mods::ReadDungeonCamera();
+            EXPECT_EQ(c["distance"], values["release_distance"]);
+            EXPECT_EQ(c["height"], values["release_height"]);
+            EXPECT_EQ(c["owners"]["distance"], "");
+            camera_released = true;
+        }
+    }
     const auto state = mods::ReadBackFloor();
     if (population_injected && gameTask == GAME_TASK_PLAY && NowMonstorUnit->SlotLimit() == unsigned(audit_population)) {
         high_slot_seen |= NowMonstorUnit->monster[audit_population - 1].state == 2;
@@ -307,7 +327,8 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false) {
+    audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -383,6 +404,35 @@ end}
 )");
         std::ofstream(script_path) << source;
     }
+    if (camera_write) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string source((std::istreambuf_iterator<char>(input_script)), {});
+        input_script.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local c=assert(chronicle.call('render.camera_get'))
+ if not c.writable then return end
+ local phase=chronicle.get('camera_phase') or 0
+ if phase==0 then
+  chronicle.set('camera_distance',c.distance)
+  chronicle.set('camera_height',c.height)
+  assert(chronicle.call('render.camera_set',{distance=85,height=25}))
+  chronicle.set('camera_phase',1)
+  return
+ elseif phase==1 then
+  chronicle.set('release_distance',c.distance==85 and chronicle.get('camera_distance') or c.distance)
+  chronicle.set('release_height',c.height==25 and chronicle.get('camera_height') or c.height)
+  assert(c.owners.distance=='audit.back' and c.owners.height=='audit.back')
+  assert(chronicle.call('render.camera_reset',{}))
+  chronicle.set('camera_phase',2)
+  return
+ end
+ assert(c.owners.distance=='' and c.owners.height=='')
+)");
+        std::ofstream(script_path) << source;
+    }
     if (atla) {
         const auto script_path = root / "mods/audit.back/main.lua";
         std::ifstream input_script(script_path);
@@ -451,6 +501,7 @@ end}
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
+    if (camera_write) { EXPECT_TRUE(camera_applied); EXPECT_TRUE(camera_released); }
     EXPECT_EQ(queued, !quit_with_population) << last_state;
     EXPECT_TRUE(arrived) << last_state << " task=" << gameTask << " longest_play=" << maximum_stable;
     if (quit_with_population || expected_monsters > 16) {
@@ -548,4 +599,5 @@ TEST(ModBackFloorRetail, OwnedChestLootGallery) { RunBackAudit(5, true, 64, true
 TEST(ModBackFloorRetail, OwnedChestLootDemonShaft) { RunBackAudit(6, true, 64, true, 5, 0, false, false, false, true); }
 TEST(ModBackFloorRetail, AtlaCollectionThroughSharedActionPreservesBackTransition) { RunBackAudit(0, true, 64, true, 5, 0, false, false, false, false, true); }
 TEST(ModBackFloorRetail, CameraSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, true); }
+TEST(ModBackFloorRetail, CameraOrbitThroughSharedActionRestoresBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, true); }
 } // namespace

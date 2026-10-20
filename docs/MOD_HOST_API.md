@@ -1798,5 +1798,32 @@ units. Current pose and requested orbit can differ while the camera interpolates
 
 Missing cameras, town scenes and non-finite native pose/orbit values return an
 error. Inspection does not advance interpolation, change the camera or consume
-RNG. It adds no automatic hooks. Camera modification and ownership cleanup are
-not yet exposed.
+RNG. The result also contains `writable`, `reason`, and per-field `owners`.
+Inspection itself does not enable camera control.
+
+`render.camera_set {distance=85,height=25,angle=1.5}` (`game.write`) accepts
+one or more fields: distance 8..300, height -80..150, angle -1000..1000 radians.
+All values must be finite; angles are normalized to one revolution.
+`render.camera_reset {}` releases the caller's fields. Declare operations in
+`requires_operations`. Camera commands may share a callback with other camera
+commands and owned mod state, but not other engine writes or currency changes.
+
+Writes require stable dungeon gameplay and the primary native camera in follow
+mode, outside events, first-person view and transitions. Each field has one
+package owner; disjoint fields can have different owners. A conflicting or
+invalid command rejects the entire camera batch before mutation. Setting only
+some fields preserves the caller's other claims.
+
+Each call changes the native orbit once. Normal camera collision, movement and
+interpolation continue and can change it on subsequent frames. This is not a
+forced camera override. Reset restores a field's original baseline only when
+its current value still equals the caller's last write, preserving newer native
+adjustments. Owner failure/disable, runtime restart, leaving stable play, native
+scene initialization, item-camera takeover and game-run exit release claims.
+The item-camera copy paths release first so they do not inherit modded orbit
+values. A released claim must be explicitly requested again; it does not resume
+automatically after a menu or event.
+
+Settings are transient, not saved. There is no mod callback from a native
+cleanup boundary. Without claims, the cleanup calls return before reading or
+changing native camera state.

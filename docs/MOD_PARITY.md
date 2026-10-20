@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 120 implemented operations, native plugins and author
+a real host-call boundary, 122 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -22,7 +22,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Detached native dungeon camera pose/orbit inspection, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
+| Rendering / audio | Native dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera controls, lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -2648,3 +2648,30 @@ and gameplay replays before camera_set/reset can be registered. No automatic
 engine hook has been added by this foundation.
 
 Full regression: 838 passed, 89 skipped, one disabled. PS2 remains unchanged.
+
+
+### Live primary dungeon camera writes (2026-10-20)
+
+render.camera_set/reset now connect CameraOrbit to the primary native follow
+camera during stable dungeon play. The getter reports writable/reason/owners.
+Camera batches are separate from other engine writes; bounds and per-field
+conflicts reject before publication. Values are written once, not forced each
+frame: native collision/input/interpolation can supersede them, and cleanup
+preserves newer native values. Changes are transient, not saved.
+
+Existing port mode initialization and the GameInit trampoline release before
+reinitialization. Existing item-camera copies and the gate-key takeover release
+before native use. The game loop retires owners before native processing and
+after callbacks; run exit/exception cleanup releases claims. With no claims,
+these calls return before reading native state. No PS2 source or renderer changes.
+
+A focused live-adapter test verifies stopped-owner retirement, mixed-write
+rejection, copy-boundary restoration and new-scene preservation. The PAL shared
+menu-action replay observes exact values immediately after commit, then verifies
+conditional reset against values after native camera adjustment and completes
+back-floor travel. Full item-effect animation and other-platform camera replays
+remain unverified; source boundary inspection and focused copy checks are not
+a substitute for those gameplay scenarios. The operation count is now 122.
+
+Validation: Clang 23.1.2 builds; 839 passed, 90 skipped, one disabled;
+35 Python tests and the explicit PAL orbit replay passed. PS2 unchanged.
