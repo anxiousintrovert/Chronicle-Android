@@ -3027,3 +3027,26 @@ one disabled; 38 Python checks passed. Both audio PAL smoke scenarios passed
 separately in fresh profiles. Evidence: bgm-retail-9eed7f97f2f2492eb7e3828c15ba2fc5.
 PS2 diff remains empty. This does not establish physical-device listening or
 all-scene/platform coverage.
+
+
+### Detached BGM archive preflight (2026-10-20)
+
+Added an internal staging loader for native music archives. It checks member
+ranges, duplicate names, list/config sizes and required bank/sequence members,
+then decodes records in native order into owned objects. Short placeholder lines
+are ignored as in the native loader; ambient-bank records are preserved. No
+live audio state, native buffers or mixer ports are touched. This helper has no
+production caller yet; public operation count remains 131.
+
+The supplied PAL assets contain 57 archives: 55 preflight successfully; sets
+120 and 130 intentionally fail with a missing-sequence diagnostic because their
+lists name d03a_a.sq/d04a_a.sq while the archives contain different names. The
+preflight does not guess replacements or alter the vanilla loader. Synthetic
+coverage includes owned decoded data, RNG preservation, malformed ranges,
+duplicate/missing members, broken sequences and oversized configuration.
+
+Still required before exposing BGM play/load: validate registered track metadata
+and configuration, publish staged state safely, and test failure preservation
+and playback through the shared menu action. Archive size limits do not yet
+constitute a separate decoded-bank memory budget. Owned music replacement also
+remains outstanding.
