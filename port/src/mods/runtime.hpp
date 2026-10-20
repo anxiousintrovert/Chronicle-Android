@@ -85,8 +85,8 @@ public:
     std::vector<QuestStatus>  Quests() const;
     std::vector<SkillStatus> Skills() const;
     bool QueueSkillTraining(std::string_view owner, std::string_view tree, std::string_view id, std::string &error);
-    bool HasSkillDamageEffects() const noexcept;
-    float ApplySkillDamage(float damage) const noexcept;
+    bool HasSkillDamageEffects(bool incoming=false) const noexcept;
+    float ApplySkillDamage(float damage,bool incoming=false) const noexcept;
     std::vector<ActionStatus> Actions(std::string_view owner) const;
     bool                      QueueAction(std::string_view owner, std::string_view id, std::string &error);
     std::vector<std::string>  Diagnostics() const;

@@ -110,6 +110,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `assets.textures.v1` | Full-resolution PNG replacement of named original texture content |
 | `assets.replace.v1` | Existing same-size game asset replacement |
 | `skills.training.v1` | Owner-scoped deferred shared-menu training requests |
+| `skills.defense.v1` | Explicit trained-rank reduction of dungeon native life deductions |
 | `skills.effects.v1` | Explicit trained-rank outgoing enemy damage bonuses |
 | `skills.trees.v1` | Owned skill definitions, prerequisites, ranks and shared-manager browsing |
 | `quests.events.v1` | Owned objectives driven by existing map/floor/death events |

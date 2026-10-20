@@ -1021,7 +1021,7 @@ struct Runtime::Impl {
     std::vector<CustomEvent>                         pending_events;
     std::vector<std::tuple<std::string,std::string,std::string>> pending_training;
     mutable bool skill_effects_dirty=true;
-    mutable std::vector<double> skill_effects;
+    mutable std::vector<double> skill_effects,skill_defense_effects;
 
     // Prepare all allocations before publishing native writes. Swap after commit
     // cannot fail, so failed native/managed transactions never leak notifications.
@@ -1325,7 +1325,7 @@ Runtime::~Runtime() = default;
 
 void Runtime::Start(const Manager &manager) {
     ++epoch_;
-    impl_->skill_effects.clear();impl_->skill_effects_dirty=true;
+    impl_->skill_effects.clear();impl_->skill_defense_effects.clear();impl_->skill_effects_dirty=true;
     impl_->meshes.Clear();
     impl_->plan = manager;
     impl_->modules.clear();
@@ -1852,22 +1852,25 @@ bool Runtime::QueueSkillTraining(std::string_view owner,std::string_view tree,st
     return false;
 }
 
-bool Runtime::HasSkillDamageEffects() const noexcept {
+bool Runtime::HasSkillDamageEffects(bool incoming) const noexcept {
     if(impl_->skill_effects_dirty) {
         try {
-            std::map<std::tuple<std::string,std::string,std::string>,double> ordered;
-            for(const auto &m:impl_->modules)if(!m->failed&&Permitted(*m,"game.write"))
-                for(const auto &[id,factor]:SkillDamageFactors(*m->state))ordered.emplace(std::tuple{m->package.id,id.first,id.second},factor);
-            std::vector<double> next;next.reserve(ordered.size());for(const auto &[id,factor]:ordered)next.push_back(factor);
-            impl_->skill_effects.swap(next);
-        } catch(...) {impl_->skill_effects.clear();}
+            for(bool defense:{false,true}) {
+                std::map<std::tuple<std::string,std::string,std::string>,double> ordered;
+                for(const auto &m:impl_->modules)if(!m->failed&&Permitted(*m,"game.write"))
+                    for(const auto &[id,factor]:SkillDamageFactors(*m->state,defense))ordered.emplace(std::tuple{m->package.id,id.first,id.second},factor);
+                std::vector<double> next;next.reserve(ordered.size());for(const auto &[id,factor]:ordered)next.push_back(factor);
+                (defense?impl_->skill_defense_effects:impl_->skill_effects).swap(next);
+            }
+        } catch(...) {impl_->skill_effects.clear();impl_->skill_defense_effects.clear();}
         impl_->skill_effects_dirty=false;
     }
-    return !impl_->skill_effects.empty();
+    return !(incoming?impl_->skill_defense_effects:impl_->skill_effects).empty();
 }
-float Runtime::ApplySkillDamage(float damage) const noexcept {
-    if(!std::isfinite(damage)||damage<=0||!HasSkillDamageEffects())return damage;
-    double result=damage;for(double factor:impl_->skill_effects)result=std::min(1000000.0,result*factor);
+float Runtime::ApplySkillDamage(float damage,bool incoming) const noexcept {
+    if(!std::isfinite(damage)||damage<=0||!HasSkillDamageEffects(incoming))return damage;
+    double result=damage;
+    for(double factor:(incoming?impl_->skill_defense_effects:impl_->skill_effects))result=std::min(1000000.0,result*factor);
     return static_cast<float>(result);
 }
 
@@ -1878,8 +1881,12 @@ std::vector<SkillStatus> Runtime::Skills() const {
         for(const auto &tree:trees["trees"])for(const auto &node:tree["nodes"]) {
             auto description=tree["title"].get<std::string>()+"\n\n"+node["description"].get<std::string>();
             if(node.contains("effects")) {
-                const double rate=node["effects"]["enemy_damage_per_rank"].get<double>();std::ostringstream summary;
-                summary<<"\nEnemy damage: +"<<rate*100<<"% per rank\nCurrent bonus: +"<<rate*100*node["rank"].get<int>()<<"%";description+=summary.str();
+                for(const auto &[kind,value]:node["effects"].items()) {
+                    const double rate=value.get<double>();const bool defense=kind=="incoming_damage_reduction_per_rank";std::ostringstream summary;
+                    summary<<(defense?"\nIncoming damage reduction: ":"\nEnemy damage: +")<<rate*100<<"% per rank\nCurrent "<<(defense?"reduction: ":"bonus: +")
+                           <<(defense?std::min(100.0,rate*100*node["rank"].get<int>()):rate*100*node["rank"].get<int>())<<"%";
+                    description+=summary.str();
+                }
             }
             for(const auto &missing:node["missing"])description+="\nRequires "+missing["id"].get<std::string>()+" rank "+std::to_string(missing["rank"].get<int>());
             result.push_back({m->package.id,tree["id"].get<std::string>(),node["id"].get<std::string>(),node["title"].get<std::string>(),description,node["rank"].get<int>(),node["max_rank"].get<int>(),node["available"].get<bool>()});

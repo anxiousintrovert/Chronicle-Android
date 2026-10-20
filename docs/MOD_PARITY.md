@@ -23,7 +23,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible assets, full-resolution name/content-targeted PNG textures, package resources and explicitly enabled existing-model mesh replacement with inherited native animation/materials and runtime fallback | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
-| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards plus map/floor/death event bindings, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page; owned skill trees with prerequisites, ranks, opt-in outgoing damage effects and shared-manager browsing | Quest stage lifecycle, dialogue trees, pickup/Georama quest events, additional skill effect types, native script interception |
+| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards plus map/floor/death event bindings, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page; owned skill trees with prerequisites, ranks, opt-in outgoing damage and incoming life-deduction effects with shared-manager browsing | Quest stage lifecycle, dialogue trees, pickup/Georama quest events, additional skill effect types, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
@@ -4187,3 +4187,23 @@ root and cycles terminate. Tests cover transitive conflicts, absent packages,
 diamond graphs, cycles, stable output and empty selections. All 76 Python author
 tool tests passed. This is offline inspection only; it adds no engine hooks,
 profile writes or plugin trust changes.
+
+## Opt-in defensive skills (2026-10-20)
+
+`skills.defense.v1` adds `incoming_damage_reduction_per_rank` to owned skill
+nodes, independently or together with the existing outgoing effect. Trained
+nodes multiply bounded reduction factors after incoming combat rules through the
+existing port-side native life hook. The shared skill menu describes both effects.
+No new native hooks or stat-array writes are introduced, and untrained/absent
+mods leave deductions untouched. Saved ranks, staged commits, rollback and owner
+cleanup govern the cached factors.
+
+The scope is dungeon negative `AddNowLife` calls, including non-combat deductions;
+it does not claim universal damage interception. Native-hook regression covers
+healing, unrelated status objects, town behavior, full-block interpolation,
+rule stacking, and no-mod behavior. Retail combat playthrough and cross-platform
+validation remain pending.
+
+Validation: Clang 23.1.2 game and test builds passed; full native regression
+passed 1,053 tests, with 107 skipped and one disabled. All 76 Python author-tool
+tests passed. PS2 baseline and upstream renderer pin checks remain unchanged.

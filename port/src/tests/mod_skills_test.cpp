@@ -10,6 +10,8 @@
 #include "mods/entity_tracking.hpp"
 #include "mods/entity_reactions.hpp"
 #include "monstorunit.hpp"
+#include "userstatus.hpp"
+#include "dun/gameloop.hpp"
 #include "main.hpp"
 extern s32 mode;
 #include <filesystem>
@@ -169,11 +171,11 @@ TEST_F(ModSkillsRuntime, DamageEffectsStackPreserveNonHitsRestoreAndDisable) {
 TEST_F(ModSkillsRuntime, StagedRankAffectsCommitButFailedOwnerLeavesNoCachedBonus) {
     Add("test.mod",R"(return {on_tick=function()
         assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Training',nodes={
-          {id='focus',title='Focus',description='Focus',max_rank=2,effects={enemy_damage_per_rank=1}}}}))
+          {id='focus',title='Focus',description='Focus',max_rank=2,effects={enemy_damage_per_rank=1,incoming_damage_reduction_per_rank=0.5}}}}))
         assert(chronicle.call('skills.unlock',{tree='combat',id='focus'}))
         assert(chronicle.call('economy.add',{amount=1}))
-    end})");Start();runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &error){EXPECT_EQ(runtime.ApplySkillDamage(10),20);error="reject";return false;});
-    EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_EQ(runtime.ApplySkillDamage(10),10);EXPECT_FALSE(runtime.HasSkillDamageEffects());
+    end})");Start();runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &error){EXPECT_EQ(runtime.ApplySkillDamage(10),20);EXPECT_EQ(runtime.ApplySkillDamage(10,true),5);error="reject";return false;});
+    EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_EQ(runtime.ApplySkillDamage(10),10);EXPECT_FALSE(runtime.HasSkillDamageEffects());EXPECT_FALSE(runtime.HasSkillDamageEffects(true));EXPECT_EQ(runtime.ApplySkillDamage(10,true),10);
 }
 TEST_F(ModSkillsRuntime, NativeAndScriptedEnemyDamageUseBonusesWithoutChangingStoredStats) {
     Add("test.mod",R"(return {on_tick=function()
@@ -193,6 +195,66 @@ TEST_F(ModSkillsRuntime, NativeAndScriptedEnemyDamageUseBonusesWithoutChangingSt
     transaction.Commit();EXPECT_EQ(actor.hp,35);EXPECT_EQ(actor.last_hit_damage,15);
     EXPECT_EQ(mods::TakeEntityReaction(unit.get(),0),MONSTER_DMG_HIT);EXPECT_EQ(actor.max_hp,50);
     mode=GAME_MODE_EDIT;EXPECT_FLOAT_EQ(mods::ModifyOutgoingDamage(unit.get(),0,0,10),10);
+}
+
+TEST(ModSkills, DefenseEffectsValidateIndependentlyAndClampAtFullReduction) {
+    auto tree=Tree();tree["nodes"][0]["effects"]={{"incoming_damage_reduction_per_rank",0.75},{"enemy_damage_per_rank",0.25}};
+    Json state=Json::object();mods::CallOwnedSkill(state,"skills.register",tree);
+    EXPECT_TRUE(mods::SkillDamageFactors(state,true).empty());
+    mods::CallOwnedSkill(state,"skills.set_rank",{{"tree","combat"},{"id","focus"},{"rank",2}});
+    EXPECT_DOUBLE_EQ(mods::SkillDamageFactors(state,true).at({"combat","focus"}),0);
+    EXPECT_DOUBLE_EQ(mods::SkillDamageFactors(state).at({"combat","focus"}),1.5);
+    for(const Json &value:std::vector<Json>{-0.1,1.1,true,"0.1",std::numeric_limits<double>::infinity()}) {
+        auto bad=tree;bad["nodes"][0]["effects"]["incoming_damage_reduction_per_rank"]=value;
+        EXPECT_FALSE(mods::ValidateSkillOperation("skills.register",bad).empty());
+    }
+}
+TEST_F(ModSkillsRuntime, DefensiveRanksStackRestoreAndDisappearWhenStopped) {
+    for(const auto id:{"test.alpha","test.beta"})Add(id,R"(return {on_game_enter=function()
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Defense',nodes={
+          {id='guard',title='Guard',description='Reduce deductions',max_rank=2,effects={incoming_damage_reduction_per_rank=0.25}}}}))
+        assert(chronicle.call('skills.set_rank',{tree='combat',id='guard',rank=2}))
+    end})");Start();EXPECT_FALSE(runtime.HasSkillDamageEffects(true));runtime.Tick({2,0,0,true,0,1});
+    ASSERT_TRUE(runtime.Diagnostics().empty());EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100,true),25);
+    EXPECT_FALSE(runtime.HasSkillDamageEffects());EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),100);
+    EXPECT_NE(runtime.Skills()[0].description.find("Current reduction: 50%"),std::string::npos);
+    for(float value:{0.0f,-0.0f,-1.0f,std::numeric_limits<float>::infinity()})
+        EXPECT_EQ(std::bit_cast<unsigned>(runtime.ApplySkillDamage(value,true)),std::bit_cast<unsigned>(value));
+    const auto saved=runtime.SaveState();runtime.ResetState();EXPECT_FALSE(runtime.HasSkillDamageEffects(true));
+    std::string error;ASSERT_TRUE(runtime.LoadState(saved,error));EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100,true),25);
+    runtime.Start(mods::Manager{});EXPECT_FALSE(runtime.HasSkillDamageEffects(true));EXPECT_EQ(runtime.ApplySkillDamage(100,true),100);
+}
+TEST_F(ModSkillsRuntime, DefenseUsesNativeLifeHookPreservesHealingAndDormantBehavior) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('skills.register',{id='combat',title='Combat',description='Defense',nodes={
+          {id='guard',title='Guard',description='Reduce deductions',max_rank=2,effects={incoming_damage_reduction_per_rank=0.25}}}}))
+        assert(chronicle.call('skills.set_rank',{tree='combat',id='guard',rank=2}))
+    end})");Start();auto status=std::make_unique<CUserStatus>();
+    struct Cleanup{int oldMode;CUserStatus *oldStatus;~Cleanup(){mods::Scripts().Start(mods::Manager{});mods::Scripts().ResetState();mods::OwnedCombatDamage()={};mode=oldMode;UserStatus=oldStatus;}}cleanup{mode,UserStatus};
+    mode=GAME_MODE_DUNGEON;UserStatus=status.get();status->hp[0]=100;status->max_hp[0]=100;status->life_step[0]=0;
+    mods::Scripts().Start(manager);mods::Scripts().Tick({2,0,0,true,0,1});ASSERT_TRUE(mods::Scripts().Diagnostics().empty());
+    status->AddNowLife(0,-20,0);EXPECT_EQ(status->hp[0],90);
+    status->AddNowLife(0,10,0);EXPECT_EQ(status->hp[0],100);
+    mods::OwnedCombatDamage().epoch=mods::Scripts().Epoch();std::string error;
+    ASSERT_TRUE(mods::OwnedCombatDamage().incoming.Set("test.mod",{{"id","double"},{"operation","multiply"},{"value",2}},error));
+    status->AddNowLife(0,-20,0);EXPECT_EQ(status->hp[0],80);
+    mode=GAME_MODE_EDIT;status->AddNowLife(0,-20,0);EXPECT_EQ(status->hp[0],60);
+    mode=GAME_MODE_DUNGEON;mods::Scripts().Start(mods::Manager{});status->AddNowLife(0,-20,0);EXPECT_EQ(status->hp[0],40);
+}
+
+TEST_F(ModSkillsRuntime, FullDefenseDoesNotSettlePendingLifeInterpolation) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('skills.register',{id='guard',title='Guard',description='Full reduction',nodes={
+          {id='guard',title='Guard',description='Block deductions',max_rank=1,effects={incoming_damage_reduction_per_rank=1}}}}))
+        assert(chronicle.call('skills.unlock',{tree='guard',id='guard'}))
+    end})");Start();auto status=std::make_unique<CUserStatus>();
+    struct Cleanup{int oldMode;CUserStatus *oldStatus;~Cleanup(){mods::Scripts().Start(mods::Manager{});mods::Scripts().ResetState();mode=oldMode;UserStatus=oldStatus;}}cleanup{mode,UserStatus};
+    mode=GAME_MODE_DUNGEON;UserStatus=status.get();mods::Scripts().Start(manager);mods::Scripts().Tick({2,0,0,true,0,1});
+    status->hp[0]=100;status->max_hp[0]=100;status->next_hp[0]=80;status->life_step[0]=-2;
+    status->AddNowLife(0,-10,10);EXPECT_EQ(status->hp[0],100);EXPECT_EQ(status->next_hp[0],80);EXPECT_EQ(status->life_step[0],-2);
+    CUserStatus unrelated{};unrelated.hp[0]=100;unrelated.max_hp[0]=100;
+    unrelated.AddNowLife(0,-10,0);EXPECT_EQ(unrelated.hp[0],90);
+    EXPECT_TRUE(mods::Scripts().Diagnostics().empty());
 }
 
 }

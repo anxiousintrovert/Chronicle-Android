@@ -43,13 +43,14 @@ float ModifyOutgoingDamage(const CMonstorUnit *unit, int actor, int character, f
     return Scripts().ApplySkillDamage(rules?combat.outgoing.Apply(damage,context):damage);
 }
 bool ModifyIncomingDamage(const CUserStatus *status, int character, short &amount) noexcept {
-    if (!Active(combat.incoming) || !status || status != UserStatus || character < 0 || character >= 6 || amount >= 0) return false;
+    const bool rules=Active(combat.incoming);
+    if (mode!=GAME_MODE_DUNGEON || (!rules&&!Scripts().HasSkillDamageEffects(true)) || !status || status != UserStatus || character < 0 || character >= 6 || amount >= 0) return false;
     DamageContext context;
     context.weapon = Weapon(status, character); context.character = character;
     context.hp = status->life_step[character] ? status->next_hp[character] : status->hp[character];
     context.max_hp = status->max_hp[character]; context.frame = combat.frame;
     const float original = -static_cast<float>(amount);
-    const float result = combat.incoming.Apply(original, context);
+    const float result = Scripts().ApplySkillDamage(rules?combat.incoming.Apply(original, context):original,true);
     if (result == original) return false;
     if (result <= 0) { amount = 0; return true; }
     amount = static_cast<short>(-std::clamp(std::lround(result), 1L, 32767L));

@@ -32,9 +32,13 @@ std::string Definition(const Json &a) {
            !nodes.emplace(node["id"].get<std::string>(),&node).second)return "invalid or duplicate skill node";
         if(node.contains("effects")) {
             const auto &effects=node["effects"];
-            if(!effects.is_object()||effects.size()!=1||!effects.contains("enemy_damage_per_rank")||!effects["enemy_damage_per_rank"].is_number())return "supported effect is enemy_damage_per_rank";
-            const auto rate=effects["enemy_damage_per_rank"].get<double>();
-            if(!std::isfinite(rate)||rate<0||rate>1)return "enemy damage per rank must be finite in 0..1";
+            if(!effects.is_object()||effects.empty()||effects.size()>2)return "provide supported skill effects";
+            for(const auto &[kind,value]:effects.items()) {
+                if(kind!="enemy_damage_per_rank"&&kind!="incoming_damage_reduction_per_rank")return "unsupported skill effect";
+                if(!value.is_number())return "skill effect rate must be numeric";
+                const auto rate=value.get<double>();
+                if(!std::isfinite(rate)||rate<0||rate>1)return "skill effect rate must be finite in 0..1";
+            }
         }
         if(node.contains("prerequisites")&&(!node["prerequisites"].is_array()||node["prerequisites"].size()>128))return "invalid prerequisites";
     }
@@ -98,14 +102,15 @@ void ValidateSkillsState(const Json &state) {
         }
     }
 }
-std::map<std::pair<std::string,std::string>,double> SkillDamageFactors(const Json &state) {
+std::map<std::pair<std::string,std::string>,double> SkillDamageFactors(const Json &state,bool incoming) {
     std::map<std::pair<std::string,std::string>,double> factors;
     if(!state.contains("skill_trees"))return factors;
     for(const auto &[tree,definition]:state["skill_trees"].items())for(const auto &node:definition["nodes"]) {
-        if(!node.contains("effects"))continue;
+        const char *effect=incoming?"incoming_damage_reduction_per_rank":"enemy_damage_per_rank";
+        if(!node.contains("effects")||!node["effects"].contains(effect))continue;
         const auto id=node["id"].get<std::string>();const int rank=Rank(state,tree,id);
-        const double rate=node["effects"]["enemy_damage_per_rank"].get<double>();
-        if(rank>0&&rate>0)factors.emplace(std::pair{tree,id},1.0+rate*rank);
+        const double rate=node["effects"][effect].get<double>();
+        if(rank>0&&rate>0)factors.emplace(std::pair{tree,id},incoming?std::max(0.0,1.0-rate*rank):1.0+rate*rank);
     }
     return factors;
 }

@@ -2612,7 +2612,7 @@ overall saved-state limits still apply; this is not an unrestricted serializer.
 
 ## Opt-in skill damage effects
 
-Require skills.effects.v1 and game.write. A node may add exactly
+Require skills.effects.v1 and game.write. A node may add
 `effects = {enemy_damage_per_rank = 0.25}`. The rate must be finite and within
 0..1. A trained rank contributes factor `1 + rate * rank`; rank zero, rate zero
 and nodes without effects contribute nothing. A tree declaration alone does not
@@ -2780,3 +2780,28 @@ Provider requirements are rechecked when saved definitions attach to a package.
 This is an optional integration route for separate extensions: they choose their
 own versioned signal names and payloads. It does not prescribe their asset formats,
 registries or implementation, and does not assert that those extensions exist.
+
+## Opt-in defensive skill effects
+
+Require `skills.defense.v1` and `game.write`. A node can declare
+`effects = {incoming_damage_reduction_per_rank = 0.25}`, optionally alongside
+`enemy_damage_per_rank`. Each rate must be finite in 0..1. At rank r, its incoming
+factor is `max(0, 1 - rate * r)`. Independent nodes/owners multiply their factors
+in lexical owner/tree/node order, after incoming combat rules. Two 50% reductions
+therefore leave 25% of the original deduction. No effect is applied at rank zero
+or rate zero. Full reduction explicitly blocks the deduction.
+
+This uses the existing dungeon `AddNowLife` hook for the active save's party:
+it covers negative life changes routed through that hook, including non-combat
+sources, not every possible direct HP write. It does not affect healing, town
+life changes, outgoing damage, unrelated status objects or saved defense stats.
+Nonzero reduced damage rounds to the nearest integer with a minimum deduction of
+one. Full reduction skips the native operation without settling an existing HP
+interpolation. Authors should describe this scope rather than promise universal
+invulnerability or attack-only armor.
+
+The shared skill menu displays per-rank and current reduction. Rank/save loading,
+transaction rollback and owner cleanup use the same rules as outgoing effects.
+Nothing is installed or trained by default. Automated native-hook tests cover
+life deductions and healing; a representative retail combat playthrough and
+non-Windows validation remain outstanding.
