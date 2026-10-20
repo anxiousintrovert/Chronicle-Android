@@ -26,6 +26,7 @@
 #include "player_combat.hpp"
 #include "weapon_loadout.hpp"
 #include "quick_items.hpp"
+#include "world_transition.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -230,6 +231,8 @@ void TickGame() {
         if (operation == "weapons.equip_state") return ReadWeaponEquipState();
         if (operation == "player.combat_state") return ReadPlayerCombat();
         if (operation == "items.quick_slots") return ReadQuickItems();
+        if (operation == "world.locations") return ReadWorldLocations();
+        if (operation == "world.transition_state") return ReadWorldTransition();
         if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
         if (operation == "party.town_state") return ReadTownSelection();
         if (operation == "party.switch_state") return ReadPartySwitchState();
@@ -263,6 +266,9 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "world.transition"; })) {
+            return QueueWorldTransition(commands, money, error);
+        }
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "party.town_set_active"; })) {
             return QueueTownSelection(commands, money, error);
         }

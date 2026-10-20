@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 94 implemented operations, native plugins and author
+a real host-call boundary, 97 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -17,7 +17,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
-| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
+| World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; native settlement travel with deferred owner-bound requests; vanilla generation unchanged | dungeon/floor/registered-map transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
@@ -1245,3 +1245,39 @@ scenario in 9.717 s, each in its own process/disposable save directory. All six
 quick-item unit tests passed. This commit changes tests and documentation only;
 PS2 and engine files are unchanged. The prior full-suite/seed receipt remains
 applicable to the unchanged engine, not a newly repeated full-suite claim.
+
+### Native settlement transitions
+
+world.locations, world.transition_state and world.transition cover the pinned
+reference's five built-in settlement destinations, using our numeric map IDs.
+Town and dungeon requests enter their existing native exit paths after the
+display frame ends. MapJump alone only sets NextMapNo/StartEventNo; the adapter
+also schedules the town system event or dungeon exit flag, so the current loop
+actually exits and performs its native cleanup. No PS2 source override is added.
+
+The request is the callback's sole engine write, is owned, and is revalidated
+before dispatch. Pending conflicts report the owner. Owner/epoch, save/scene/
+character changes, newly busy contexts and missing destination event resources
+reject or cancel without dispatch. Same-town requests are unchanged no-ops.
+No queued request means no native context or resource inspection in the new
+frame-end hook. Travel cancels pending quick-item input before changing scenes.
+
+Four unit tests exercise schema/catalog, callback isolation, one-shot dispatch,
+preflight rechecks, owner/epoch/context cancellation, missing assets, no-op and
+busy rejection. Two optional retail tests (DC_DATA and DC_WORLD_TRANSITION_AUDIT,
+run separately with disposable roots) initiate Lua calls through a shared-manager
+action. Norune-to-Matataki arrives via the native town event. Divine Beast Cave
+exit reaches Matataki through native dungeon cleanup; the damaged/poisoned
+fixture is recovered on arrival. Both passed. These test one town pair and one
+dungeon exit, not all five destinations or all native event/story variants.
+
+Dungeon entry and floor selection, registered destinations, back-floor requests
+and floor-generation overrides remain open. This is native settlement capability
+coverage, not a claim that those other travel domains are implemented.
+
+Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
+780 registered, 756 passed, 23 skipped and one disabled, with no failures (one
+additional mouse-capture test skipped in this environment). Both optional PAL
+travel tests passed separately: town 3.139 s, dungeon exit 11.472 s. All 18 Python
+checks and 3,840 empty/disabled seed comparisons passed. CLI discovery lists all
+three operations. PS2 files remain unchanged.

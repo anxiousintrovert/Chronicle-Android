@@ -16,6 +16,7 @@
 #include "player_tuning.hpp"
 #include "player_combat.hpp"
 #include "quick_items.hpp"
+#include "world_transition.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -23,6 +24,9 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"world.locations", "game.read", "List supported retail settlement destinations.", false},
+    {"world.transition_state", "game.read", "Read native travel readiness and the last queued request.", false},
+    {"world.transition", "game.write", "Queue native settlement travel after the current display frame.", true},
     {"items.quick_slots", "game.read", "Read saved quick slots and native selection readiness.", false},
     {"items.quick_slot_select", "game.write", "Select a loaded native quick-item slot during dungeon play.", true},
     {"items.quick_slot_use", "game.write", "Request bounded native Square-button use of a loaded quick slot.", true},
@@ -235,6 +239,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "items.quick_slots" || name == "items.quick_slot_select" || name == "items.quick_slot_use") return ValidateQuickItems(name, a);
+    if (name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
     if (name.starts_with("shops.")) {
@@ -409,6 +414,7 @@ Json ReadStatus(const CUserStatus &s, const World &w, std::string_view op, const
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
+    if (op == "world.locations") return ReadWorldLocations();
     if (retail::Handles(op)) {
         return retail::Read(s, op, a);
     }

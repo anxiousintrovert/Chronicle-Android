@@ -47,6 +47,9 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `weapons.get` | `slot`, optional `character` | `game.read` | One owned weapon; fails for empty or unavailable slot |
 | `economy.get` | none | `game.read` | Money and storage capacity (65535) |
 | `world.get` | none | `game.read` | Native mode, map, dungeon, floor and restriction identifier |
+| `world.locations` | none | `game.read` | List the five supported retail settlement map IDs and names |
+| `world.transition_state` | none | `game.read` | Native travel readiness, rejection reason and last request state |
+| `world.transition` | `map` (0–4) | `game.write` | Queue native settlement travel as the callback's sole engine write |
 | `player.heal` | `amount`, optional `character` | `game.write` | Add HP, clamped to current maximum |
 | `player.damage` | `amount`, optional `character` | `game.write` | Reduce HP; direct gauge change, not a combat hit or damage formula |
 | `player.set` | `hp`, optional `character` | `game.write` | Set current HP within maximum; does not set maximum HP |
@@ -1361,3 +1364,41 @@ Selection alone does not synthesize input. Native quick-slot use differs from
 inventory-menu `items.use`; the two operations must not be substituted for each
 other. With no pending request, the added native input check returns immediately
 without reading game resources, scanning owners or changing physical input.
+
+### Native settlement travel
+
+`world.locations {}` returns the five retail destinations: map 0 Norune, 1
+Matataki, 2 Queens, 3 Muska Lacka and 4 Yellow Drops. This read does not load
+assets. `world.transition {map=1}` requests travel from ordinary outdoor town
+walking or ordinary dungeon play. It rejects menus, events, active dungeon
+actions, first-person view, missing native resources and an existing native or
+mod transition. A request also checks the destination's indexed event resource;
+this is not exhaustive validation of every asset that the native loader uses.
+
+Travel must be the callback's only engine write, including dependency commands
+and currency changes. Owned script state may still record the request. The host
+queues it only when the callback succeeds and dispatches after the display frame
+ends. It rechecks owner/epoch, save, scene, character, native readiness and the
+destination resource before dispatch. A stopped owner or changed context prevents
+travel. A second pending request reports a conflict with its owner. Requesting
+the current town is an unchanged no-op.
+
+`world.transition_state {}` returns `ready`, `reason`, and `request`. Request
+states are `idle`, `queued`, `unchanged`, `dispatched`, `cancelled`, or `failed`;
+non-idle states include the owner and destination, with an error on failure.
+Dispatched means the native transition was initiated, not that arrival is
+complete. Observe `world.get` and native readiness before subsequent operations.
+A shared-manager action should arm an on_tick request after menus close.
+
+The town path schedules the native system event used by world-map travel. The
+dungeon path sets the native exit flag so GameLoop performs its ordinary
+exit cleanup, including gate-key handling, character/status recovery and audio
+handling under the native flags. A pending quick-item request is cancelled
+before travel. Once dispatched, stopping the requesting mod does not rewind
+travel. The operation can bypass ordinary story destination availability when
+explicitly requested; it does not manually alter story unlocks.
+
+This API accepts existing settlements only. Dungeon entry, specific floors,
+back floors and registered map destinations remain separate coverage work.
+There is no per-frame readiness/resource scan when no request is queued, and no
+travel is triggered by merely installing or enabling a package.
