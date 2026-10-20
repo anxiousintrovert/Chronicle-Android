@@ -5,8 +5,8 @@ replacement path. **The game validates this format but cannot activate mesh pack
 it to a manifest's `files` mapping: that mapping still replaces compatible native
 assets. No new mesh runtime capability is advertised by this tool, and it does
 not install packages, edit game assets, enable mods, launch the game, or fetch
-external resources. Runtime package selection and native construction attachment remain in the
-coverage ledger; staged declarations and conflict checks are available below.
+external resources. Runtime attachment is integrated for internal catalogs; public package activation
+and retail replacement evidence remain gated. Staged declarations are available below.
 
 ## Commands
 
@@ -63,7 +63,8 @@ Limits:
 The native `DecodeMeshAsset` decoder enforces the same limits before returning
 detached float32 geometry. It rejects nested objects and excessive JSON nesting,
 and performs no graphics allocation, native-state write, RNG call or file read.
-It is not yet connected to package activation or visual construction.
+Native visual construction now connects through the internal package bridge;
+public package activation remains gated pending retail validation.
 
 The format stores geometry only. Texture pixels, external material definitions,
 vertex colors, skin weights, animation, attachments and transforms are not
@@ -113,8 +114,7 @@ This is an internal adapter, not an exposed package feature yet. Native
 arena retirement and transient sweeping detach them. Bindings reject changed rest
 pointers/counts and invalid influences until explicitly rebuilt. Registration is
 bounded to 256 visuals and one million source/replacement points each. Native morph/color/material updates and GPU publication are integrated for
-internal bindings. Package activation, native construction attachment and retail
-replacement-rendering tests remain required before mesh replacement is advertised.
+internal bindings. Package activation and retail replacement-rendering tests remain required before mesh replacement is advertised.
 No custom skeleton, motion, item, weapon or cutscene registry is introduced.
 
 
@@ -135,8 +135,8 @@ Material refresh preserves replacement index ranges. It validates all updates
 before publishing and allocates nothing, so malformed updates cannot leave a
 partially refreshed visual.
 
-These helpers remain internal preparation. The game does not yet select a mesh package or attach replacements during
-native visual construction. Internal registration can now upload a separate GPU
+These helpers feed native construction through the internal package bridge.
+The public package activation gate remains in place. Internal registration can now upload a separate GPU
 mesh, and native draw/remake paths resolve and refresh it while retaining the
 original as fallback. Native animation and synthetic GPU tests are not retail
 replacement-model validation. Package activation and retail visual evidence are still required. Replacement-aware frame bounds are now integrated as described below.
@@ -183,7 +183,7 @@ behavior is unchanged. Failed replacements cease contributing bounds; native
 fallback remains available. With no registered replacement, the helper returns
 before querying the visual's model identity or calculating bounds.
 
-This does not enable mesh packages. Native construction attachment, target discovery and runtime activation remain
+This does not enable mesh packages. Target discovery and public activation remain
 pending; staged declarations and conflict diagnostics are described below.
 
 
@@ -193,8 +193,8 @@ Mesh package activation is **not yet available**. Authors can validate, pack,
 install and inspect conflicts for this declaration now, but enabling a package
 with meshes blocks the whole package with an explicit diagnostic. Its scripts,
 plugins and other overrides do not become active. Packages remain disabled by
-default. This staging gate will be removed only with native construction
-attachment and retail validation; no mesh capability is advertised yet.
+default. Native construction attachment is integrated; this staging gate will be removed
+only after retail validation; no mesh capability is advertised yet.
 
 Add an optional `meshes` array to the normal `mod.json`:
 
@@ -261,5 +261,35 @@ or strip order. An ambiguous match must keep the original visual.
 Selected definitions are shared immutable snapshots. Retiring an owner or clearing
 the catalog removes it from future selection without invalidating a selection
 already in use. Selection performs no filesystem access, geometry copying or GPU
-allocation. The catalog does not itself attach visuals or activate packages; that
-integration and retail evidence remain pending.
+allocation. The catalog does not itself attach visuals. The package bridge below handles
+attachment; public activation and retail evidence remain pending.
+
+
+## Native package bridge and diagnostics
+
+The runtime owns a `MeshPackages` catalog. Eligible packages are decoded at
+startup, before callbacks, and mesh-only owners can participate without Lua or a
+native plugin. The manager's temporary activation gate still prevents ordinary
+mesh packages from entering that startup load order. Internal native fixtures
+exercise the complete bridge without claiming retail package readiness.
+
+Native MDT construction captures the flattened-to-native vertex correspondence
+only while a catalog is active. After normal visual construction/upload, the
+bridge selects a unique target and attaches a separate replacement mesh. Source
+MDT data remains unchanged. With an empty catalog, no correspondence entries are
+allocated and no package attachment runs. Unmatched models retain their original
+visual without errors. Unsupported mappings, missing material strips and ambiguous
+matches keep the original visual and produce owner-prefixed diagnostics.
+
+Startup reset clears owned attachments. Callback failure or owner retirement
+removes both catalog entries and that runtime's GPU replacements and skin bindings
+before the next draw. Native visual retirement also releases attachments. A failed
+replacement refresh selects the original visual and contributes a diagnostic.
+The existing shared mod-manager menu displays these as module diagnostics, along
+with script errors; no separate menu or plugin UI is introduced. Attachment
+messages are deduplicated and bounded to 64, with at most 64 live refresh messages.
+
+Native fixture tests cover construction, unchanged MDT bytes, cached geometry
+after file removal, remake/morph updates, ambiguous two-texture models, material
+mismatch, refresh failure, and an actual Lua callback failure retiring its mesh.
+Actual retail model/animation screenshots and author target discovery remain open.

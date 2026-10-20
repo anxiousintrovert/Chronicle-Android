@@ -456,7 +456,7 @@ void Draw() {
         }
         for (const auto &message : Scripts().Diagnostics()) {
             if (message.starts_with(p.id + ":")) {
-                body += "\n\nScript error: " + message;
+                body += "\n\nModule diagnostic: " + message;
             }
         }
         for (const auto &message : Scripts().Logs()) {

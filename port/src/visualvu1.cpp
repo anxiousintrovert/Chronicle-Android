@@ -1,5 +1,6 @@
 #include "mods/mesh_skin_runtime.hpp"
 #include "mods/mesh_visual_runtime.hpp"
+#include "mods/mesh_packages.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -624,6 +625,8 @@ PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int
     Draw3DVisual &visual = Draw3DRegisterVisual(block, false);
     MdtView       view = View(data);
     visual.vertex_colour = view.colour != nullptr;
+    const bool mesh_packages = mods::PackageMeshesActive();
+    std::vector<std::uint32_t> mesh_sources;
 
     Draw3DStrip             current;
     std::vector<TextureRun> runs;
@@ -650,6 +653,7 @@ PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int
         UvScale(current, su, sv);
         uint32_t first_vertex = static_cast<uint32_t>(visual.vertices.size());
         for (uint32_t i = 0; i < count; i++, index += view.stride) {
+            if (mesh_packages && mesh_sources.size() < 100000) mesh_sources.push_back(index[0]);
             gfx::Vertex3D vertex = {};
             std::memcpy(vertex.position, view.vertex[index[0]], sizeof(vertex.position));
             std::memcpy(vertex.normal, view.normal[index[1]], sizeof(vertex.normal));
@@ -686,6 +690,7 @@ PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int
         }
     }
     Draw3DFinishVisual(visual);
+    if (mesh_packages) mods::AttachPackageMesh(block, data, view.vertex, view.header->vertex_num, mesh_sources);
     return vu_size;
 }
 

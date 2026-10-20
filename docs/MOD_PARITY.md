@@ -3782,3 +3782,31 @@ cumulative geometry-budget exhaustion without evicting existing owners. PS2 and
 Kazarov diffs remain empty. No catalog is published to native construction yet;
 mesh package activation remains explicitly blocked. Native attachment, diagnostic
 plumbing, target discovery and retail replacement rendering remain outstanding.
+
+
+## Native mesh construction bridge and shared diagnostics (2026-10-20)
+
+Runtime now owns MeshPackages, loads eligible geometry before callbacks, recognizes
+mesh-only owners and retires cached definitions/GPU replacements/skin bindings on
+startup reset or owner failure. Native MDT construction captures source indices
+only with an active catalog, then selects and attaches a distinct replacement
+without writing MDT data. Empty and unmatched paths keep the native visual.
+Runtime-only ambiguity, unsupported mappings/material strips and failed refreshes
+retain the original and appear as owner-prefixed module diagnostics in the shared
+menu. Attachment diagnostics are deduplicated/capped, and refresh errors are read
+from live owned bindings. Context-scoped retirement does not touch other bindings.
+
+Clang 23.1.2 game/test builds passed. All 74 focused native/runtime tests passed;
+full regression passed 967 tests, with 104 skipped and one disabled benchmark.
+All 56 Python checks passed, including a source guard proving native construction
+statements are unchanged around the capture/attachment hooks. Five new native
+fixture cases cover unchanged MDT bytes, constructor attachment, cached-file
+removal, remake, ambiguity, material/refresh fallback, unmatched models and actual
+Lua callback failure retiring geometry before the next draw. The isolated PAL
+combat/shared-manager/back-floor replay passed with the new hook dormant. PS2 and
+Kazarov diffs remain empty.
+
+The manager still explicitly blocks public mesh package activation. Native
+construction and diagnostic plumbing are integrated, but author target discovery
+and retail replacement-model/animation visual evidence remain outstanding before
+removing that gate and advertising a mesh capability. Full coverage is unfinished.

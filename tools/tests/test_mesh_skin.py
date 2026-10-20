@@ -21,4 +21,15 @@ class MeshSkinSource(unittest.TestCase):
             body=body.replace(hook,"")
         self.assertEqual(hashlib.sha256(body.encode()).hexdigest(),"383ebc685f58f3d11ddf5140d00be20a494b43c883592cf4704dba04007c075c")
 
+    def test_native_visual_construction_statements_remain_unchanged_around_mesh_capture(self):
+        source=(ROOT/'port/src/visualvu1.cpp').read_text()
+        body=function(source,'PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(')
+        for hook in ["    const bool mesh_packages = mods::PackageMeshesActive();\n",
+                     "    std::vector<std::uint32_t> mesh_sources;\n",
+                     "            if (mesh_packages && mesh_sources.size() < 100000) mesh_sources.push_back(index[0]);\n",
+                     "    if (mesh_packages) mods::AttachPackageMesh(block, data, view.vertex, view.header->vertex_num, mesh_sources);\n"]:
+            self.assertEqual(body.count(hook),1)
+            body=body.replace(hook,"")
+        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(),"47f8c52db468bedc68574da1587f82d00a99597eb0955bb271e5de9e84509a17")
+
 if __name__=='__main__':unittest.main()

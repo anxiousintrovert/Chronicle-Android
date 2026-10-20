@@ -4,7 +4,10 @@
 class CVisualVu1;
 namespace mods {
 bool AttachReplacementVisual(const void *block,const void *model,std::span<const MeshSkinBinding::Point> native_rest,
-                             std::span<const std::uint32_t> flat_native_indices,const MeshAsset &asset,std::string &error);
+                             std::span<const std::uint32_t> flat_native_indices,const MeshAsset &asset,std::string &error,
+                             std::string_view owner = {}, const void *context = nullptr);
+void RetainReplacementOwners(const void *context, std::span<const std::string> owners);
+std::vector<std::string> ReplacementDiagnostics(const void *context);
 // Returns false without touching output when this visual has no healthy replacement.
 // Bounds conservatively include native corners and both published replacement poses.
 bool ReplacementVisualCorners(CVisualVu1 &visual, const float native[8][4], float output[8][4]) noexcept;

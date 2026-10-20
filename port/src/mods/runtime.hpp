@@ -51,6 +51,7 @@ struct ActionStatus {
     bool        available = false;
 };
 
+class MeshPackages;
 class Runtime {
 public:
     Runtime();
@@ -65,6 +66,7 @@ public:
     void                     StopAudio();
     std::shared_ptr<const audio::PcmTrack> BindMusic(int port, std::string_view sequence, std::shared_ptr<const audio::PcmTrack> fallback);
     bool                     HasGameplay() const;
+    MeshPackages &Meshes();
     bool                     WantsEnemyDeaths() const;
     std::vector<std::string> ActiveOwners() const;
 

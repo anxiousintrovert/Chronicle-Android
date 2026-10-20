@@ -5,6 +5,7 @@
 #include "api.hpp"
 #include "arguments.hpp"
 #include "audio_streams.hpp"
+#include "mesh_packages.hpp"
 #include "audio/mixer.hpp"
 #include "native.hpp"
 extern "C" {
@@ -978,6 +979,7 @@ struct Runtime::Impl {
     bool                                             was_playing = false, loaded_pending = false;
     Manager                                          plan;
     std::unique_ptr<AudioStreams> audio;
+    MeshPackages meshes;
     std::vector<std::pair<std::string, std::string>> pending_actions;
     std::vector<CustomEvent>                         pending_events;
 
@@ -1258,6 +1260,7 @@ Runtime::~Runtime() = default;
 
 void Runtime::Start(const Manager &manager) {
     ++epoch_;
+    impl_->meshes.Clear();
     impl_->plan = manager;
     impl_->modules.clear();
     if (impl_->audio) impl_->audio->Clear();
@@ -1274,7 +1277,7 @@ void Runtime::Start(const Manager &manager) {
         if (found == manager.Packages().end()) {
             continue;
         }
-        if (found->script.empty() && found->quests.empty() && found->native_library.empty()) {
+        if (found->script.empty() && found->quests.empty() && found->native_library.empty() && found->meshes.empty()) {
             continue;
         }
         auto  module = std::make_unique<Module>();
@@ -1292,6 +1295,13 @@ void Runtime::Start(const Manager &manager) {
                     m.failed = true;
                     impl_->diagnostics.push_back(id + ": dependency script failed: " + dependency);
                 }
+            }
+        }
+        if (!m.failed && !m.package.meshes.empty()) {
+            std::string error;
+            if (!impl_->meshes.LoadPackage(m.package, error)) {
+                m.failed = true;
+                impl_->diagnostics.push_back(id + ": mesh load failed: " + error);
             }
         }
         if (!m.failed && !m.package.audio.empty()) {
@@ -1403,6 +1413,7 @@ void Runtime::Start(const Manager &manager) {
         impl_->modules.push_back(std::move(module));
     }
     if (impl_->audio) impl_->audio->Retain(ActiveOwners());
+    if (impl_->meshes.Active()) impl_->meshes.Retain(ActiveOwners());
 }
 
 void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
@@ -1548,6 +1559,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         }
     }
     if (impl_->audio) impl_->audio->Retain(ActiveOwners());
+    if (impl_->meshes.Active()) impl_->meshes.Retain(ActiveOwners());
     impl_->was_playing = world.playing;
     if (world.playing) {
         impl_->loaded_pending = false;
@@ -1730,7 +1742,11 @@ std::vector<QuestStatus> Runtime::Quests() const {
     return result;
 }
 
-std::vector<std::string> Runtime::Diagnostics() const { return impl_->diagnostics; }
+MeshPackages &Runtime::Meshes() {return impl_->meshes;}
+std::vector<std::string> Runtime::Diagnostics() const {
+    auto result=impl_->diagnostics;auto meshes=impl_->meshes.Diagnostics();
+    result.insert(result.end(),meshes.begin(),meshes.end());return result;
+}
 
 Runtime &Scripts() {
     static Runtime runtime;

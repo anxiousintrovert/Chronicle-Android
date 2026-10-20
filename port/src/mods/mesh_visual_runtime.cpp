@@ -18,11 +18,11 @@ Bounds Measure(const Draw3DVisual &visual) noexcept {
     }
     return result;
 }
-struct Entry {const void *block=nullptr;const void *model=nullptr;Bounds current,previous;PreparedMeshVisual prepared;std::vector<MeshSkinBinding::Vertex> pose;std::string_view error;};
+struct Entry {std::string owner;const void *context=nullptr;const void *block=nullptr;const void *model=nullptr;Bounds current,previous;PreparedMeshVisual prepared;std::vector<MeshSkinBinding::Vertex> pose;std::string_view error;};
 std::map<const Draw3DVisual *,Entry> visuals;
 }
 bool AttachReplacementVisual(const void *block,const void *model,std::span<const MeshSkinBinding::Point> native_rest,
-                             std::span<const std::uint32_t> flat_native_indices,const MeshAsset &asset,std::string &error) {
+                             std::span<const std::uint32_t> flat_native_indices,const MeshAsset &asset,std::string &error,std::string_view owner,const void *context) {
     error.clear();const auto *source=Draw3DFindVisual(block);
     if(!source||source->immediate||flat_native_indices.size()!=source->vertices.size()||native_rest.empty()||
        std::ranges::any_of(flat_native_indices,[&](auto i){return i>=native_rest.size();})) {error="invalid registered native visual mapping";return false;}
@@ -33,7 +33,7 @@ bool AttachReplacementVisual(const void *block,const void *model,std::span<const
     if(points>1000000||source_points>1000000||indices>3000000){error="replacement visual point/index budget exceeded";return false;}
     gfx::MeshHandle created=gfx::kNullMesh;
     try {
-        Entry next;next.block=block;next.model=model;next.prepared=PrepareMeshVisual(*source,asset);next.current=next.previous=Measure(next.prepared.visual);next.pose.resize(asset.vertices.size());
+        Entry next;next.owner=owner;next.context=context;next.block=block;next.model=model;next.prepared=PrepareMeshVisual(*source,asset);next.current=next.previous=Measure(next.prepared.visual);next.pose.resize(asset.vertices.size());
         std::vector<std::uint32_t> mapping;mapping.reserve(asset.vertices.size());
         for(auto flat:next.prepared.source_vertices)mapping.push_back(flat_native_indices[flat]);
         created=gfx::CreateMesh(next.prepared.visual.vertices,next.prepared.visual.indices);
@@ -45,6 +45,21 @@ bool AttachReplacementVisual(const void *block,const void *model,std::span<const
         if(!old.empty())gfx::DestroyMesh(old.mapped().prepared.visual.mesh);
         return true;
     }catch(const std::exception &failure){if(created!=gfx::kNullMesh)gfx::DestroyMesh(created);error=failure.what();return false;}
+}
+void RetainReplacementOwners(const void *context,std::span<const std::string> owners) {
+    for(auto it=visuals.begin();it!=visuals.end();) {
+        const auto *source=it->first;const auto &entry=it->second;++it;
+        if(entry.context==context&&!entry.owner.empty()&&std::ranges::find(owners,entry.owner)==owners.end())DetachReplacementVisual(source);
+    }
+}
+std::vector<std::string> ReplacementDiagnostics(const void *context) {
+    std::vector<std::string> result;
+    for(const auto &[source,entry]:visuals)if(entry.context==context&&!entry.owner.empty()&&!entry.error.empty()) {
+        auto message=entry.owner+": mesh refresh: "+std::string(entry.error);
+        if(std::ranges::find(result,message)==result.end())result.push_back(std::move(message));
+        if(result.size()>=64)break;
+    }
+    return result;
 }
 bool ReplacementVisualCorners(CVisualVu1 &visual,const float native[8][4],float output[8][4]) noexcept {
     // Avoid even querying native model identity on the dormant path. Union all
