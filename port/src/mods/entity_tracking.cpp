@@ -43,6 +43,8 @@ EntityHandles &TrackEntities(CMonstorUnit &unit) {
     return handles;
 }
 
+EntityHandles *TrackedEntities(CMonstorUnit *unit) { return unit && tracked == unit ? &handles : nullptr; }
+
 void StopTrackingEntities() {
     if (!tracked) {
         return;

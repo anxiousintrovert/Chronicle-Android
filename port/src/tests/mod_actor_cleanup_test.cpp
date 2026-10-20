@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 #include "mods/actor_cleanup.hpp"
 #include "mods/entity_events.hpp"
+#include "mods/entity_tracking.hpp"
+#include "mods/entity_reactions.hpp"
+#include "monstorunit.hpp"
 #include "chronicle/monster_limits.hpp"
 #include "collisiondata.hpp"
 #include "shot_effect_pack.hpp"
@@ -46,4 +49,42 @@ TEST(ModActorCleanup, DeathCancellationMatchesUnitAndGenerationAndKeepsOrder) {
     EXPECT_EQ(queue.Pending()[1].unit, second);
     EXPECT_EQ(queue.Dropped(), 0);
     EXPECT_TRUE(queue.Enabled());
+}
+
+TEST(ModActorCleanup, OwnedRetirementPreservesOtherActorsAndNeverDispatchesKillRewards) {
+    auto unit = std::make_unique<CMonstorUnit>(); unit->CleanViewMonstor(0);
+    for (int slot : {0, 1}) {
+        unit->monster[slot].state = 2; unit->monster[slot].hp = 10;
+        unit->monster[slot].kind = 0; unit->monster[slot].attachment_kind = 0;
+    }
+    unit->alive_count = 2;
+    auto &handles = mods::TrackEntities(*unit);
+    const auto handle = handles.Get(0), other = handles.Get(1);
+    mods::ActorOwners owners; std::string error;
+    ASSERT_TRUE(owners.Claim(handles, handle, "alpha", "guard", error));
+    const auto before = unit->monster[0];
+    EXPECT_FALSE(mods::RetireOwnedActor(unit.get(), owners, handle, "beta", nullptr, nullptr, -1, -1, -1, error));
+    EXPECT_EQ(std::memcmp(&unit->monster[0], &before, sizeof(before)), 0);
+    unit->monster[0].event_flag2 = 7;
+    EXPECT_FALSE(mods::RetireOwnedActor(unit.get(), owners, handle, "alpha", nullptr, nullptr, -1, -1, -1, error));
+    unit->monster[0].event_flag2 = -1;
+    unit->sound[0].sequence_id = 2800;
+    EXPECT_FALSE(mods::RetireOwnedActor(unit.get(), owners, handle, "alpha", nullptr, nullptr, -1, -1, -1, error));
+    EXPECT_EQ(unit->alive_count, 2); EXPECT_TRUE(handles.Resolve(handle));
+    unit->sound[0].sequence_id = -1;
+    ASSERT_TRUE(mods::CanQueueEntityReactions(unit.get()));
+    mods::QueueEntityReaction(unit.get(), 0, MONSTER_DMG_HIT);
+    mods::EnemyDeaths().Enable(true);
+    mods::EnemyDeath event; event.unit = unit.get(); event.entity = handle;
+    mods::EnemyDeaths().Push(event); event.entity = other; mods::EnemyDeaths().Push(event);
+    ASSERT_TRUE(mods::RetireOwnedActor(unit.get(), owners, handle, "alpha", nullptr, nullptr, -1, -1, -1, error)) << error;
+    EXPECT_EQ(unit->alive_count, 1); EXPECT_EQ(unit->monster[0].state, -1); EXPECT_EQ(unit->monster[0].hp, 0);
+    EXPECT_EQ(unit->monster[1].hp, 10); EXPECT_EQ(unit->monster[1].state, 2);
+    EXPECT_FALSE(handles.Resolve(handle)); EXPECT_TRUE(handles.Resolve(other)); EXPECT_EQ(owners.Size(), 0);
+    EXPECT_EQ(mods::TakeEntityReaction(unit.get(), 0), MONSTER_DMG_NONE);
+    ASSERT_EQ(mods::EnemyDeaths().Pending().size(), 1);
+    EXPECT_EQ(mods::EnemyDeaths().Pending()[0].entity, other);
+    EXPECT_FALSE(mods::RetireOwnedActor(unit.get(), owners, handle, "alpha", nullptr, nullptr, -1, -1, -1, error));
+    EXPECT_EQ(unit->alive_count, 1);
+    mods::EnemyDeaths().Enable(false); mods::StopTrackingEntities();
 }

@@ -3234,3 +3234,22 @@ Spawn/despawn integration, floor placement and gameplay replay remain pending.
 Validation: Clang 23.1.2 game/test builds and 13 retail-audio/sequence tests
 passed, including rendered voice release after Step, exact identity matching,
 invalid requests, dormant storage and expanded slot 255. PS2 diff is empty.
+
+
+### Composed owned actor retirement (2026-10-20)
+
+Added internal RetireOwnedActor composition. A read-only tracking lookup avoids
+switching/activating the tracked unit on rejection. Ownership, generation, active
+slot, live state/alive accounting, mimic state and event linkage validate before
+sound retirement. Successful cleanup cancels matching attacks/projectiles, owned
+stat/scale overrides, queued reactions and that generation's pending death events.
+It resets the slot's transient storage to reusable floor defaults, retains native
+model/script allocations, decrements alive_count once and retires its identity
+and ownership record. No native kill/reward dispatch is invoked.
+
+Clang 23.1.2 game/test builds and 27 actor/identity/sound tests passed. The composed
+test verifies rejection preservation, invalid sound identity, other actors and
+events surviving cleanup, handle expiration and no repeated alive decrement.
+The helper has no public caller yet. Spawn placement, creation/ownership commit,
+automatic lifecycle integration and PAL gameplay validation remain outstanding.
+Public operations remain 135. PS2 diff against the baseline remains empty.
