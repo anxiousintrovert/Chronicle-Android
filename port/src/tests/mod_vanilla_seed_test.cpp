@@ -57,6 +57,10 @@ TEST(ModVanillaAudit, SeedMatrix) {
                     mods::Scripts().Tick({1, dungeon, 0, true}, [](int) { ADD_FAILURE()<<"unexpected native write"; return false; }, [](std::string_view) { ADD_FAILURE()<<"unexpected native read"; return nlohmann::json(); });
 #endif
                     map->buildRandomMap(rooms, first);
+                    int active_grid = DNG_GRID;
+#if __has_include("chronicle/dungeon_build.hpp")
+                    active_grid = map->GridExtent();
+#endif
                     nlohmann::json j = {
                         {"input_seed",      seed              },
                         {"dungeon",         dungeon           },
@@ -66,7 +70,7 @@ TEST(ModVanillaAudit, SeedMatrix) {
                         {"room_num",        map->room_num     },
                         {"gate_key",        map->gate_key_no  },
                         {"next_rng",        rand()            },
-                        {"grid",            DNG_GRID          },
+                        {"grid",            active_grid       },
                         {"map_bytes",       sizeof(*map)      },
                         {"road_part",       MAP_PARTS_URA_ROAD}
                     };

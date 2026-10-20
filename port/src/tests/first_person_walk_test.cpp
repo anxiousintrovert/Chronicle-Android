@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "../first_person_walk.hpp"
+#include "../mouse_collision.hpp"
 #include "platform/clock.hpp"
 #include "platform/config.hpp"
 #include "platform/input.hpp"
@@ -157,6 +158,11 @@ TEST(FirstPersonWalk, DungeonWalkUsesBodyFloorWallAndObjectCollisionAndRejectsMa
     mesh[0].poly = Poly({-100, 0, -100}, {-100, 0, 100}, {100, 0, -100}, {0, 1, 0});
     mesh[1].poly = Poly({100, 0, -100}, {-100, 0, 100}, {100, 0, 100}, {0, 1, 0});
     mesh[2].poly = Poly({-100, -100, 10}, {0, 100, 10}, {100, -100, 10}, {0, 0, -1});
+    for (auto &m : mesh) {
+        for (auto &vertex : m.poly.vertex) {
+            vertex[3] = 1.0f;
+        }
+    }
     for (int j = 0; j < 3; ++j) {
         collision.min[j] = 1000;
         collision.max[j] = -1000;
@@ -184,6 +190,44 @@ TEST(FirstPersonWalk, DungeonWalkUsesBodyFloorWallAndObjectCollisionAndRejectsMa
         EXPECT_LE(pos[2], 5.001f);
     }
     EXPECT_GT(pos[2], 4);
+    // The same physical floor/wall must work beyond retail bounds only when
+    // the map explicitly carries expanded dimensions.
+    constexpr int far_cell = 43 + 43 * chronicle::dungeon::GridStride;
+    constexpr float far_origin = 43 * 160.0f;
+    map->cells[0].parts_no = -1;
+    map->cells[far_cell].parts_no = 0;
+    map->cells[far_cell].direction = 0;
+    map->parts[0].camera_collision = &frame;
+    CBoxVu0 far_box{};
+    far_box.min[0] = far_box.min[2] = far_origin - 30;
+    far_box.max[0] = far_box.max[2] = far_origin + 30;
+    far_box.min[1] = -30;
+    far_box.max[1] = 30;
+    std::vector<CCPoly> far_polys;
+    EXPECT_EQ(MouseCameraPolys(*map, far_box, far_polys), 0);
+    pos[0] = pos[2] = far_origin;
+    pos[1] = 0;
+    velocity[0] = velocity[2] = 0;
+    velocity[1] = -.1f;
+    ASSERT_TRUE(FirstPersonDungeonStep(*map, nullptr, pos, velocity, info, 1));
+    EXPECT_FALSE(info.landed);
+    EXPECT_LT(pos[1], 0);
+    map->port_grid_extent = chronicle::dungeon::GridStride;
+    EXPECT_GT(MouseCameraPolys(*map, far_box, far_polys), 0);
+    pos[1] = 0;
+    for (int tick = 0; tick < 100; ++tick) {
+        velocity[0] = 0;
+        velocity[1] = -.1f;
+        velocity[2] = .6f;
+        ASSERT_TRUE(FirstPersonDungeonStep(*map, nullptr, pos, velocity, info, 1));
+        EXPECT_NEAR(pos[1], 0, 1e-5);
+        EXPECT_TRUE(info.landed);
+        EXPECT_LE(pos[2], far_origin + 5.01f);
+    }
+    EXPECT_GT(pos[2], far_origin + 4);
+    map->port_grid_extent = chronicle::dungeon::RetailGridExtent;
+    map->cells[far_cell].parts_no = -1;
+    map->cells[0].parts_no = 0;
     map->map_type = 0;
     map->parts[0].frame[0] = &frame;
     pos[0] = pos[2] = 0;

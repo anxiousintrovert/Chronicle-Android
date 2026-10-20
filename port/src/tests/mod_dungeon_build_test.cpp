@@ -24,6 +24,7 @@ TEST(ModDungeonBuild, ScopeRestoresDefaultsAfterRejectedPacking) {
                  })(*map),
                  std::runtime_error);
     EXPECT_FALSE(CustomBuild());
+    EXPECT_EQ(map->GridExtent(), 20);
     EXPECT_EQ(BuildExtent(), 20);
     EXPECT_EQ(BuildArea(), 16);
     UserStatus = nullptr;
@@ -44,8 +45,19 @@ TEST(ModDungeonBuild, ExpandedGenerationUsesRequestedRoomSizesAndStorage) {
         auto map = std::make_unique<CDungeonMap>();
         NowDngMap = map.get();
         srand(seed);
-        BuildScope scope({64, 46, 3, 6});
-        ASSERT_NO_THROW(map->buildRandomMap(6, 1));
+        {
+            BuildScope scope({64, 46, 3, 6});
+            ASSERT_NO_THROW(map->buildRandomMap(6, 1));
+        }
+        EXPECT_FALSE(CustomBuild());
+        EXPECT_EQ(map->GridExtent(), 48);
+        if (seed == 1) {
+            auto copied = std::make_unique<CDungeonMap>(*map);
+            EXPECT_EQ(copied->GridExtent(), 48);
+            copied->initalize();
+            EXPECT_EQ(copied->GridExtent(), 20);
+            EXPECT_EQ(map->GridExtent(), 48);
+        }
         EXPECT_GT(map->room_num, 16);
         EXPECT_LE(map->room_num, 64);
         bool outside_retail = false;

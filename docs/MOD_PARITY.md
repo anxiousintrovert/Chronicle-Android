@@ -1720,3 +1720,32 @@ Clang 23.1.2 Windows game/test builds pass. The full suite has 779 passes,
 34 skips and one disabled test; all 28 Python checks and all seven separate
 PAL first-floor retail back-floor scenarios pass.
 
+### Per-map runtime dimensions
+
+Successful internal generation now publishes an extent on that map. Native
+map copies retain it, and native initialization/submap initialization reset it
+to retail bounds. The field is appended in the port header copy; the original
+PS2 class is untouched. Runtime bounds do not depend on a temporary build scope.
+
+Map drawing/precalculation, fire/raster/water readers, normal player collision,
+native neighbourhood collision, first-person movement and camera collectors
+consume the persisted bounds. The existing first-person collision fixture now
+also exercises a floor and wall at cell 43,43: retail bounds exclude that cell,
+expanded bounds retain floor contact and stop movement at the wall. The camera
+collector likewise sees the far cell only with expanded bounds. Fixture
+vertices now have positional homogeneous coordinates so translations are
+actually exercised. Map-copy/reset tests and the 192 generation cases pass.
+
+This is not yet complete large-floor gameplay integration. Minimap scaling,
+native event collection/capacity, transport script coordinates, spawn placement,
+custom scenery and resource validation remain required, along with the public
+owned layout API and failed-build recovery. Rendering bounds are source/build
+verified; the synthetic collision test is not a retail large-floor playthrough.
+
+Validation: Clang 23.1.2 Windows game/test builds, the full 779-pass suite
+(34 skipped, one disabled), all 28 Python checks and all seven separate retail
+back-floor scenarios pass. The 3,840-case empty/disabled audit now reads the
+actual per-map extent; all exported fields except map size match upstream.
+The Windows map size is 115,632 bytes versus the baseline's 76,576. No protected
+PS2 file changed; other platforms remain unverified.
+

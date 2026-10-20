@@ -375,8 +375,8 @@ PORT_OVERRIDE void CDungeonMap::DrawMap(CCameraFollow *camera, CFrameVu1 *player
     this->ClearNPC_Cash();
     nearest = 10000.0f;
 
-    for (row = 0; row < 20; row++) {
-        for (col = 0; col < 20; col++) {
+    for (row = 0; row < this->GridExtent(); row++) {
+        for (col = 0; col < this->GridExtent(); col++) {
             world_x = 160.0f * col;
             delta_x = world_x - cam_pos[0];
             world_z = 160.0f * row;

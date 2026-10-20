@@ -1402,8 +1402,8 @@ PORT_OVERRIDE void DunMoveChara() {
                                                                 bound.min[2] = pos[2] - 20.0f;
                                                                 colPolyNum = 0;
 
-                                                                for (z = 0; z < 20; z++) {
-                                                                    for (x = 0; x < 20; x++) {
+                                                                for (z = 0; z < NowDngMap->GridExtent(); z++) {
+                                                                    for (x = 0; x < NowDngMap->GridExtent(); x++) {
                                                                         CDungeonMap *cmap = NowDngMap;
                                                                         int          parts_no = cmap->cells[x + z * chronicle::dungeon::GridStride]
                                                                                                     .parts_no;

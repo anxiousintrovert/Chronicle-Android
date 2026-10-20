@@ -350,8 +350,8 @@ int MouseCameraPolys(CDungeonMap &map, CBoxVu0 &box, std::vector<CCPoly> &polys)
             }
         }
     } else {
-        for (int j = 0; j < 20; ++j) {
-            for (int i = 0; i < 20; ++i) {
+        for (int j = 0; j < map.GridExtent(); ++j) {
+            for (int i = 0; i < map.GridExtent(); ++i) {
                 auto &cell = map.cells[i + j * chronicle::dungeon::GridStride];
                 if (cell.parts_no == -1) {
                     continue;

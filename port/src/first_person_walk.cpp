@@ -109,8 +109,8 @@ bool FirstPersonDungeonStep(CDungeonMap &map, DRAN_MAP_FIELD_SET *fields, float 
             }
         }
     } else {
-        for (int z = 0; z < 20; ++z) {
-            for (int x = 0; x < 20; ++x) {
+        for (int z = 0; z < map.GridExtent(); ++z) {
+            for (int x = 0; x < map.GridExtent(); ++x) {
                 auto &cell = map.cells[x + z * chronicle::dungeon::GridStride];
                 if (cell.parts_no == -1) {
                     continue;
