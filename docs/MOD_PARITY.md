@@ -938,3 +938,39 @@ Validation receipt: llvm-mingw Clang 23.1.2 builds passed. The full suite regist
 town API retail scenarios passed separately with PAL data. All 17 Python tests
 passed and the fresh 3,840-case empty/disabled seed comparison matched pinned
 upstream 50eaff63 exactly. No PS2 files changed.
+
+## Player tuning ownership foundation (2026-10-19; internal)
+
+The pinned reference binds nine player tuning controls for Chronicle: dungeon
+run speed, Toan swing recovery speed, recoil duration, bonus hit invincibility,
+action-gauge refill, thirst drain, weapon wear, map reveal and monster reveal.
+Its native implementation scales movement in `port/src/dun/movechara.cpp`, tunes
+hit frames at two damage branches, and adds hooks inside native `motionDrive`,
+`CUserStatus::Step`, `BattleSubWeaponDmg` and the minimap renderer. The reference's
+PS2 patch mechanism will not be copied; any required native replacement must be
+implemented and checked outside `ps2/`.
+
+`mods::PlayerTuning` now provides detached transaction state for these controls.
+Claims are exclusive per field and expose the conflicting field and package;
+independent fields may have different owners. Unlike the reference's implicit
+multiplier stacking, this preserves explicit conflict detection and bounded
+values. Replacing a request releases its omitted fields; explicit neutral values
+still claim their fields. Clear releases only the caller's claims. Runtime epoch
+changes and stopped owners retire claims. A failed batch, including one spanning
+multiple owners, does not publish partial values or ownership changes. The state
+can be copied for staging beside save/entity transactions and swapped at commit.
+
+Six Clang tests cover all nine defaults, exact argument validation, nonfinite and
+out-of-range numbers, spoofed owners, per-field conflicts, replacement semantics,
+neutral claims, transactional rollback, detached commit, owner shutdown, runtime
+restart and dormant RNG preservation. This is an internal foundation only: it has
+no production instance, native hook or public catalog registration. Public API
+count remains 83. Native integration, lifecycle ordering, baseline comparisons,
+retail activation/cleanup and menu-driven examples remain required before these
+calls are published. Contributor-owned content registration is untouched.
+
+Validation receipt: Clang 23.1.2 Release game/test builds passed. The full suite
+registered 740 tests: 726 passed, 13 skipped and one disabled, with no failures.
+All 17 Python checks passed; 3,840 generator cases still match the pinned baseline
+with empty and disabled mods. PS2 remains unchanged. This validates the internal
+ownership foundation, not the as-yet-unimplemented native tuning controls.
