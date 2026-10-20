@@ -272,3 +272,17 @@ version may be disabled, conflict with another package, lack native trust or fai
 runtime validation. Inspection returns successfully when it can produce a report;
 its process exit code is not a save-compatibility gate. Check the report and use
 the game manager for the actual selected package set.
+
+## Start a skill package
+
+```sh
+python tools/chronicle_mod.py new author.training --template skill --output training-package
+```
+
+This creates a disabled package based on the runnable
+[Combat Training example](../examples/mods/combat-training/README.md). It registers
+a two-node tree, handles explicit training from the shared skill page, saves ranks,
+and resets both prerequisite and dependent ranks through a shared-menu action.
+Registration alone grants no bonuses. Training is free in this example; define
+and test your own experience/cost policy before distributing gameplay content.
+The example is separate from the core framework and is never auto-enabled.

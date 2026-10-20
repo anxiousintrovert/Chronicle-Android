@@ -4265,3 +4265,17 @@ action/back-floor scenario also passed with the readiness notification observed
 from the real native query. Evidence: `transition-ready-retail-20261020` under
 the local framework expansion evidence directory. Non-Windows validation remains
 outstanding. PS2 baseline and upstream renderer checks are unchanged.
+
+## Skill author starter (2026-10-20)
+
+`chronicle_mod.py new ID --template skill` creates the separate disabled-by-default
+Combat Training example. The shipped Lua registers immutable prerequisite-linked
+nodes, accepts explicit shared-menu training, and provides a full dependent-rank
+reset action. Registration grants no effect. The example's free training policy
+is explicit and remains separate from the framework.
+
+Clang 23.1.2 built the test executable and all 20 skill tests passed. The test
+executes the shipped files, including denied prerequisite requests, deferred
+training, save/load and complete rank reset. All 81 Python author-tool tests pass,
+including starter validation and pack/install preservation. No engine or PS2
+source changed, and the upstream renderer pin remains untouched.

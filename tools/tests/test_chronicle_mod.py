@@ -131,6 +131,19 @@ class AuthorTools(unittest.TestCase):
             path.write_bytes(raw+zlib.crc32(raw).to_bytes(4,'little'))
             with self.assertRaises(ValueError): tool.inspect_save(path)
 
+    def test_skill_template_pack_install_keeps_opt_in_training_script(self):
+        folder=self.root/'authored';tool.create('test.training',folder,'skill')
+        manifest=tool.validate(folder)
+        self.assertNotIn('enabled',manifest)
+        self.assertIn('skills.training.v1',manifest['requires_capabilities'])
+        self.assertIn('skills.defense.v1',manifest['requires_capabilities'])
+        source=Path(tool.__file__).resolve().parents[1]/'examples/mods/combat-training/main.lua'
+        self.assertEqual((folder/'main.lua').read_bytes(),source.read_bytes())
+        self.assertNotIn('examples/mods/combat-training',(folder/'README.md').read_text())
+        archive=self.root/'training.zip';tool.pack(folder,archive)
+        result=tool.install(archive,self.root/'mods');self.assertTrue(result['profile_unchanged'])
+        self.assertEqual(tool.validate(self.root/'mods/test.training'),manifest)
+
     def test_quest_template_pack_install_preserves_script_and_stays_disabled(self):
         folder = self.root / "authored"
         self.assertEqual(tool.main(["new", "test.hunt", "--template", "quest", "--output", str(folder)]), 0)

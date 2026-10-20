@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "api_version": 1,
+  "id": "example.combat-training",
+  "name": "Combat Training Example",
+  "version": "1.0.0",
+  "game": "chronicle",
+  "requires_capabilities": [
+    "scripts.lua.v1",
+    "host.calls.v1",
+    "menu.actions.v1",
+    "skills.trees.v1",
+    "skills.training.v1",
+    "skills.effects.v1",
+    "skills.defense.v1",
+    "save.metadata.v1"
+  ],
+  "permissions": [
+    "game.read",
+    "game.write"
+  ],
+  "script": "main.lua",
+  "files": {}
+}

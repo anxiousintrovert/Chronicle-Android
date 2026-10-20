@@ -257,4 +257,28 @@ TEST_F(ModSkillsRuntime, FullDefenseDoesNotSettlePendingLifeInterpolation) {
     EXPECT_TRUE(mods::Scripts().Diagnostics().empty());
 }
 
+TEST_F(ModSkillsRuntime, ShippedTrainingIsExplicitSavedAndResetsEveryDependentRank) {
+    const auto source=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path()/"examples/mods/combat-training";
+    std::filesystem::create_directories(root/"training");
+    for(const auto *file:{"mod.json","main.lua"})std::filesystem::copy_file(source/file,root/"training"/file);
+    Start();EXPECT_FALSE(runtime.HasGameplay());
+    enabled["example.combat-training"]=true;Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);
+    ASSERT_TRUE(runtime.Diagnostics().empty());ASSERT_EQ(runtime.Skills().size(),2u);
+    EXPECT_FALSE(runtime.HasSkillDamageEffects());EXPECT_FALSE(runtime.HasSkillDamageEffects(true));
+    std::string error;ASSERT_TRUE(runtime.QueueSkillTraining("example.combat-training","combat","guard",error));
+    runtime.Tick(world);EXPECT_FALSE(runtime.HasSkillDamageEffects(true));
+    ASSERT_TRUE(runtime.QueueSkillTraining("example.combat-training","combat","focus",error))<<error;
+    EXPECT_FALSE(runtime.HasSkillDamageEffects());runtime.Tick(world);EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),110);
+    ASSERT_TRUE(runtime.QueueSkillTraining("example.combat-training","combat","guard",error))<<error;
+    runtime.Tick(world);EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100,true),95);
+    const auto trained=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(trained,error));runtime.Tick(world);
+    EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100),110);EXPECT_FLOAT_EQ(runtime.ApplySkillDamage(100,true),95);
+    ASSERT_TRUE(runtime.QueueAction("example.combat-training","reset",error))<<error;runtime.Tick(world);
+    EXPECT_FALSE(runtime.HasSkillDamageEffects());EXPECT_FALSE(runtime.HasSkillDamageEffects(true));
+    for(const auto &skill:runtime.Skills())EXPECT_EQ(skill.rank,0);
+    ASSERT_TRUE(runtime.QueueSkillTraining("example.combat-training","combat","guard",error));
+    runtime.Tick(world);EXPECT_FALSE(runtime.HasSkillDamageEffects(true));
+    EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+
 }

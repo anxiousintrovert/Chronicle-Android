@@ -265,19 +265,20 @@ def validate_png_header(header, encoded_size):
 
 def create(package_id, output, template="basic"):
     require(identity(package_id), "invalid package ID")
-    require(template in ("basic", "quest"), "unknown package template")
+    require(template in ("basic", "quest", "skill"), "unknown package template")
     root = Path(output)
     require(not any(part.casefold() == "ps2" for path in (root.absolute(), root.resolve())
                     for part in path.parts), "PS2 output is forbidden")
-    if template == "quest":
-        source = Path(__file__).resolve().parents[1] / "examples/mods/dungeon-contract"
+    if template in ("quest", "skill"):
+        example = "dungeon-contract" if template == "quest" else "combat-training"
+        source = Path(__file__).resolve().parents[1] / "examples/mods" / example
         mod = validate(source)
         mod["id"] = package_id
         mod["name"] = package_id
         script = (source / "main.lua").read_text(encoding="utf-8")
         readme = (source / "README.md").read_text(encoding="utf-8")
         readme = readme.split("Validate from the repository root:", 1)[0]
-        readme = readme.replace("# Dungeon Contract example", "# " + package_id)
+        readme = readme.replace("# Dungeon Contract example" if template == "quest" else "# Combat Training example", "# " + package_id)
         readme += "Validate this directory with chronicle_mod.py check before packing.\n"
     else:
         mod = {"schema_version": 1, "api_version": 1, "id": package_id,
@@ -605,8 +606,8 @@ def main(argv=None):
     commands = parser.add_subparsers(dest="command", required=True)
     new = commands.add_parser("new", help="create a disabled starter package")
     new.add_argument("id"); new.add_argument("--output", required=True)
-    new.add_argument("--template", choices=("basic", "quest"), default="basic",
-                     help="basic logging package or event-driven quest with shared-menu start")
+    new.add_argument("--template", choices=("basic", "quest", "skill"), default="basic",
+                     help="basic logging, event-driven quest, or explicit shared-menu skill training")
     for command in ("check", "inspect"):
         cmd = commands.add_parser(command)
         cmd.add_argument("package"); cmd.add_argument("--data", help="optional logical asset tree for exact-path size checks")
