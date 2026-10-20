@@ -207,3 +207,54 @@ TEST(ModAudioStreams, TransactionsRejectMixedWritesAndReplacementInstancesNeverR
     EXPECT_NE(old, next);
     EXPECT_FALSE(replacement.Stop("a", old, error));
 }
+
+TEST(ModAudioStreams, MusicReplacementConflictsCleanupAndNativeSupersession) {
+    audio::Mixer mixer(48000);
+    mods::AudioStreams streams(mixer);
+    std::string error;
+    ASSERT_TRUE(streams.Register("a", "tone", Tone(), error));
+    ASSERT_TRUE(streams.Register("b", "tone", Tone(), error));
+    ASSERT_TRUE(streams.SetMusic("a", "test_a.sq", "tone", error));
+    EXPECT_FALSE(streams.SetMusic("b", "test_a.sq", "tone", error));
+    EXPECT_NE(error.find("owned by a"), std::string::npos);
+    EXPECT_FALSE(streams.ClearMusic("b", "test_a.sq", error));
+    auto fallback = std::make_shared<audio::PcmTrack>(Tone());
+    fallback->samples.assign(16, 4096);
+    mixer.SetVolume(0, audio::kFullPortVolume);
+    mixer.SetStream(0, streams.BindMusic(0, "test_a.sq", fallback));
+    mixer.Play(0);
+    for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.25f, 0.00001f);
+    ASSERT_TRUE(streams.ClearMusic("a", "test_a.sq", error));
+    for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.125f, 0.00001f);
+    ASSERT_TRUE(streams.SetMusic("a", "test_a.sq", "tone", error));
+    mixer.SetStream(0, streams.BindMusic(0, "test_a.sq", fallback)); mixer.Play(0);
+    // A later native start has a different fallback; clear must not overwrite it.
+    auto newer = std::make_shared<audio::PcmTrack>(Tone()); newer->samples.assign(16, 2048);
+    mixer.SetStream(0, streams.BindMusic(0, "none_a.sq", newer)); mixer.Play(0);
+    ASSERT_TRUE(streams.ClearMusic("a", "test_a.sq", error));
+    for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.0625f, 0.00001f);
+    ASSERT_TRUE(streams.SetMusic("a", "test_a.sq", "tone", error));
+    mixer.SetStream(0, streams.BindMusic(0, "test_a.sq", fallback)); mixer.Play(0);
+    const std::array<std::string, 1> owners{"b"}; streams.Retain(owners);
+    EXPECT_TRUE(streams.State("a")["music"].empty());
+    for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.125f, 0.00001f);
+    ASSERT_TRUE(streams.SetMusic("b", "test_a.sq", "tone", error));
+    mixer.SetStream(0, streams.BindMusic(0, "test_a.sq", fallback));
+    mixer.Stop(0);
+    streams.StopVoices();
+    EXPECT_FALSE(mixer.IsPlaying(0));
+    EXPECT_EQ(streams.State("b")["music"].size(), 1); // mapping survives scene cleanup
+}
+TEST(ModAudioStreams, MusicWritesValidateOwnershipArgumentsAndTransactionBoundary) {
+    audio::Mixer mixer(48000); mods::AudioStreams streams(mixer); std::string error;
+    ASSERT_TRUE(streams.Register("a", "tone", Tone(), error));
+    const mods::GameCommand set{"audio.music_set", {{"sequence", "test_a.sq"}, {"id", "tone"}}, "a"};
+    EXPECT_FALSE(streams.Apply({set, set}, 0, error));
+    EXPECT_FALSE(streams.Apply({set}, 1, error));
+    EXPECT_TRUE(streams.State("a")["music"].empty());
+    EXPECT_TRUE(streams.Apply({set}, 0, error));
+    EXPECT_FALSE(streams.SetMusic("b", "othr_a.sq", "tone", error));
+    for (const auto &name : {"../a.sq", "test_g.sq", "test_a.SQ", "longer_a.sq"})
+        EXPECT_FALSE(mods::AudioStreams::Validate("audio.music_clear", {{"sequence", name}}).empty());
+    EXPECT_FALSE(mods::AudioStreams::Validate("audio.music_clear", {{"sequence", "test_a.sq"}, {"owner", "a"}}).empty());
+}

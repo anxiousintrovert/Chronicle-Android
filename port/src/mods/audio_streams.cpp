@@ -130,6 +130,46 @@ bool AudioStreams::Stop(std::string_view owner, std::string_view handle, std::st
     voices_.erase(found);
     error.clear(); return true;
 }
+bool AudioStreams::SetMusic(std::string_view owner, std::string_view sequence, std::string_view id, std::string &error) {
+    error = Validate("audio.music_set", {{"sequence", sequence}, {"id", id}});
+    if (!error.empty()) return false;
+    const auto sound = sounds_.find({std::string(owner), std::string(id)});
+    if (sound == sounds_.end()) { error = "music asset is unavailable to this owner"; return false; }
+    const auto existing = music_.find(std::string(sequence));
+    if (existing != music_.end() && existing->second.owner != owner) {
+        error = "music sequence already owned by " + existing->second.owner; return false;
+    }
+    if (existing == music_.end() && (music_.size() >= 64 || std::ranges::count_if(music_, [&](const auto &item) { return item.second.owner == owner; }) >= 16)) {
+        error = "music replacement count limit reached"; return false;
+    }
+    music_.insert_or_assign(std::string(sequence), Music{std::string(owner), std::string(id), sound->second.track});
+    error.clear(); return true;
+}
+void AudioStreams::ReleaseMusic(std::string_view owner, std::string_view sequence) {
+    for (auto it = music_bindings_.begin(); it != music_bindings_.end();) {
+        if (it->second.owner != owner || (!sequence.empty() && it->second.sequence != sequence)) { ++it; continue; }
+        const bool playing = mixer_.IsPlaying(it->first);
+        mixer_.SetStream(it->first, it->second.fallback);
+        mixer_.Rewind(it->first, 0);
+        if (playing) mixer_.Play(it->first);
+        it = music_bindings_.erase(it);
+    }
+}
+bool AudioStreams::ClearMusic(std::string_view owner, std::string_view sequence, std::string &error) {
+    error = Validate("audio.music_clear", {{"sequence", sequence}});
+    if (!error.empty()) return false;
+    const auto it = music_.find(std::string(sequence));
+    if (it == music_.end()) { error.clear(); return true; }
+    if (it->second.owner != owner) { error = "music sequence already owned by " + it->second.owner; return false; }
+    ReleaseMusic(owner, sequence); music_.erase(it); error.clear(); return true;
+}
+std::shared_ptr<const audio::PcmTrack> AudioStreams::BindMusic(int port, std::string_view sequence, std::shared_ptr<const audio::PcmTrack> fallback) {
+    music_bindings_.erase(port); // A new native start supersedes the old binding.
+    const auto it = music_.find(std::string(sequence));
+    if (it == music_.end()) return fallback;
+    music_bindings_.emplace(port, MusicBinding{it->second.owner, std::string(sequence), std::move(fallback)});
+    return it->second.track;
+}
 void AudioStreams::Prune() {
     for (auto it = voices_.begin(); it != voices_.end();) {
         if (it->second.channel->State() == audio::StreamState::Playing) { ++it; continue; }
@@ -143,14 +183,22 @@ void AudioStreams::Retain(std::span<const std::string> owners) {
         mixer_.RemoveStreamChannel(it->second.channel.get());
         it = voices_.erase(it);
     }
+    for (auto it = music_.begin(); it != music_.end();) {
+        if (std::ranges::find(owners, it->second.owner) != owners.end()) { ++it; continue; }
+        ReleaseMusic(it->second.owner, it->first); it = music_.erase(it);
+    }
     std::erase_if(sounds_, [&](const auto &entry) { return std::ranges::find(owners, entry.first.first) == owners.end(); });
     Prune();
 }
 void AudioStreams::StopVoices() {
+    for (const auto &[sequence, music] : music_) ReleaseMusic(music.owner, sequence);
     for (auto &[id, voice] : voices_) mixer_.RemoveStreamChannel(voice.channel.get());
     voices_.clear();
 }
-void AudioStreams::Clear() { StopVoices(); sounds_.clear(); }
+void AudioStreams::Clear() {
+    for (const auto &[sequence, music] : music_) ReleaseMusic(music.owner, sequence);
+    music_.clear(); StopVoices(); sounds_.clear();
+}
 nlohmann::json AudioStreams::State(std::string_view owner) const {
     auto result = nlohmann::json{{"sounds", nlohmann::json::array()}, {"voices", nlohmann::json::array()}};
     for (const auto &[name, sound] : sounds_) if (name.first == owner)
@@ -158,6 +206,9 @@ nlohmann::json AudioStreams::State(std::string_view owner) const {
     for (const auto &[handle, voice] : voices_) if (voice.owner == owner)
         result["voices"].push_back({{"handle", handle}, {"id", voice.id},
             {"playing", voice.channel->State() == audio::StreamState::Playing}, {"position", voice.channel->Position()}});
+    result["music"] = nlohmann::json::array();
+    for (const auto &[sequence, music] : music_) if (music.owner == owner)
+        result["music"].push_back({{"sequence", sequence}, {"id", music.id}});
     return result;
 }
 }
@@ -166,6 +217,15 @@ namespace mods {
 std::string AudioStreams::Validate(std::string_view operation, const nlohmann::json &a) {
     if (!a.is_object()) return "audio arguments must be an object";
     if (operation == "audio.state") return a.empty() ? "" : "audio.state takes no arguments";
+    if (operation == "audio.music_set" || operation == "audio.music_clear") {
+        const bool set = operation == "audio.music_set";
+        if (a.size() != (set ? 2u : 1u) || !a.contains("sequence") || !a["sequence"].is_string()) return "music replacement requires a sequence name";
+        const auto &sequence = a["sequence"].get_ref<const std::string &>();
+        if (sequence.size() != 9 || !Id(sequence) || sequence.substr(6) != ".sq" ||
+            (sequence[5] != 'a' && sequence[5] != 'e' && sequence[5] != 'i')) return "sequence must be an exact native nine-character .sq name";
+        if (set && (!a.contains("id") || !a["id"].is_string() || !Id(a["id"].get_ref<const std::string &>()))) return "music replacement requires a local audio ID";
+        return {};
+    }
     if (operation == "audio.stop") {
         if (a.size() != 1 || !a.contains("handle") || !a["handle"].is_string() || a["handle"].get_ref<const std::string &>().empty() || a["handle"].get_ref<const std::string &>().size() > 64)
             return "audio.stop requires a voice handle";
@@ -191,6 +251,8 @@ bool AudioStreams::Apply(const std::vector<GameCommand> &commands, int money, st
     error = Validate(command.operation, command.arguments);
     if (!error.empty()) return false;
     const auto &a = command.arguments;
+    if (command.operation == "audio.music_set") return SetMusic(command.owner, a["sequence"].get<std::string>(), a["id"].get<std::string>(), error);
+    if (command.operation == "audio.music_clear") return ClearMusic(command.owner, a["sequence"].get<std::string>(), error);
     if (command.operation == "audio.play") return !Play(command.owner, a["id"].get<std::string>(), a.value("loop", false), a.value("volume", 1.0), a.value("pan", 0.0), error).empty();
     if (command.operation == "audio.stop") return Stop(command.owner, a["handle"].get<std::string>(), error);
     error = "audio state is read-only"; return false;

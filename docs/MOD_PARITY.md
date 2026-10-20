@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 133 implemented operations, native plugins and author
+a real host-call boundary, 135 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -3112,3 +3112,23 @@ cross-platform validation remain unfinished.
 Full regression: 878 passed, 97 skipped, one disabled. PAL evidence:
 bgm-load-602e64c80cee4a7fb34de4b60ffa52a2/report.json under the local framework
 expansion evidence folder. PS2 diff against the baseline is empty.
+
+
+### Owned music replacement API (2026-10-20)
+
+Added audio.music_set/clear and audio.state.music. The native sequence start
+selects a registered package track or returns the exact previous soundtrack
+fallback when no mapping exists. Runtime ownership isolates registrations;
+conflicts name the existing owner. Clear/unload restores the prior fallback,
+while a newer native start supersedes the binding. Scene cleanup releases active
+bindings and preserves mappings. The official Kazarov backend is unchanged.
+
+Focused tests cover actual mixed PCM replacement/restoration, competing owners,
+native supersession, owner retirement, stopped-state cleanup, strict arguments,
+sole-write transactions and deferred shared actions/callback rollback. Physical
+listening, PAL replacement-specific replay and non-Windows validation remain
+pending. Public operation count is 135; this does not close the other capability
+gaps in the ledger.
+
+Validation: Clang 23.1.2 builds; 882 native tests passed, 97 skipped,
+one disabled; all 38 Python checks passed. PS2 diff remains empty.

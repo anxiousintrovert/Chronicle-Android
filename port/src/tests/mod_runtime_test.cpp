@@ -2360,3 +2360,44 @@ TEST_F(ModRuntime, RetailSoundMenuActionCommitsThroughNativeDriverWithCustomAudi
     EXPECT_TRUE(std::ranges::any_of(output, [](float sample) { return sample != 0; }));
     sound.SE_Stop(10, 0, 0, 0); sound.Step(); mixer.Reset();
 }
+
+TEST_F(ModRuntime, MusicReplacementActionCommitsAndClearsOwnedMapping) {
+    auto manifest = Manifest();
+    manifest["audio"] = {{"tone", "tone.flac"}};
+    manifest["permissions"] = {"resources.read", "game.read", "game.write"};
+    Add(R"(
+        assert(chronicle.action('set','Replace music','Own sequence',function()
+            assert(chronicle.call('audio.music_set',{sequence='test_a.sq',id='tone'}))
+        end))
+        assert(chronicle.action('clear','Restore music','Release sequence',function()
+            assert(#chronicle.call('audio.state').music==1)
+            assert(chronicle.call('audio.music_clear',{sequence='test_a.sq'}))
+        end))
+        return {}
+    )", manifest);
+    Write(root / "mods/test.mod/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+    Start(); ASSERT_TRUE(runtime.Diagnostics().empty());
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "set", error));
+    EXPECT_FALSE(runtime.BindMusic(0, "test_a.sq", {}));
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_TRUE(runtime.BindMusic(0, "test_a.sq", {}));
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "clear", error));
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(runtime.BindMusic(0, "test_a.sq", {}));
+}
+TEST_F(ModRuntime, FailedMusicActionDoesNotPublishReplacement) {
+    auto manifest = Manifest(); manifest["audio"] = {{"tone", "tone.flac"}};
+    manifest["permissions"] = {"resources.read", "game.write"};
+    Add(R"(return {on_tick=function()
+        assert(chronicle.call('audio.music_set',{sequence='test_a.sq',id='tone'}))
+        error('cancel music change')
+    end})", manifest);
+    Write(root / "mods/test.mod/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+    Start(); runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(runtime.BindMusic(0, "test_a.sq", {}));
+}

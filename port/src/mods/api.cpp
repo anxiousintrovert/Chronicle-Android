@@ -119,6 +119,8 @@ constexpr Operation operations[] = {
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
     {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
     {"audio.bgm_state", "game.read", "Inspect native music state and decoded track readiness.", false},
+    {"audio.music_set", "game.write", "Own a native sequence replacement using a package audio asset.", true},
+    {"audio.music_clear", "game.write", "Release this owner's native sequence replacement.", true},
     {"audio.bgm_load", "game.write", "Load and validate a native BGM set without starting playback.", true},
     {"audio.bgm_play", "game.write", "Restart a validated track in the currently loaded native music set.", true},
     {"audio.bgm_stop", "game.write", "Stop native background music after callback commit.", true},

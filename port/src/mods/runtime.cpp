@@ -498,7 +498,7 @@ int ApiCall(lua_State *L) {
         return 1;
     }
     if (op->name == "audio.state") {
-        m.snapshot = m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}};
+        m.snapshot = m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}, {"music", Json::array()}};
         PushJson(L, m.snapshot); return 1;
     }
     if (!m.query_game || !*m.query_game) {
@@ -605,7 +605,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             Transaction(m).commands.push_back({name, args, m.package.id});
             m.native_result = "{\"queued\":true}";
         } else if (op->name == "audio.state") {
-            m.native_result = (m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}}).dump();
+            m.native_result = (m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}, {"music", Json::array()}}).dump();
         } else {
             if (!m.query_game || !*m.query_game) {
                 throw std::runtime_error("query provider unavailable");
@@ -1413,7 +1413,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
         if (!world.playing || (impl_->observed && (world.mode != impl_->previous.mode || world.map != impl_->previous.map || world.dungeon != impl_->previous.dungeon || world.floor != impl_->previous.floor))) impl_->audio->StopVoices();
         impl_->audio->Retain(ActiveOwners());
         commit_game = [&](const auto &commands, int money, std::string &error) {
-            if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.play" || command.operation == "audio.stop"; })) {
+            if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.play" || command.operation == "audio.stop" || command.operation == "audio.music_set" || command.operation == "audio.music_clear"; })) {
                 if (!world.playing) { error = "audio playback requires gameplay"; return false; }
                 return impl_->audio->Apply(commands, money, error);
             }
@@ -1737,3 +1737,9 @@ Runtime &Scripts() {
     return runtime;
 }
 } // namespace mods
+
+namespace mods {
+std::shared_ptr<const audio::PcmTrack> Runtime::BindMusic(int port, std::string_view sequence, std::shared_ptr<const audio::PcmTrack> fallback) {
+    return impl_->audio ? impl_->audio->BindMusic(port, sequence, std::move(fallback)) : std::move(fallback);
+}
+}

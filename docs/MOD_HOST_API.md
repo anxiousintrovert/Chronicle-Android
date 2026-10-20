@@ -2046,3 +2046,34 @@ the loader does not guess another filename. The native no-mod loader is
 unchanged. Public load/play/stop are one-time requests, not persistent music
 replacement or ownership. The author audio suite exercises loading a different
 set and playing it through a shared action before back-floor travel.
+
+### Owned native-sequence music replacements
+
+`audio.music_set {"sequence":"test_a.sq","id":"theme"}` (`game.write`)
+associates a package's declared audio asset with an exact nine-character native
+sequence name. Supported sequence letters are `a`, `e`, and `i`; names are case
+sensitive. Use names reported by `audio.bgm_state` or native audio tracing.
+The package must load its audio assets with `resources.read`. Each owner may
+register 16 replacements, with 64 globally; assets retain the existing decoded
+memory limits. No extra PCM copy is made for a mapping.
+
+Registration is a sole deferred engine write and applies on the next native
+sequence start, including a later `audio.bgm_play`. It loops the full audio asset
+at its native rate and uses the game's music volume. An existing owner's mapping
+may be updated; another owner cannot replace or clear it and receives an error
+naming the owner. No package has music replacements by default.
+
+`audio.music_clear {"sequence":"test_a.sq"}` releases the caller's mapping.
+Clearing an absent mapping succeeds. Active owned playback returns to the prior
+soundtrack choice (or native sequence), restarted from the beginning while
+preserving playing/stopped state. A newer native sequence start supersedes the
+old binding and is not overwritten by later cleanup. Owner failure, unload and
+runtime destruction release mappings; scene cleanup releases active bindings
+but retains registrations for subsequent starts. Registrations are runtime-only
+and must be recreated after restarting the runtime or loading mod state.
+
+`audio.state.music` lists the caller's `{sequence,id}` registrations. These
+operations work through the shared runtime host boundary for Lua/native calls;
+they cannot be mixed with other engine writes or currency changes in a callback.
+Music replacements take precedence over the user's soundtrack mapping while
+owned; clearing restores the fallback captured at that sequence start.

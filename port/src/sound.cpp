@@ -325,7 +325,8 @@ void StartSequence(int port, int seq_no, const int *volume) {
     }
     Player().SetSequence(port, g_slot_sequences[slot][seq_no]);
     // The soundtrack option: a recording named for this sequence plays in its place.
-    Player().SetStream(port, audio::SoundtrackFor(std::string_view(state.sequence[seq_no]->name, strnlen(state.sequence[seq_no]->name, 9))));
+    const std::string_view name(state.sequence[seq_no]->name, strnlen(state.sequence[seq_no]->name, 9));
+    Player().SetStream(port, mods::Scripts().BindMusic(port, name, audio::SoundtrackFor(name)));
     Player().SetVolume(port, volume != nullptr ? *volume : state.sequence[seq_no]->volume);
     Player().Rewind(port, 0);
     Player().Play(port);

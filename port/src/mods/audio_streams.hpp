@@ -19,6 +19,9 @@ public:
     std::string Play(std::string_view owner, std::string_view id, bool loop, double volume, double pan, std::string &error);
     bool Stop(std::string_view owner, std::string_view handle, std::string &error);
     void Retain(std::span<const std::string> owners);
+    bool SetMusic(std::string_view owner, std::string_view sequence, std::string_view id, std::string &error);
+    bool ClearMusic(std::string_view owner, std::string_view sequence, std::string &error);
+    std::shared_ptr<const audio::PcmTrack> BindMusic(int port, std::string_view sequence, std::shared_ptr<const audio::PcmTrack> fallback);
     void Prune();
     void Clear();
     void StopVoices();
@@ -28,6 +31,11 @@ public:
 private:
     struct Sound { std::shared_ptr<const audio::PcmTrack> track; std::size_t bytes; };
     struct Voice { std::string owner, id; std::unique_ptr<audio::StreamChannel> channel; };
+    struct Music { std::string owner, id; std::shared_ptr<const audio::PcmTrack> track; };
+    struct MusicBinding { std::string owner, sequence; std::shared_ptr<const audio::PcmTrack> fallback; };
+    void ReleaseMusic(std::string_view owner, std::string_view sequence);
+    std::map<std::string, Music> music_;
+    std::map<int, MusicBinding> music_bindings_;
     audio::Mixer &mixer_;
     std::map<std::pair<std::string, std::string>, Sound> sounds_;
     std::map<std::string, Voice> voices_;

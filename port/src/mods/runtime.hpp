@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include "audio/pcm.hpp"
 
 #include "entity_events.hpp"
 #pragma push_macro("B")
@@ -62,6 +63,7 @@ public:
                                   std::span<const EnemyDeath> deaths = {}, unsigned dropped_deaths = 0);
     void                     ResetState();
     void                     StopAudio();
+    std::shared_ptr<const audio::PcmTrack> BindMusic(int port, std::string_view sequence, std::shared_ptr<const audio::PcmTrack> fallback);
     bool                     HasGameplay() const;
     bool                     WantsEnemyDeaths() const;
     std::vector<std::string> ActiveOwners() const;
