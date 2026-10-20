@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import struct
 from pathlib import Path
 import tempfile
 
@@ -27,19 +28,22 @@ def validate(mesh):
     vertices, triangles = mesh['vertices'], mesh['triangles']
     require(isinstance(vertices, list) and 3 <= len(vertices) <= MAX_VERTICES, 'vertex count must be 3..100000')
     require(isinstance(triangles, list) and 1 <= len(triangles) <= MAX_TRIANGLES, 'triangle count must be 1..200000')
+    renderer_vertices = []
     for vertex in vertices:
         require(isinstance(vertex, list) and len(vertex) == 8 and all(finite(x) for x in vertex), 'vertex requires bounded finite position, normal and UV')
-        length = math.sqrt(sum(x*x for x in vertex[3:6]))
+        renderer_vertex = list(struct.unpack('<8f', struct.pack('<8f', *vertex)))
+        renderer_vertices.append(renderer_vertex)
+        length = math.sqrt(sum(x*x for x in renderer_vertex[3:6]))
         require(abs(length - 1) <= 0.001, 'vertex normal must be unit length')
     for triangle in triangles:
         require(isinstance(triangle, list) and len(triangle) == 4 and all(type(x) is int for x in triangle), 'triangle requires integer strip,a,b,c')
         strip, *indices = triangle
         require(0 <= strip <= 255 and all(0 <= i < len(vertices) for i in indices), 'triangle strip or vertex index out of range')
         require(len(set(indices)) == 3, 'triangle repeats a vertex')
-        a,b,c = [vertices[i][:3] for i in indices]
+        a,b,c = [renderer_vertices[i][:3] for i in indices]
         u,v = [[point[k]-a[k] for k in range(3)] for point in (b,c)]
         cross = [u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
-        require(sum(x*x for x in cross) > 1e-20, 'degenerate triangle')
+        require(sum(x*x for x in cross) > 1e-20, 'triangle degenerates at renderer precision')
     return mesh
 
 

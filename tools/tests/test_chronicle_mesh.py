@@ -39,6 +39,15 @@ class MeshAuthoring(unittest.TestCase):
         for value in ['nan','inf','1000001']:
             with self.assertRaises(ValueError):self.read('v '+value+' 0 0\n'+self.base+'f 2 3 4\n')
         with self.assertRaises(ValueError):self.read('v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n')
+    def test_rejects_geometry_that_collapses_at_renderer_precision(self):
+        value=self.read(self.base+'f 1 2 3\n')
+        value['vertices'][0][0]=1000000.0
+        value['vertices'][1][0]=999999.999
+        value['vertices'][2][0]=1000000.0
+        with self.assertRaisesRegex(ValueError,'renderer precision'):mesh.validate(value)
+        value['vertices'][1][0]=999999.0
+        mesh.validate(value)
+
     def test_does_not_follow_material_libraries(self):
         result=self.read('mtllib ../../never-open.mtl\n'+self.base+'f 1 2 3\n')
         self.assertEqual(len(result['triangles']),1)

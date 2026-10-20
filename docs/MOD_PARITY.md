@@ -3582,3 +3582,26 @@ conflict handling, renderer integration, skinning, GLB/DAE and retail visual
 validation remain outstanding. Native integration must keep using documented
 Clang and the upstream renderer, with dormant behavior when no replacement is
 requested. Contributor cutscene/item/weapon registries remain untouched.
+
+
+## Native mesh decoder and animation boundary audit (2026-10-20)
+
+Added detached DecodeMeshAsset for geometry schema 1, with bounded source size,
+counts, exact fields, duplicate-key and nesting rejection, finite float32
+vertices, unit normals, bounded strip/index values and nondegenerate triangles.
+The Python author validator now checks the same renderer precision: a triangle
+that exists in double precision but collapses in float32 is rejected by both.
+The decoder performs no I/O, graphics allocation, native writes or RNG access.
+
+Clang 23.1.2 game/test builds passed, all four focused native decoder tests
+passed, and all 50 Python tests passed. PS2 remains unchanged. No runtime mesh
+capability is advertised and no engine path invokes this decoder yet.
+
+Inspection of port/src/visualvu1.cpp found a required integration constraint:
+CreateVUdataFromMDTRemake rewrites positions, colors and materials after native
+skinning/morph/material updates. Replacing only CreateVUdataFromMDT's upload
+would let later native remakes overwrite replacement geometry by source index.
+The binding must preserve source geometry and animation correspondence before
+activation is exposed. Package target matching, conflicts, native animation
+binding, renderer publication and retail visual evidence therefore remain open;
+this decoder alone does not complete runtime model replacement.

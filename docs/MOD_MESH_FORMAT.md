@@ -54,10 +54,16 @@ Limits:
 - Vertices: 3..100000; triangles: 1..200000.
 - All eight vertex components must be finite numbers with absolute value at most
   1000000. Booleans are not numbers or indices.
-- Normals must be unit length within 0.001.
+- Normals must be unit length within 0.001 after conversion to renderer float32 precision.
 - Triangle indices must be distinct and in bounds. Squared cross-product length
-  must exceed 1e-20, rejecting zero-area and extremely small triangles.
+  must exceed 1e-20 after float32 conversion, rejecting zero-area, extremely small
+  and precision-collapsed triangles.
 - Unknown fields and duplicate JSON keys are rejected.
+
+The native `DecodeMeshAsset` decoder enforces the same limits before returning
+detached float32 geometry. It rejects nested objects and excessive JSON nesting,
+and performs no graphics allocation, native-state write, RNG call or file read.
+It is not yet connected to package activation or visual construction.
 
 The format stores geometry only. Texture pixels, external material definitions,
 vertex colors, skin weights, animation, attachments and transforms are not
