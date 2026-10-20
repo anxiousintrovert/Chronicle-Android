@@ -858,6 +858,96 @@
           "old": "this->cells[x + (i + (j + z) * chronicle::dungeon::GridStride)].parts_no",
           "new": "chronicle::dungeon::RetailDummyPart(*this, x + i, z + j)",
           "count": 3
+        },
+        {
+          "old": "s32 scanRoomInfoWork[256];",
+          "new": "s32 scanRoomInfoWork[chronicle::dungeon::GridCells];",
+          "count": 1
+        },
+        {
+          "old": "    for (int i = 0; i < 256; i++) {\n        scanRoomInfoWork[i] = -1;",
+          "new": "    for (int i = 0; i < chronicle::dungeon::GridCells; i++) {\n        scanRoomInfoWork[i] = -1;",
+          "count": 1
+        },
+        {
+          "old": "\n    scanRoomInfoWork[x + y * 16] = 9;\n",
+          "new": "\n    scanRoomInfoWork[x + y * chronicle::dungeon::GridStride] = 9;\n",
+          "count": 1
+        },
+        {
+          "old": "\n            scanRoomInfoWork[x + (y - 1) * 16] = 0;\n",
+          "new": "\n            scanRoomInfoWork[x + (y - 1) * chronicle::dungeon::GridStride] = 0;\n",
+          "count": 2
+        },
+        {
+          "old": "\n            scanRoomInfoWork[x + (y + 1) * 16] = 1;\n",
+          "new": "\n            scanRoomInfoWork[x + (y + 1) * chronicle::dungeon::GridStride] = 1;\n",
+          "count": 2
+        },
+        {
+          "old": "\n            scanRoomInfoWork[x + y * 16 + 1] = 0;\n",
+          "new": "\n            scanRoomInfoWork[x + y * chronicle::dungeon::GridStride + 1] = 0;\n",
+          "count": 2
+        },
+        {
+          "old": "\n            scanRoomInfoWork[x + y * 16 - 1] = 1;\n",
+          "new": "\n            scanRoomInfoWork[x + y * chronicle::dungeon::GridStride - 1] = 1;\n",
+          "count": 2
+        },
+        {
+          "old": "\n                if (scanRoomInfoWork[x + y * 16] == -1 || scanRoomInfoWork[x + y * 16] == 9) {\n",
+          "new": "\n                if (scanRoomInfoWork[x + y * chronicle::dungeon::GridStride] == -1 || scanRoomInfoWork[x + y * chronicle::dungeon::GridStride] == 9) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y - 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y - 1) * chronicle::dungeon::GridStride] == -1 && (propagation_mask & buildMapDat[x + (y - 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        scanRoomInfoWork[x + (y - 1) * 16] = scanRoomInfoWork[x + y * 16];\n",
+          "new": "\n                        scanRoomInfoWork[x + (y - 1) * chronicle::dungeon::GridStride] = scanRoomInfoWork[x + y * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y + 1) * 16] == -1 && (propagation_mask & buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + (y + 1) * chronicle::dungeon::GridStride] == -1 && (propagation_mask & buildMapDat[x + (y + 1) * chronicle::dungeon::GridStride].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        scanRoomInfoWork[x + (y + 1) * 16] = scanRoomInfoWork[x + y * 16];\n",
+          "new": "\n                        scanRoomInfoWork[x + (y + 1) * chronicle::dungeon::GridStride] = scanRoomInfoWork[x + y * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride - 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 - 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride - 1].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride - 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * chronicle::dungeon::GridStride - 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride - 1].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        scanRoomInfoWork[x + y * 16 - 1] = scanRoomInfoWork[x + y * 16];\n",
+          "new": "\n                        scanRoomInfoWork[x + y * chronicle::dungeon::GridStride - 1] = scanRoomInfoWork[x + y * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride + 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * 16 + 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride + 1].content) != 0) {\n",
+          "new": "\n                if (buildMapDat[x + y * chronicle::dungeon::GridStride + 1].kind != MAP_PARTS_NONE && scanRoomInfoWork[x + y * chronicle::dungeon::GridStride + 1] == -1 && (propagation_mask & buildMapDat[x + y * chronicle::dungeon::GridStride + 1].content) != 0) {\n",
+          "count": 1
+        },
+        {
+          "old": "\n                        scanRoomInfoWork[x + y * 16 + 1] = scanRoomInfoWork[x + y * 16];\n",
+          "new": "\n                        scanRoomInfoWork[x + y * chronicle::dungeon::GridStride + 1] = scanRoomInfoWork[x + y * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n    int target_label = scanRoomInfoWork[stair_x + (stair_y + 1) * 16];\n",
+          "new": "\n    int target_label = scanRoomInfoWork[stair_x + (stair_y + 1) * chronicle::dungeon::GridStride];\n",
+          "count": 1
+        },
+        {
+          "old": "\n        if (target_label == scanRoomInfoWork[this->rooms[i].x + (this->rooms[i].y + 1) * 16 + 1]) {\n",
+          "new": "\n        if (target_label == scanRoomInfoWork[this->rooms[i].x + (this->rooms[i].y + 1) * chronicle::dungeon::GridStride + 1]) {\n",
+          "count": 1
         }
       ]
     },

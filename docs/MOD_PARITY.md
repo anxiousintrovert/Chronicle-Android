@@ -1663,3 +1663,23 @@ Raw hashes remain different and the explicit map-size-only comparison passes.
 Protected PS2 sources remain unchanged. Other platforms and larger requested
 layouts remain unverified.
 
+### Room-link workspace preparation
+
+The special-door/key flood-fill workspace now has 48x48 storage and uses the
+same storage stride as the map. Its retail scan limits, candidate order and
+32-door selection cap remain unchanged. This removes a separate 16-cell
+addressing dependency; it does not enable larger layout requests.
+
+The native builder assumes two initial rooms exist after bounded placement
+retries and calls `joinRoom(0, 1)` without checking that assumption. Exposing
+custom build areas and room sizes must address failed initial packing before
+entering that path. A successful configuration write cannot promise that a
+requested room count can fit. Custom-generation failure handling, active scan
+bounds and connectivity/key-reachability tests remain required.
+
+Validation: Clang 23.1.2 game/test builds pass. The 3,840-case empty/disabled
+seed exports retain the previous grid-storage hashes, with map size still the
+only difference from pinned upstream. PS2 originals remain read-only.
+The full suite again has 777 passes, 34 skips and one disabled test; all 28
+Python checks pass. No new public operation or gameplay package is added.
+
