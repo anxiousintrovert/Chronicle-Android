@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline Chronicle package tools. Never executes Lua or enables a package."""
 import argparse
+import importlib.util
 import hashlib
 import json
 from pathlib import Path
@@ -20,7 +21,7 @@ CAPABILITIES = {
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}
 FIELDS = REQUIRED | {"api_version", "enabled", "requires", "conflicts", "exclusive",
-                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio"}
+                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio", "meshes"}
 
 
 def require(condition, message):
@@ -168,6 +169,25 @@ def validate(root, data=None):
         size = path.stat().st_size
         audio_bytes += size
         require(0 < size <= 32 * 1024 * 1024 and audio_bytes <= 64 * 1024 * 1024, "audio exceeds file/package size limits or is empty")
+    meshes = mod.get("meshes", [])
+    require(isinstance(meshes, list) and len(meshes) <= 16, "meshes must be an array of at most 16 replacements")
+    mesh_bytes, targets = 0, []
+    if meshes:
+        spec = importlib.util.spec_from_file_location('chronicle_mesh', Path(__file__).with_name('chronicle_mesh.py'))
+        mesh_tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mesh_tool)
+    for mesh in meshes:
+        require(isinstance(mesh, dict) and {'texture', 'source'} <= set(mesh) <= {'texture', 'source', 'native_vertices'}, "invalid mesh replacement fields")
+        require(isinstance(mesh['texture'], str) and re.fullmatch(r'[A-Za-z0-9_.-]{1,31}', mesh['texture']), "invalid mesh texture name")
+        if 'native_vertices' in mesh:
+            require(type(mesh['native_vertices']) is int and 1 <= mesh['native_vertices'] <= 100000, "mesh native_vertices must be 1-100000")
+        require(not any(mesh_overlap(mesh, previous) for previous in targets), "overlapping mesh target: " + mesh['texture'])
+        targets.append(mesh)
+        path = contained(root, mesh['source'])
+        size = path.stat().st_size
+        mesh_bytes += size
+        require(0 < size <= 16 * 1024 * 1024 and mesh_bytes <= 64 * 1024 * 1024, "mesh exceeds file/package size limits or is empty")
+        mesh_tool.inspect(path)
     files = mod["files"]
     require(isinstance(files, dict) and len(files) <= 4096, "files must contain at most 4096 mappings")
     targets = set()
@@ -204,7 +224,7 @@ def pack(root, output):
     output = Path(output).resolve()
     require(not output.is_relative_to(root), "archive must be outside the package")
     # Do not accidentally ship saves, credentials, git metadata, or arbitrary files.
-    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values()) | set(mod.get("audio", {}).values())
+    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values()) | set(mod.get("audio", {}).values()) | {m["source"] for m in mod.get("meshes", [])}
     if "script" in mod:
         names.add(mod["script"])
     if "native_library" in mod:
@@ -227,6 +247,12 @@ def apis():
                 r'\{\s*"([a-z_.]+)"\s*,\s*"([a-z_.]+)"\s*,\s*"([^"\n]+)"\s*,\s*(true|false)\s*\}', source)]
 
 
+def mesh_overlap(left, right):
+    return left['texture'].lower() == right['texture'].lower() and (
+        'native_vertices' not in left or 'native_vertices' not in right or
+        left['native_vertices'] == right['native_vertices'])
+
+
 def check_set(root, enabled, data=None):
     """Offline plan only. No profile writes, native loading, Lua or game execution."""
     packages, errors = {}, []
@@ -246,6 +272,8 @@ def check_set(root, enabled, data=None):
             problems[key].append('missing or duplicate package ID')
             continue
         mod = candidates[0]
+        if mod.get('meshes'):
+            problems[key].append('Mesh package activation is not yet available in this build')
         if 'native_library' in mod:
             problems[key].append('native trust must be reviewed in the game manager')
         for dependency in mod.get('requires', []):
@@ -264,6 +292,10 @@ def check_set(root, enabled, data=None):
                 problems[key].append(f'declared conflict: {other}')
             for claim in sorted(set(mod.get('exclusive', [])) & set(candidate.get('exclusive', []))):
                 problems[key].append(f'exclusive feature {claim}: {other}')
+            for mesh in mod.get('meshes', []):
+                for other_mesh in candidate.get('meshes', []):
+                    if mesh_overlap(mesh, other_mesh):
+                        problems[key].append(f"mesh conflict {mesh['texture'].lower()} (native vertices {mesh.get('native_vertices', 'any')} / {other_mesh.get('native_vertices', 'any')}): {other}")
             left = {relative(p).lower() for p in mod['files']}
             right = {relative(p).lower() for p in candidate['files']}
             for target in sorted(left & right):
@@ -340,7 +372,7 @@ def install(archive, mods_root, replace=False, data=None):
         package_root = stage / next(iter(roots))
         mod = validate(package_root, data)
         require(package_root.name == mod['id'], 'archive folder must match package ID')
-        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values()) | set(mod.get('audio', {}).values())
+        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values()) | set(mod.get('audio', {}).values()) | {m['source'] for m in mod.get('meshes', [])}
         declared |= {mod[key] for key in ('script', 'native_library') if key in mod}
         allowed = {mod['id'] + '/' + relative(name) for name in declared}
         require(set(files) <= allowed, 'archive contains undeclared files; use the pack command')

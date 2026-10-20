@@ -340,3 +340,39 @@ TEST_F(ModManager, AudioDeclarationsAreContainedBoundedAndDisabledByDefault) {
     Scan();
     EXPECT_FALSE(manager.Packages()[0].problems.empty());
 }
+
+TEST_F(ModManager, MeshDeclarationsValidateGeometryAndStayDisabledOrExplicitlyUnavailable) {
+    auto manifest=Manifest("test.mesh");manifest["meshes"]={{{"texture","HERO.TM2"},{"native_vertices",3},{"source","hero.mesh.json"}}};
+    Add("mesh",manifest);
+    Write(root/"mods/mesh/hero.mesh.json",R"({"schema_version":1,"vertices":[[0,0,0,0,0,1,0,0],[1,0,0,0,0,1,1,0],[0,1,0,0,0,1,0,1]],"triangles":[[0,0,1,2]]})");
+    manager.Scan({root/"mods"},base);
+    ASSERT_EQ(Find("test.mesh").meshes.size(),1u);EXPECT_EQ(Find("test.mesh").meshes[0].texture,"hero.tm2");
+    EXPECT_FALSE(Find("test.mesh").enabled);EXPECT_TRUE(Find("test.mesh").problems.empty());
+    Scan();EXPECT_FALSE(Find("test.mesh").Active());EXPECT_TRUE(manager.LoadOrder().empty());
+    EXPECT_NE(manager.Report().find("activation is not yet available"),std::string::npos);
+    Write(root/"mods/mesh/hero.mesh.json","{}");Scan();EXPECT_FALSE(Find("test.mesh").problems.empty());
+}
+TEST_F(ModManager, MeshConflictsIncludeWildcardCountsEveryOwnerAndBlockedDependents) {
+    const std::string geometry=R"({"schema_version":1,"vertices":[[0,0,0,0,0,1,0,0],[1,0,0,0,0,1,1,0],[0,1,0,0,0,1,0,1]],"triangles":[[0,0,1,2]]})";
+    for(const auto &id:{"a","b","c"}) {
+        auto manifest=Manifest(id);manifest["meshes"]={{{"texture",id==std::string("a")?"HERO":"hero"},{"source","mesh.json"}}};
+        if(id!=std::string("a"))manifest["meshes"][0]["native_vertices"]=id==std::string("b")?3:4;
+        Add(id,manifest);Write(root/"mods"/id/"mesh.json",geometry);
+    }
+    auto dependent=Manifest("dependent");dependent["requires"]={"b"};Add("dependent",dependent);Scan();
+    const auto has=[&](const char *id,const char *text){for(const auto &problem:Find(id).problems)if(problem.find(text)!=std::string::npos)return true;return false;};
+    EXPECT_TRUE(has("a","also replaced by 'b'"));EXPECT_TRUE(has("a","also replaced by 'c'"));
+    EXPECT_TRUE(has("b","also replaced by 'a'"));EXPECT_TRUE(has("c","also replaced by 'a'"));
+    EXPECT_FALSE(has("b","also replaced by 'c'"));EXPECT_TRUE(has("dependent","blocked"));
+    enabled["a"]=false;Scan();EXPECT_FALSE(has("b","also replaced"));EXPECT_FALSE(has("c","also replaced"));
+}
+TEST_F(ModManager, MeshDeclarationsRejectAmbiguityUnsafePathsCountsAndUnknownFields) {
+    auto manifest=Manifest("test.mesh");const Json good={{"texture","hero"},{"source","mesh.json"}};
+    const std::vector<Json> invalid={{{"texture","../hero"},{"source","mesh.json"}},{{"texture","hero"},{"source","../outside.json"}},
+        {{"texture","hero"},{"source","mesh.json"},{"native_vertices",true}},{{"texture","hero"},{"source","mesh.json"},{"native_vertices",0}},
+        {{"texture","hero"},{"source","mesh.json"},{"native_vertices",100001}},{{"texture","hero"},{"source","mesh.json"},{"bones",true}}};
+    for(const auto &mesh:invalid) {manifest["meshes"]={mesh};Add("mesh",manifest);Write(root/"mods/mesh/mesh.json","{}");Scan();EXPECT_FALSE(Find("test.mesh").problems.empty());}
+    manifest["meshes"]={good,good};Add("mesh",manifest);
+    Write(root/"mods/mesh/mesh.json",R"({"schema_version":1,"vertices":[[0,0,0,0,0,1,0,0],[1,0,0,0,0,1,1,0],[0,1,0,0,0,1,0,1]],"triangles":[[0,0,1,2]]})");
+    Scan();EXPECT_NE(manager.Report().find("overlapping mesh target"),std::string::npos);
+}

@@ -12,6 +12,7 @@
 
 #include "api.hpp"
 #include "native.hpp"
+#include "mesh_asset.hpp"
 
 namespace mods {
 namespace {
@@ -143,7 +144,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio", "meshes"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -308,6 +309,37 @@ void Read(Package &package, const FileIndex &base) {
             package.audio.emplace(id, std::move(path));
         }
     }
+    if (json.contains("meshes")) {
+        const auto &meshes = json["meshes"];
+        if (!meshes.is_array() || meshes.size() > 16) throw std::runtime_error("meshes must be an array of at most 16 replacements");
+        std::uintmax_t total = 0;
+        for (const auto &mesh : meshes) {
+            if (!mesh.is_object()) throw std::runtime_error("mesh replacement must be an object");
+            for (const auto &[key, value] : mesh.items())
+                if (key != "texture" && key != "native_vertices" && key != "source") throw std::runtime_error("unknown mesh replacement field: " + key);
+            MeshReplacement replacement;
+            replacement.texture = Fold(String(mesh, "texture"));
+            if (replacement.texture.size() > 31 || !std::ranges::all_of(replacement.texture, [](char c) {
+                return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+            })) throw std::runtime_error("mesh texture must be 1-31 ASCII letters, digits, dots, underscores or hyphens");
+            if (mesh.contains("native_vertices")) {
+                const auto &count = mesh["native_vertices"];
+                if (!count.is_number_integer() || count < 1 || count > 100000) throw std::runtime_error("mesh native_vertices must be 1-100000");
+                replacement.native_vertices = count.get<unsigned>();
+            }
+            for (const auto &previous : package.meshes)
+                if (previous.Overlaps(replacement)) throw std::runtime_error("overlapping mesh target: " + replacement.texture);
+            replacement.source = Contained(package.root, package.root / Path(Relative(String(mesh, "source"))));
+            const auto bytes = fs::file_size(replacement.source);
+            if (!bytes || bytes > 16 * 1024 * 1024 || bytes > 64 * 1024 * 1024 - total) throw std::runtime_error("mesh exceeds 16 MiB per file or 64 MiB per package, or is empty");
+            total += bytes;
+            std::ifstream input(replacement.source, std::ios::binary);
+            std::string text(static_cast<std::size_t>(bytes), '\0');
+            if (!input.read(text.data(), static_cast<std::streamsize>(bytes)) || input.peek() != std::char_traits<char>::eof()) throw std::runtime_error("mesh file changed or cannot be read");
+            DecodeMeshAsset(text);
+            package.meshes.push_back(std::move(replacement));
+        }
+    }
     const auto &files = json.at("files");
     if (!files.is_object() || files.size() > 4096) {
         throw std::runtime_error("files must be an object with at most 4096 mappings");
@@ -441,6 +473,14 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
                 Problem(a, "Declared conflict with '" + b.id + "'");
                 Problem(b, "Declared conflict with '" + a.id + "'");
             }
+            for (const auto &left : a.meshes) for (const auto &right : b.meshes) {
+                if (left.Overlaps(right)) {
+                    const auto target = left.texture + " (native vertices " + (left.native_vertices ? std::to_string(left.native_vertices) : "any") +
+                        " / " + (right.native_vertices ? std::to_string(right.native_vertices) : "any") + ")";
+                    Problem(a, "Mesh '" + target + "' also replaced by '" + b.id + "'");
+                    Problem(b, "Mesh '" + target + "' also replaced by '" + a.id + "'");
+                }
+            }
             for (const auto &[target, file] : a.files) {
                 if (b.files.contains(target)) {
                     Problem(a, "File '" + target + "' also replaced by '" + b.id + "'");
@@ -449,6 +489,11 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
             }
         }
     }
+
+    // Staged authoring support; never silently activate a package whose mesh
+    // declarations cannot yet be attached during native visual construction.
+    for (auto &package : packages_) if (package.enabled && !package.meshes.empty())
+        Problem(package, "Mesh package activation is not yet available in this build");
 
     // DFS identifies the actual cycle; dependents receive dependency diagnostics below.
     std::vector<int>                 visited(packages_.size(), 0);
@@ -537,6 +582,7 @@ std::string Manager::Report() const {
             {"state",               !package.problems.empty() ? "blocked" : package.enabled ? "active"
                                                                               : "disabled"},
             {"problems",            package.problems                                                           },
+            {"mesh_count",          package.meshes.size()},
             {"file_count",          package.files.size()                                                       },
             {"dependencies",        package.dependencies                                                       },
             {"dependency_versions", version_rules                                                              },

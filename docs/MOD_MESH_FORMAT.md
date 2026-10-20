@@ -1,12 +1,12 @@
 # Mesh authoring format (preparation stage)
 
 `tools/chronicle_mesh.py` prepares triangle geometry for the forthcoming mesh
-replacement path. **The current game does not load this format yet.** Do not add
+replacement path. **The game validates this format but cannot activate mesh packages yet.** Do not add
 it to a manifest's `files` mapping: that mapping still replaces compatible native
 assets. No new mesh runtime capability is advertised by this tool, and it does
 not install packages, edit game assets, enable mods, launch the game, or fetch
-external resources. Runtime selection, conflict checks and renderer integration
-remain in the coverage ledger.
+external resources. Runtime package selection and native construction attachment remain in the
+coverage ledger; staged declarations and conflict checks are available below.
 
 ## Commands
 
@@ -112,10 +112,9 @@ This is an internal adapter, not an exposed package feature yet. Native
 `MotionProc2` notifications now drive attached bindings, and visual rebuild,
 arena retirement and transient sweeping detach them. Bindings reject changed rest
 pointers/counts and invalid influences until explicitly rebuilt. Registration is
-bounded to 256 visuals and one million source/replacement points each. Native
-morph/color/material updates, replacement visual publication, package conflict
-resolution and retail replacement-rendering tests remain required before package
-mesh replacement is advertised.
+bounded to 256 visuals and one million source/replacement points each. Native morph/color/material updates and GPU publication are integrated for
+internal bindings. Package activation, native construction attachment and retail
+replacement-rendering tests remain required before mesh replacement is advertised.
 No custom skeleton, motion, item, weapon or cutscene registry is introduced.
 
 
@@ -140,8 +139,7 @@ These helpers remain internal preparation. The game does not yet select a mesh p
 native visual construction. Internal registration can now upload a separate GPU
 mesh, and native draw/remake paths resolve and refresh it while retaining the
 original as fallback. Native animation and synthetic GPU tests are not retail
-replacement-model validation. Package conflict handling, activation and retail visual evidence are still
-required. Replacement-aware frame bounds are now integrated as described below.
+replacement-model validation. Package activation and retail visual evidence are still required. Replacement-aware frame bounds are now integrated as described below.
 
 
 ## Internal GPU publication
@@ -185,5 +183,54 @@ behavior is unchanged. Failed replacements cease contributing bounds; native
 fallback remains available. With no registered replacement, the helper returns
 before querying the visual's model identity or calculating bounds.
 
-This does not enable mesh packages. Package declarations, native construction
-attachment, target discovery and conflict diagnostics remain pending.
+This does not enable mesh packages. Native construction attachment, target discovery and runtime activation remain
+pending; staged declarations and conflict diagnostics are described below.
+
+
+## Staged package declarations
+
+Mesh package activation is **not yet available**. Authors can validate, pack,
+install and inspect conflicts for this declaration now, but enabling a package
+with meshes blocks the whole package with an explicit diagnostic. Its scripts,
+plugins and other overrides do not become active. Packages remain disabled by
+default. This staging gate will be removed only with native construction
+attachment and retail validation; no mesh capability is advertised yet.
+
+Add an optional `meshes` array to the normal `mod.json`:
+
+```json
+"meshes": [
+  {
+    "texture": "hero_body",
+    "native_vertices": 120,
+    "source": "models/hero.mesh.json"
+  }
+]
+```
+
+`texture` is a case-insensitive native texture name, 1-31 ASCII letters, digits,
+dots, underscores or hyphens. `native_vertices`, when supplied, is an integer
+from 1 to 100000 referring to the original model's vertex count, not the exported
+replacement count. Omit it to target every count for that name. This is target
+metadata, not a change to native capacities. These targets reserve existing model
+replacement only; they do not allocate custom item, weapon or character IDs.
+
+`source` is a contained relative package path to the schema-1 mesh JSON described
+above. Geometry is validated during discovery even for disabled packages. Limits
+are 16 declarations, 16 MiB per file, and 64 MiB total declared mesh bytes per
+package; repeated references count toward the total. Unknown declaration fields,
+escaping paths, invalid geometry and overlapping targets within a package are
+rejected.
+
+Two enabled packages conflict when their normalized texture names match and
+vertex counts match, or either declaration omits its count. Both packages receive
+the target and other owner's ID in their shared mod-manager diagnostics. Every
+collision is reported, including three-way collisions; blocked dependencies are
+propagated. Distinct exact vertex counts do not conflict. Disabled packages do
+not claim targets. This is a conservative declaration check; native target
+resolution and ambiguity checks still need runtime integration.
+
+`chronicle_mod.py validate`, `pack`, `install` and `check-set` understand mesh
+files. Packing includes only declared files and existing permitted metadata;
+installation does not enable a package. `check-set` also reports the temporary
+activation gate, so an offline-valid draft cannot be mistaken for a runnable mod.

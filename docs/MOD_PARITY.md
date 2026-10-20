@@ -3733,3 +3733,28 @@ Mesh package declarations, target discovery/matching, conflict diagnostics,
 native construction attachment, activation and retail replacement-model visual
 validation remain open. Public operations remain 143; no mesh capability is
 advertised and overall MoonMod coverage is still incomplete.
+
+
+## Staged mesh packages and author-tool conflicts (2026-10-20)
+
+The manager accepts bounded meshes declarations targeting normalized native
+texture names and optional exact native vertex counts. It validates contained
+schema-1 geometry at discovery, rejects overlapping targets within one package,
+and reports every cross-package overlap through existing shared-manager problem
+messages. Disabled packages do not claim targets; exact different counts remain
+independent, wildcard counts overlap, and dependent packages are blocked normally.
+Limits are 16 declarations, 16 MiB per asset and 64 MiB total per package.
+
+Offline validate/pack/install/check-set support the declarations and include only
+declared geometry. Manager reports expose mesh_count. Both the manager and offline
+check-set explicitly block activation of mesh packages until native construction
+attachment is implemented; scripts/plugins/overrides cannot silently run without
+their required mesh content. No mesh capability is advertised. The schema reserves
+replacement targets only and does not introduce custom item/weapon registries.
+
+Clang 23.1.2 game/test builds passed. Focused manager/mesh checks: 49 passed and
+one platform symlink check skipped. Full regression: 956 passed, 104 skipped, one
+disabled benchmark. All 55 Python checks passed, including archive/install and
+conflict cases. The isolated PAL combat/shared-manager/back-floor replay passed.
+PS2 and Kazarov remain unchanged. Runtime mesh attachment, target discovery and
+retail replacement visual evidence remain outstanding; full parity is unfinished.

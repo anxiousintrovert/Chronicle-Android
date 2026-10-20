@@ -257,5 +257,52 @@ class AuthorTools(unittest.TestCase):
         self.assertEqual(list((destination / '.backups').iterdir()), [])
 
 
+    def mesh_package(self, name, targets):
+        folder = self.package(name, meshes=targets)
+        geometry = {'schema_version': 1, 'vertices': [[0,0,0,0,0,1,0,0],[1,0,0,0,0,1,1,0],[0,1,0,0,0,1,0,1]], 'triangles': [[0,0,1,2]]}
+        (folder / 'hero.mesh.json').write_text(json.dumps(geometry))
+        return folder
+
+    def test_mesh_pack_install_keeps_declared_geometry_and_reports_unavailable_activation(self):
+        folder = self.mesh_package('test.mesh', [{'texture': 'HERO', 'native_vertices': 3, 'source': 'hero.mesh.json'}])
+        self.assertEqual(len(tool.validate(folder)['meshes']), 1)
+        archive = self.root / 'mesh.zip'
+        tool.pack(folder, archive)
+        with zipfile.ZipFile(archive) as data:
+            self.assertIn('test.mesh/hero.mesh.json', data.namelist())
+        destination = self.root / 'installed'
+        tool.install(archive, destination)
+        self.assertTrue((destination / 'test.mesh/hero.mesh.json').is_file())
+        report = tool.check_set(destination, ['test.mesh'])
+        self.assertTrue(any('activation is not yet available' in p for p in report['problems']['test.mesh']))
+
+    def test_mesh_conflicts_match_case_and_overlapping_counts_only(self):
+        self.mesh_package('test.any', [{'texture': 'HERO', 'source': 'hero.mesh.json'}])
+        self.mesh_package('test.three', [{'texture': 'hero', 'native_vertices': 3, 'source': 'hero.mesh.json'}])
+        self.mesh_package('test.four', [{'texture': 'hero', 'native_vertices': 4, 'source': 'hero.mesh.json'}])
+        result = tool.check_set(self.root / 'mods', ['test.any', 'test.three', 'test.four'])
+        self.assertEqual(sum('mesh conflict' in p for p in result['problems']['test.any']), 2)
+        self.assertEqual(sum('mesh conflict' in p for p in result['problems']['test.three']), 1)
+        result = tool.check_set(self.root / 'mods', ['test.three', 'test.four'])
+        self.assertFalse(any('mesh conflict' in p for problems in result['problems'].values() for p in problems))
+
+    def test_mesh_validation_rejects_ambiguous_targets_bad_geometry_and_unsafe_paths(self):
+        target = {'texture': 'hero', 'source': 'hero.mesh.json'}
+        folder = self.mesh_package('test.mesh', [target])
+        manifest_path = folder / 'mod.json'
+        manifest = json.loads(manifest_path.read_text())
+        for targets in ([target, target], [dict(target, native_vertices=True)], [dict(target, native_vertices=0)],
+                        [dict(target, texture='../hero')], [dict(target, source='../escape')], [dict(target, bones=True)]):
+            manifest['meshes'] = targets
+            manifest_path.write_text(json.dumps(manifest))
+            with self.assertRaises(ValueError):
+                tool.validate(folder)
+        manifest['meshes'] = [target]
+        manifest_path.write_text(json.dumps(manifest))
+        (folder / 'hero.mesh.json').write_text('{}')
+        with self.assertRaises(ValueError):
+            tool.validate(folder)
+
+
 if __name__ == '__main__':
     unittest.main()

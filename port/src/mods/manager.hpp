@@ -19,6 +19,15 @@ struct Quest {
     int         map = -1; // -1 means only scripts advance this quest.
 };
 
+struct MeshReplacement {
+    std::string texture;
+    unsigned native_vertices = 0; // Zero matches every vertex count for this texture.
+    std::filesystem::path source;
+    bool Overlaps(const MeshReplacement &other) const {
+        return texture == other.texture && (!native_vertices || !other.native_vertices || native_vertices == other.native_vertices);
+    }
+};
+
 struct Package {
     std::filesystem::path                        root;
     std::string                                  id;
@@ -31,6 +40,7 @@ struct Package {
     std::vector<std::string>                     exclusive;
     std::vector<std::string>                     permissions;
     std::vector<Quest>                           quests;
+    std::vector<MeshReplacement>                 meshes;
     std::filesystem::path                        script;
     std::filesystem::path                        native_library;
     std::string                                  native_fingerprint;
