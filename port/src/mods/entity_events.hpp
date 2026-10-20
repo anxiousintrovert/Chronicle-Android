@@ -47,6 +47,13 @@ public:
 
     std::uint32_t Dropped() const { return dropped_; }
 
+    void CancelEntity(CMonstorUnit *unit, std::uint64_t entity) {
+        unsigned kept = 0;
+        for (unsigned i = 0; i < size_; ++i)
+            if (records_[i].unit != unit || records_[i].entity != entity) records_[kept++] = records_[i];
+        size_ = kept;
+    }
+
     void CancelUnit(CMonstorUnit *unit) {
         unsigned kept = 0;
         for (unsigned i = 0; i < size_; ++i) {

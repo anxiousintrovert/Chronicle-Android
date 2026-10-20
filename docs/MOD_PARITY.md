@@ -3195,3 +3195,22 @@ Validation: Clang 23.1.2 game/test builds and six spawn/ownership tests passed.
 Tests exercise missing resources, model bounds, first-slot arena capacity,
 attachment requirements, full floors, ownership reuse and RNG preservation.
 PS2 remains untouched; contributor-owned content registries are unaffected.
+
+
+### Actor combat-reference cleanup prerequisite (2026-10-20)
+
+Added a commit-only helper to retire hit/projectile references for a validated
+monster slot. Collision hits match the native slot*5+200 owner identity or the
+source monster index; projectiles match their secondary source-slot ID. Actual
+array extents are used, with compile-time paired-array checks. Unrelated and
+inactive records remain untouched, invalid slots fail closed, and repeated
+cleanup is idempotent. The helper does not retire a native actor or grant kills.
+
+Death-event queues can now cancel one unit/generation without dropping another
+actor's events or changing their order. These helpers have no production caller
+until owned spawn/despawn integrates resource, placement, lifecycle and sound
+cleanup. Public operation count remains 135; no claim of completed despawn.
+
+Validation: Clang 23.1.2 game/test builds and ten focused actor/event tests
+passed, including expanded-slot and array-tail cleanup, unrelated references,
+idempotence and unit/generation isolation. PS2 diff remains empty.
