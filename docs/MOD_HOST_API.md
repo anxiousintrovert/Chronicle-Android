@@ -21,7 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
-| `quests.register` | `id`, `title`, `description`, `goal` or `objectives` | `game.write` | Register an owned saved objective; returns its status |
+| `quests.register` | `id`, `title`, `description`, `goal` or `objectives`, optional `explicit_start` | `game.write` | Register an owned saved objective; returns its status |
+| `quests.start` | `id` | `game.write` | Activate an owned registered quest; completed quests cannot restart |
 | `quests.advance` | `id`, `amount`, optional `objective` | `game.write` | Transactionally advance an owned objective; returns its status |
 | `quests.list` | none | `game.read` | This owner's declared quests and saved objective progress |
 | `quests.get` | `id` | `game.read` | One declared quest owned by the caller; unknown IDs fail |
@@ -2420,3 +2421,37 @@ the definition, aggregate and objective counters together. Renaming objectives o
 changing definitions remains a separate migration feature; immutable registration
 still rejects changed saved definitions. No automatic rewards, native writes or
 new native quest hooks are introduced.
+
+
+## Explicit quest lifecycle
+
+Require `quests.lifecycle.v1` and the `quests.start` operation to opt into
+registered, active and completed quest states. Add `explicit_start = true` to
+`quests.register` alongside either goal or objectives. A new definition then
+returns `status = "registered"`; `quests.advance` rejects it until the owner
+calls `quests.start` with exactly `{id = "quest-id"}`. Start requires game.write
+and returns the same status object as get/register/advance.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "return_home", title = "Return home", description = "Visit Norune.",
+    goal = 1, explicit_start = true
+}))
+assert(chronicle.call("quests.start", {id = "return_home"}))
+assert(chronicle.call("quests.advance", {id = "return_home", amount = 1}))
+```
+
+Every shared quest status now includes `status`: registered, active or completed.
+Starting an active quest is idempotent; starting a completed quest fails without
+resetting progress. Completion follows existing goal/objective counters. The
+shared menu shows Not started for registered quests; the noncompleted filter
+also includes these entries. Neither opening the menu nor reading a quest starts
+it. This introduces no automatic quest events, scenes, rewards or stage logic.
+
+Omitting explicit_start (or setting false) preserves immediate progression for
+existing single-counter and named-objective packages. Their status begins active;
+start is an idempotent no-op unless completed. This option is part of the immutable
+definition and cannot be changed by re-registration. Saved quest_started records
+are owner-local, move with rename_quests, and roll back with the callback. Save
+loading rejects orphan/nonboolean/false start records and progress on an unstarted
+quest. Start records exist only after explicit requests by participating mods.

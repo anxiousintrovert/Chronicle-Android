@@ -21,10 +21,17 @@ Quest ParseQuest(const std::string &id,const Json &definition) {
     else for(const auto &objective:definition["objectives"])quest.goal+=objective["goal"].get<int>();
     return quest;
 }
+bool ExplicitStart(const std::string &id,const Json &state) {
+    return state.contains("quest_definitions")&&state["quest_definitions"].contains(id)&&state["quest_definitions"][id].value("explicit_start",false);
+}
+bool Started(const std::string &id,const Json &state) {
+    return !ExplicitStart(id,state)||(state.contains("quest_started")&&state["quest_started"].value(id,false));
+}
 Json Status(const Quest &quest,const Json &state) {
     const int progress=state.contains("quests")?state["quests"].value(quest.id,0):0;
     Json status={{"id",quest.id},{"title",quest.title},{"description",quest.description},
                  {"goal",quest.goal},{"progress",std::min(progress,quest.goal)},{"complete",progress>=quest.goal}};
+    status["status"]=progress>=quest.goal?"completed":Started(quest.id,state)?"active":"registered";
     if(state.contains("quest_definitions")&&state["quest_definitions"].contains(quest.id)&&state["quest_definitions"][quest.id].contains("objectives")) {
         status["objectives"]=Json::array();
         for(const auto &objective:state["quest_definitions"][quest.id]["objectives"]) {
@@ -41,10 +48,12 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
     if(!a.is_object())return "quest arguments must be an object";
     if(operation=="quests.list")return a.empty()?"":"quests.list takes no arguments";
     if(!a.contains("id")||!Id(a["id"]))return "invalid quest id";
-    if(operation=="quests.get")return a.size()==1?"":"provide only quest id";
+    if(operation=="quests.get"||operation=="quests.start")return a.size()==1?"":"provide only quest id";
     if(operation=="quests.register") {
-        if(a.size()!=4||!a.contains("title")||!Text(a["title"])||!a.contains("description")||!Text(a["description"]))
-            return "quest registration requires only id, bounded title/description, and goal or objectives";
+        if((a.size()!=4&&a.size()!=5)||(a.size()==5&&(!a.contains("explicit_start")||!a["explicit_start"].is_boolean()))||
+           (a.contains("explicit_start")&&!a["explicit_start"].is_boolean())||!a.contains("title")||!Text(a["title"])||!a.contains("description")||!Text(a["description"]))
+            return "quest registration requires only id, bounded title/description, and goal or objectives, with optional explicit_start boolean";
+        if(a.contains("goal")&&a.contains("objectives"))return "choose goal or objectives";
         if(a.contains("goal"))return a["goal"].is_number_integer()&&a["goal"]>=1&&a["goal"]<=1000000?"":"quest goal must be integer 1..1000000";
         if(!a.contains("objectives")||!a["objectives"].is_array()||a["objectives"].empty()||a["objectives"].size()>16)return "quest requires 1..16 objectives";
         std::set<std::string> ids;int total=0;
@@ -69,7 +78,7 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
         const auto &definitions=state["quest_definitions"];
         Require(definitions.is_object()&&definitions.size()+result.size()<=64,"at most 64 combined manifest and dynamic quests per owner");
         for(const auto &[id,value]:definitions.items()) {
-            Require(value.is_object()&&value.size()==3&&!value.contains("id"),"invalid saved quest definition");
+            Require(value.is_object()&&(value.size()==3||value.size()==4)&&!value.contains("id"),"invalid saved quest definition");
             auto arguments=value;arguments["id"]=id;
             const auto error=ValidateQuestOperation("quests.register",arguments);if(!error.empty())throw std::runtime_error(error);
             Require(std::ranges::none_of(result,[&](const Quest &quest){return quest.id==id;}),"saved dynamic quest collides with a manifest quest");
@@ -95,6 +104,13 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
         const auto aggregate=state.contains("quests")?state["quests"].value(id,Json(0)):Json(0);
         Require(aggregate.is_number_integer()&&aggregate==total,"quest aggregate differs from objective progress");
     }
+    if(state.contains("quest_started")) {
+        Require(state["quest_started"].is_object()&&state["quest_started"].size()<=64,"invalid quest start records");
+        for(const auto &[id,started]:state["quest_started"].items())
+            Require(ExplicitStart(id,state)&&started.is_boolean()&&started.get<bool>(),"invalid or orphan quest start record");
+    }
+    for(const auto &quest:result)if(!Started(quest.id,state))
+        Require(!state.contains("quests")||state["quests"].value(quest.id,Json(0))==0,"unstarted quest has progress");
     return result;
 }
 Json CallOwnedQuest(const Package &package,Json &state,std::string_view operation,const Json &arguments) {
@@ -121,7 +137,14 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
         const auto result=Status(quest,staged);state.swap(staged);return result;
     }
     Require(found!=quests.end(),"quest is not declared or registered by this package");
+    if(operation=="quests.start") {
+        Require(!Status(*found,state)["complete"].get<bool>(),"completed quest cannot be restarted");
+        auto staged=state;
+        if(ExplicitStart(id,staged))staged["quest_started"][id]=true;
+        const auto result=Status(*found,staged);state.swap(staged);return result;
+    }
     if(operation=="quests.advance") {
+        Require(Started(id,state),"quest must be started before advancing");
         auto staged=state;
         if(!staged.contains("quests"))staged["quests"]=Json::object();
         Require(staged["quests"].is_object()&&(staged["quests"].contains(id)||staged["quests"].size()<64),"quest progress limit reached");

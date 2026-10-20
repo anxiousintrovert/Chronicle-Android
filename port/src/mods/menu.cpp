@@ -211,7 +211,7 @@ void DrawQuests() {
         Text(10+i-quest_list.FirstRow(),std::string(entries[i].progress>=entries[i].goal?"[+] ":"[ ] ")+Literal(entries[i].title),rect.x,rect.y,rect.w,selected_row);
     });
     std::string body="No quests match this filter.";
-    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(q.progress>=q.goal?"Completed":"In progress")+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
+    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(q.progress>=q.goal?"Completed":q.status=="registered"?"Not started":"In progress")+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
     const auto lines=Lines(body,298);const int pages=std::max(1,(static_cast<int>(lines.size())+8)/9);
     quest_detail=std::clamp(quest_detail,0,pages-1);
     for(int i=0;i<9&&quest_detail*9+i<static_cast<int>(lines.size());++i)Text(40+i,Literal(lines[quest_detail*9+i]),295,150+i*21,300);

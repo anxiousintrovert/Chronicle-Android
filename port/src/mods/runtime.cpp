@@ -1769,7 +1769,7 @@ std::vector<QuestStatus> Runtime::Quests() const {
             const auto status=QuestStatusJson(q,*m->state);
             if(status.contains("objectives"))for(const auto &objective:status["objectives"])
                 description+="\n\n"+objective["title"].get<std::string>()+": "+std::to_string(objective["progress"].get<int>())+" / "+std::to_string(objective["goal"].get<int>());
-            result.push_back({m->package.id, q.id, q.title, description, std::min(value, q.goal), q.goal});
+            result.push_back({m->package.id, q.id, q.title, description, std::min(value, q.goal), q.goal, status["status"].get<std::string>()});
         }
     }
     return result;

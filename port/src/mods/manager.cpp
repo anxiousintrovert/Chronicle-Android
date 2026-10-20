@@ -383,7 +383,7 @@ void Problem(Package &package, const std::string &message) {
 } // namespace
 
 bool Supports(std::string_view capability) {
-    return capability == "quests.objectives.v1" || capability == "quests.dynamic.v1" || capability == "quests.read.v1" || capability == "save.migrations.v1" || capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
+    return capability == "quests.lifecycle.v1" || capability == "quests.objectives.v1" || capability == "quests.dynamic.v1" || capability == "quests.read.v1" || capability == "save.migrations.v1" || capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
            capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
            capability == "party.read.v1" || capability == "inventory.read.v1" ||

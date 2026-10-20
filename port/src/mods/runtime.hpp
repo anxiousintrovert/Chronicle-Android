@@ -44,6 +44,7 @@ struct World {
 struct QuestStatus {
     std::string owner, id, title, description;
     int         progress = 0, goal = 1;
+    std::string status;
 };
 
 struct ActionStatus {

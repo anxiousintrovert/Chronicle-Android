@@ -86,7 +86,8 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
                !host->call(host->context, "quests.get", "{\"id\":\"foreign\"}", &result) &&
                host->call(host->context, "quests.register", "{\"id\":\"dynamic\",\"title\":\"Native objective\",\"description\":\"Collect treasures\",\"goal\":3}", &result) &&
                host->call(host->context, "quests.advance", "{\"id\":\"dynamic\",\"amount\":1}", &result) && strstr(result,"\"progress\":1") &&
-               host->call(host->context, "quests.register", "{\"id\":\"multi\",\"title\":\"Native quest\",\"description\":\"Find villagers\",\"objectives\":[{\"id\":\"people\",\"title\":\"People\",\"goal\":2}]}", &result) &&
+               host->call(host->context, "quests.register", "{\"id\":\"multi\",\"title\":\"Native quest\",\"description\":\"Find villagers\",\"explicit_start\":true,\"objectives\":[{\"id\":\"people\",\"title\":\"People\",\"goal\":2}]}", &result) &&
+               host->call(host->context, "quests.start", "{\"id\":\"multi\"}", &result) && strstr(result,"\"status\":\"active\"") &&
                host->call(host->context, "quests.advance", "{\"id\":\"multi\",\"objective\":\"people\",\"amount\":1}", &result) && strstr(result,"\"progress\":1") &&
                host->state_set(host->context, "quest_read", "true", &result);
     }
