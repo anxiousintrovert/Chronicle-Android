@@ -2695,3 +2695,31 @@ verification remain open. The public operation count is 123.
 
 Clang 23.1.2 validation: 841 passed, 91 skipped, one disabled; all 35 Python
 checks and the explicit PAL lighting replay passed. PS2 unchanged.
+
+
+### Detached lighting ownership transactions (2026-10-20)
+
+LightingControl stages front/back fog, background, ambient, each directional
+light's direction/color, and current-map view_scale on value snapshots. It
+validates finite bounds, RGB bytes, unique zero-based light indices, nonzero
+normalized directions and ordered fog ranges, including native float rounding.
+Fog is one ownership group so partial edits cannot split its coupled range;
+RGB and direction vectors are also whole groups. Front/back and disjoint groups
+can have independent owners. Conflicts and late failures leave values and
+claims unchanged. Reset/retirement restores only groups still matching the last
+actual stored float values, preserving later native changes.
+
+Four focused tests cover conflict/late-error rollback across sides, precision
+collapse, normalization, float readback/restoration, unrelated writes not
+adopting newer native values, invalid inputs and dormant byte/RNG preservation.
+This is internal groundwork, not a public lighting write API; count stays 123.
+
+Native TEIGIMdsLoad in ps2/src/itemdata.cpp writes the lighting groups and
+VIEWLEVEL during model-definition loading, including reuse loads. The live
+adapter must release before this boundary and before native camera/game scene
+initialization, handle map identity for view_scale, and avoid throwing from
+cleanup. Only after load/retirement tests and a rendered gameplay replay should
+lighting_set/reset be registered. PS2 remains read-only.
+
+Clang 23.1.2 game/tests build and full regression pass: 845 passed, 91 skipped,
+one disabled; 35 Python checks pass. No live lighting hook was added.
