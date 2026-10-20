@@ -30,7 +30,7 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 | Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Component/isolated texture evidence exists; distribution-level rehearsal is pending |
 | Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
 | Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
-| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Packaging and clean launch validation are pending; never include disc/extracted assets, saves, profiles or enabled gameplay mods |
+| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Allowlisted staging, dependency notice collection, file hashes and initial clean startup passed; final notice review, approved archive and full install rehearsal remain pending |
 | Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | [Tester procedure](MOD_BETA_TESTING.md) documents setup and acceptance; candidate-specific results and limitations remain pending |
 
 Do not label a candidate release-ready solely because unit tests pass. Record
@@ -59,6 +59,34 @@ not a full gameplay or distribution acceptance run. License-notice collection,
 archive/checksum automation, normal-controls quest playthrough and the staged
 enable/conflict/disable/restart workflow remain pending. The staging directory
 also holds local test saves/evidence and must not itself be distributed.
+
+## Allowlisted bundle and refreshed regression (2026-10-20)
+
+`tools/chronicle_windows_bundle.py` stages the six runtime executable/DLL files,
+source language/font and referenced glyph assets, mod documentation, and pinned
+dependency notices. It does not recursively copy the build directory. A new
+output directory is required, PS2 output is rejected, and both recorded compilers
+must be Clang. The build cache must identify the current source checkout.
+`bundle.json` records file sizes/hashes, compiler records and checkout state;
+it explicitly does not certify binary provenance or release readiness.
+
+The local run staged 61 files and verified every recorded hash, without any mod,
+save, data or capture paths. A launch from that generated bundle with a fresh
+external save directory, PAL data and PATH restricted to Windows directories
+completed three offscreen frames and exited zero. No test evidence was written
+inside the bundle. Dependency notices include Lua, Kazarov, SDL, LLVM/MinGW,
+JSON, simdjson, fastgltf, embedded decoder/font libraries and asset provenance.
+The existing glyph provenance document records missing supplied-art attribution;
+notice review remains an explicit distribution task. No release archive was
+published by this helper.
+
+The native source at 0368ceb0 was rebuilt with llvm-mingw Clang 23.1.2. Full
+regression: 1,064 passed, 107 skipped and one disabled. The isolated PAL texture
+runner passed baseline, unchanged PNG, diagnostic replacement, 4096x4096 upscale,
+disabled and conflicting cases against the rebuilt test binary. All 85 Python
+tests passed after adding the bundle checks. PS2 baseline and upstream Kazarov
+remain unchanged. Normal-controls quest acceptance and the complete staged
+install/enable/conflict/disable/restart workflow are still outstanding.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 

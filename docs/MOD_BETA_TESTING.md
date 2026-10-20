@@ -115,3 +115,27 @@ and with the necessary package/version context. Note whether evidence came from
 normal controls, an automated fixture or source inspection. Windows results do
 not certify Android, Linux or macOS. Planned features are listed separately in
 [the roadmap](MOD_ROADMAP.md).
+
+## Maintainer: stage a Windows candidate
+
+Build the checkout with the documented Clang toolchain first. The staging helper
+copies an explicit runtime list, source language/glyph assets, mod documentation
+and dependency notices into a new directory. It does not copy build-tree saves,
+mods, profiles, captured textures or game data. Run from the source checkout:
+
+```powershell
+python tools/chronicle_windows_bundle.py --build "C:\Chronicle\port\build\windows-x64-release" --dependencies "C:\Chronicle\.kazarov\windows\deps" --output "C:\Candidates\chronicle-beta"
+```
+
+The output parent must exist; the destination must not. Missing required inputs,
+non-Clang compiler records and PS2 output paths fail. This helper expects the
+documented dependency layout and fetched CMake dependency sources. A build with
+externally supplied libraries needs its corresponding notices collected first.
+
+`bundle.json` records per-file SHA-256 hashes, sizes, compiler records and the
+checkout identity/dirty flag. Checkout identity alone does not prove which source
+produced an existing binary: retain the clean build log and exact source commit.
+The manifest itself is not signed and does not certify a release. Acceptance
+checks and notice review remain required, including the supplied glyph artwork's
+missing attribution noted in `notices/Glyph-provenance.md`. Keep test saves and
+logs outside this bundle, then archive and hash the approved candidate separately.
