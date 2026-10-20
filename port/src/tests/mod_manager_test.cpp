@@ -267,7 +267,7 @@ TEST_F(ModManager, RequiredHostOperationsBlockBeforeLoadingAnyCode) {
     Add("one", m);
     Scan();
     EXPECT_TRUE(Find("test.one").Active());
-    m["requires_operations"] = {"entities.spawn"};
+    m["requires_operations"] = {"entities.register_model"};
     Add("one", m);
     Scan();
     EXPECT_FALSE(Find("test.one").Active());

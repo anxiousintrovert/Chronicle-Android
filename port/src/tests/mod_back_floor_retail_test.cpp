@@ -27,6 +27,8 @@
 #include "main.hpp"
 #include "itemdata.hpp"
 #include "mods/back_floor.hpp"
+#include "mods/actor_runtime.hpp"
+#include "mods/entities.hpp"
 #include "mods/camera.hpp"
 #include "mods/dungeon_layout.hpp"
 #include "monstorunit.hpp"
@@ -346,7 +348,8 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false, bool actor_spawn = false, bool actor_fail = false, bool actor_leave = false) {
+    actor_spawn = actor_spawn || actor_fail || actor_leave;
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
@@ -388,6 +391,87 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (actor_spawn) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input(script_path); std::string source((std::istreambuf_iterator<char>(input)), {}); input.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local phase=chronicle.get('actor_phase') or 0
+ if phase==0 then
+  local models=assert(chronicle.call('entities.models'))
+  local model=nil
+  for _,m in ipairs(models.models) do if m.resources_ready then model=m.model;break end end
+  assert(model,'no spawnable loaded model')
+  local index=chronicle.get('actor_scan') or 0
+  for attempt=1,8 do
+   assert(index<400,'no valid grid-center spawn position')
+   local point={(index%20)*160,0,math.floor(index/20)*160}
+   index=index+1
+   local check=assert(chronicle.call('entities.spawn_check',{model=model,position=point}))
+   if check.ready then
+    chronicle.set('actor_free',models.free_slots)
+    assert(chronicle.call('entities.spawn',{id='probe',model=model,position=point}))
+    chronicle.set('actor_phase',1)
+    return
+   end
+   chronicle.set('actor_last_reason',check.reason)
+  end
+  chronicle.set('actor_scan',index)
+  return
+ elseif phase==1 then
+  local owned=assert(chronicle.call('entities.owned')).actors
+  assert(#owned==1 and owned[1].owner=='audit.back' and owned[1].id=='probe' and owned[1].current)
+  local handle=owned[1].entity
+  assert(chronicle.call('entities.get',{entity=handle}).status=='live')
+  assert(chronicle.call('entities.models').free_slots==chronicle.get('actor_free')-1)
+  chronicle.set('actor_handle',handle)
+  assert(chronicle.call('entities.despawn',{entity=handle}))
+  chronicle.set('actor_phase',2)
+  return
+ elseif phase==2 then
+  assert(#chronicle.call('entities.owned').actors==0)
+  assert(chronicle.call('entities.get',{entity=chronicle.get('actor_handle')}).status=='expired')
+  assert(chronicle.call('entities.models').free_slots==chronicle.get('actor_free'))
+  chronicle.set('actor_spawn_verified',true)
+ end
+)");
+        if (actor_leave) {
+            const std::string despawn = "  assert(chronicle.call('entities.despawn',{entity=handle}))";
+            const auto at = source.find(despawn); ASSERT_NE(at, std::string::npos);
+            source.replace(at, despawn.size(), "  chronicle.set('actor_spawn_verified',true)\n  assert(chronicle.call('dungeon.back_floor_enter'))\n  requested=true");
+        }
+        if (actor_fail) {
+            const std::string despawn = "  assert(chronicle.call('entities.despawn',{entity=handle}))";
+            const auto at = source.find(despawn); ASSERT_NE(at, std::string::npos);
+            source.replace(at, despawn.size(), "  error('intentional actor owner failure')");
+            std::filesystem::create_directories(root / "mods/audit.watch");
+            std::ofstream(root / "mods-profile.json") << R"({"schema_version":1,"enabled":{"audit.back":true,"audit.watch":true}})";
+            std::ofstream(root / "mods/audit.watch/mod.json") << R"({"schema_version":1,"api_version":1,"id":"audit.watch","name":"Actor cleanup observer","version":"1.0.0","game":"chronicle","files":{},"script":"main.lua","permissions":["game.read","game.write"]})";
+            std::ofstream(root / "mods/audit.watch/main.lua") << R"(
+local seen=nil
+local requested=false
+return {on_tick=function()
+ if requested then return end
+ local owned=assert(chronicle.call('entities.owned')).actors
+ for _,actor in ipairs(owned) do if actor.owner=='audit.back' then seen=actor.entity end end
+ if not seen or #owned~=0 then return end
+ local state=assert(chronicle.call('dungeon.back_floor_state'))
+ if not state.ready then return end
+ assert(chronicle.call('entities.get',{entity=seen}).status=='expired')
+ chronicle.set('actor_cleanup_verified',true)
+ assert(chronicle.call('dungeon.back_floor_enter'))
+ requested=true
+end}
+)";
+        }
+        std::ofstream(script_path) << source;
+        const auto manifest_path = root / "mods/audit.back/mod.json";
+        std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
+        for (const auto *op : {"entities.models", "entities.spawn_check", "entities.owned", "entities.spawn", "entities.despawn", "entities.get"})
+            manifest["requires_operations"].push_back(op);
+        std::ofstream(manifest_path) << manifest.dump();
+    }
     if (actor_models) {
         const auto script_path = root / "mods/audit.back/main.lua";
         std::ifstream input(script_path); std::string source((std::istreambuf_iterator<char>(input)), {}); input.close();
@@ -732,6 +816,20 @@ end}
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
+    if (actor_fail) {
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        EXPECT_EQ(state.at("mods").at("audit.watch").at("values").at("actor_cleanup_verified"), true);
+    }
+    if (actor_spawn && !actor_fail) {
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        const auto values = state.at("mods").at("audit.back").at("values");
+        EXPECT_EQ(values.value("actor_spawn_verified", false), true) << values.dump();
+        if (actor_leave) {
+            EXPECT_TRUE(mods::ReadActorOperation("entities.owned", nlohmann::json::object())["actors"].empty());
+            const auto entity = values.at("actor_handle");
+            EXPECT_EQ(mods::ReadEntities(NowMonstorUnit, "entities.get", {{"entity", entity}})["status"], "expired");
+        }
+    }
     if (actor_models) {
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("actor_models_verified"), true);
@@ -772,9 +870,12 @@ end}
             EXPECT_EQ(NowMonstorUnit->script[i], nullptr);
         }
     }
+    bool saw_actor_failure = false;
     for (const auto &diagnostic : mods::Scripts().Diagnostics()) {
-        ADD_FAILURE() << diagnostic;
+        if (actor_fail && diagnostic.find("intentional actor owner failure") != std::string::npos) saw_actor_failure = true;
+        else ADD_FAILURE() << diagnostic;
     }
+    EXPECT_EQ(saw_actor_failure, actor_fail);
 }
 
 TEST(ModBackFloorRetail, SharedActionReachesBackFloorThroughNativeScriptBoundary) { RunBackAudit(0); }
@@ -873,3 +974,9 @@ TEST(ModBackFloorRetail, BgmLoadThroughSharedActionPreservesBackTransition) { Ru
 TEST(ModBackFloorRetail, MusicReplacementThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
 
 TEST(ModBackFloorRetail, ActorModelsThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, ActorSpawnDespawnThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, ActorOwnerFailureCleansUpBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, ActorLifetimeEndsAtNativeBackFloorReset) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }

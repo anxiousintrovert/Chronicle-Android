@@ -69,22 +69,27 @@ namespace {
 // Native global unit constructors call clear notifications. Do not initialize
 // an ownership container from those calls, before any mod has requested one.
 constinit CMonstorUnit *bound_actor_unit = nullptr;
+constinit std::uint64_t bound_actor_epoch = 0;
 ActorOwners &BoundOwners() { static ActorOwners owners; return owners; }
 }
-ActorOwners &BindActorOwnership(CMonstorUnit &unit) {
+ActorOwners &BindActorOwnership(CMonstorUnit &unit, std::uint64_t epoch) {
     if (!TrackedEntities(&unit)) throw std::runtime_error("actor ownership requires an already tracked unit");
     auto &owners = BoundOwners();
     if (bound_actor_unit != &unit && owners.Size())
         throw std::runtime_error("another unit still has owned actors awaiting cleanup");
-    bound_actor_unit = &unit;
+    if (owners.Size() && epoch != bound_actor_epoch)
+        throw std::runtime_error("previous runtime still has owned actors awaiting cleanup");
+    bound_actor_unit = &unit; bound_actor_epoch = epoch;
     return owners;
 }
+CMonstorUnit *ActorOwnershipUnit() { return bound_actor_unit; }
+std::uint64_t ActorOwnershipEpoch() { return bound_actor_epoch; }
 bool HasBoundActorOwnership(const CMonstorUnit *unit) {
     return unit && bound_actor_unit == unit && BoundOwners().Size() != 0;
 }
 void ClearBoundActorOwnership(CMonstorUnit *unit) {
     if (!unit || bound_actor_unit != unit) return;
-    BoundOwners().Clear(); bound_actor_unit = nullptr;
+    BoundOwners().Clear(); bound_actor_unit = nullptr; bound_actor_epoch = 0;
 }
 void ForgetBoundActorOwnership(CMonstorUnit *unit, EntityHandles::Handle handle) {
     if (unit && bound_actor_unit == unit) BoundOwners().Forget(handle);

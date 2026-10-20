@@ -100,10 +100,13 @@ class AuthorTools(unittest.TestCase):
         operations = {op['name']: op for op in tool.apis()}
         self.assertEqual(operations['player.heal']['permission'], 'game.write')
         self.assertTrue(operations['economy.spend']['writes'])
-        self.assertNotIn('entities.spawn', operations)
+        self.assertEqual(operations['entities.spawn']['permission'], 'game.write')
+        self.assertTrue(operations['entities.spawn']['writes'])
+        self.assertFalse(operations['entities.spawn_check']['writes'])
+        self.assertNotIn('entities.register_model', operations)
 
     def test_required_operations_need_implementation_and_permission(self):
-        missing = self.package('test.missing', requires_operations=['entities.spawn'])
+        missing = self.package('test.missing', requires_operations=['entities.register_model'])
         with self.assertRaisesRegex(ValueError, 'missing host operation'):
             tool.validate(missing)
         denied = self.package('test.denied', requires_operations=['story.flag_set'])

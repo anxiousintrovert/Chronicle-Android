@@ -165,7 +165,7 @@ TEST(ModActorCleanup, BoundOwnershipPinsTrackingUntilRetirementOrNativeLifetimeE
     mods::EntitySlotConstructed(&unit, 0); const auto handle = handles.Get(0);
     std::string error; ASSERT_TRUE(owners.Claim(handles, handle, "alpha", "guard", error));
     EXPECT_TRUE(mods::HasBoundActorOwnership(&unit));
-    mods::StopTrackingEntities(); EXPECT_EQ(mods::TrackedEntities(&unit), &handles);
+    EXPECT_FALSE(mods::StopTrackingEntities()); EXPECT_EQ(mods::TrackedEntities(&unit), &handles);
     mods::ExpireEntitiesOutsideUnit(nullptr); EXPECT_TRUE(handles.Resolve(handle));
     EXPECT_THROW(mods::TrackEntities(*other), std::runtime_error);
     EXPECT_TRUE(owners.Find(handles, handle));
@@ -173,7 +173,7 @@ TEST(ModActorCleanup, BoundOwnershipPinsTrackingUntilRetirementOrNativeLifetimeE
     other->CleanViewMonstor(0); EXPECT_TRUE(mods::HasBoundActorOwnership(&unit));
     auto result = mods::RetainOwnedActors(&unit, owners, {}, nullptr, nullptr, -1, -1, -1);
     ASSERT_TRUE(result.Complete()); EXPECT_EQ(result.retired, 1);
-    mods::StopTrackingEntities(); EXPECT_EQ(mods::TrackedEntities(&unit), nullptr);
+    EXPECT_TRUE(mods::StopTrackingEntities()); EXPECT_EQ(mods::TrackedEntities(&unit), nullptr);
     // Native replacement is explicit proof that the previous slot lifetime ended.
     mods::TrackEntities(unit); mods::BindActorOwnership(unit);
     unit.monster[0].state = 2; unit.monster[0].hp = 10;

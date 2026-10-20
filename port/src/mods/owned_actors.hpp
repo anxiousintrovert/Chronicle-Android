@@ -40,7 +40,9 @@ private:
 };
 // Game-thread ownership binding. Empty/unbound state is dormant. Native lifetime
 // notifications release records before invalidating their public identities.
-ActorOwners &BindActorOwnership(CMonstorUnit &unit);
+ActorOwners &BindActorOwnership(CMonstorUnit &unit, std::uint64_t epoch = 0);
+CMonstorUnit *ActorOwnershipUnit();
+std::uint64_t ActorOwnershipEpoch();
 bool HasBoundActorOwnership(const CMonstorUnit *unit);
 void ClearBoundActorOwnership(CMonstorUnit *unit);
 void ForgetBoundActorOwnership(CMonstorUnit *unit, EntityHandles::Handle handle);

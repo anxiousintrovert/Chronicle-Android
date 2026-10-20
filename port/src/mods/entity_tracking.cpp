@@ -49,12 +49,12 @@ EntityHandles &TrackEntities(CMonstorUnit &unit) {
 
 EntityHandles *TrackedEntities(CMonstorUnit *unit) { return unit && tracked == unit ? &handles : nullptr; }
 
-void StopTrackingEntities() {
-    if (!tracked || HasBoundActorOwnership(tracked)) {
-        return;
-    }
+bool StopTrackingEntities() {
+    if (!tracked) return true;
+    if (HasBoundActorOwnership(tracked)) return false;
     tracked = nullptr;
     handles.Deactivate();
+    return true;
 }
 
 void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {

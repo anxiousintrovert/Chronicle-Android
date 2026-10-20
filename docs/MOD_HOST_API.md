@@ -2097,8 +2097,8 @@ An invalid native radius is returned as null with a rejection reason.
 `resources_ready` checks the loaded script, main/attachment frames, first free
 slot's script arena, model health and radius. It is not permission to spawn: it
 does not validate the game phase, a requested position, dynamic obstructions,
-boss-specific initialization or owner lifetime. Spawn/despawn are not public APIs
-yet. Model indices are valid only for the current floor's loaded model set; do
+boss-specific initialization or owner lifetime. Use `entities.spawn_check`
+for a particular position before requesting `entities.spawn`. Model indices are valid only for the current floor's loaded model set; do
 not save them as persistent content IDs. This query does not load assets, change
 monster limits, activate entity tracking, consume RNG or register custom content.
 
@@ -2115,3 +2115,57 @@ end
 The `actors` suite in `tools/chronicle_mod_smoke.py` exercises this query through
 a shared-manager action during retail dungeon play and then takes native
 back-floor transport.
+
+
+### Owned actor creation and retirement
+
+These operations use the currently loaded retail monster models. They do not
+register custom content, expand capacity automatically or install gameplay mods.
+They are shared by Lua and native plugins through the host-call boundary.
+
+| Operation | Permission | Arguments / result |
+|---|---|---|
+| `entities.spawn_check` | `game.read` | `{model, position:[x,y,z]}` returns `{ready, reason}` without mutation or RNG consumption. |
+| `entities.spawn` | `game.write` | `{id, model, position:[x,y,z]}` queues creation of one package-owned actor. |
+| `entities.owned` | `game.read` | `{}` returns `{actors:[{entity, owner, id, current, cleanup_reason}]}`. |
+| `entities.despawn` | `game.write` | `{entity:"decimal handle"}` retires an actor owned by the caller without kill rewards. |
+
+`model` is a floor-local integer 0..8 reported by `entities.models`; it must
+actually be loaded. Position coordinates must be finite and within +/-1000000.
+`id` is a package-local label of 1..64 ASCII letters, digits, `_`, `-`, `.` or `:`.
+The same owner cannot reuse a label while its ownership record remains. This
+label does not reserve a content ID in a contributor's item, weapon or cutscene
+registry. Ownership always comes from the runtime, never from JSON arguments.
+
+Creation validates ordinary dungeon play, loaded scene/sound resources, free
+active capacity, script storage, geometry/height/radius clearance, and separation
+from the player, occupied monsters, used chests/Atla, traps and dungeon triggers.
+Player clearance is conservatively 20 game units plus the requested model radius.
+Mimics and the special native boss initialization slot reject. Loaded retail
+initialization scripts run normally; arbitrary replacement bytecode is not
+sandboxed or transactionally reversible. The check is a snapshot and does not
+reserve space, a slot or a label: commit validates again.
+
+Spawn and despawn must be the sole engine write in their callback, with no
+currency delta. Their immediate result acknowledges queuing, not completion.
+Inspect `entities.owned` on a later tick to obtain a committed handle by owner/id;
+then use the existing `entities.get` and combat APIs. Never persist these handles
+or model indices across floors. Despawn rejects another owner's actor, stale
+handles, dying/transitioning actors, mimics and event-linked actors. It clears
+matching attacks, projectiles, sound sequences, owned overrides and queued
+reactions, retires the identity and adjusts the alive count once.
+
+The runtime checks ownership before tracking shutdown and after callbacks.
+Actors from failed/inactive owners or an older runtime epoch are retired when
+native dungeon context is stable. Failure preserves ownership and is reported
+in `cleanup_reason`; it retries later. Pending native death/event states may
+require native floor cleanup. While old-epoch cleanup remains pending, entity
+reads/writes that rely on those identities reject rather than adopting the old
+handles. `entities.owned` remains available for inspection. A native slot
+replacement or floor reset releases the corresponding lifetime immediately.
+Manager enable/disable changes retain the manager's existing restart semantics.
+
+The `actors` author smoke suite covers model inspection, explicit spawn/despawn,
+a deliberately failed owner followed by automatic retirement, and an actor left
+alive across native back-floor reset. All run through shared-manager actions;
+no example gameplay package is installed or enabled by these APIs.

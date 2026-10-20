@@ -5,6 +5,8 @@
 #include <optional>
 
 #include "api.hpp"
+#include "actor_runtime.hpp"
+#include "owned_actors.hpp"
 #include "atla.hpp"
 #include "character.hpp"
 #include "dngstatusdata.hpp"
@@ -183,6 +185,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    RetainGameActors();
     RetainDungeonLighting();
     RetainDungeonCamera();
     if (mode != GAME_MODE_DUNGEON) chronicle::monsters::ResetExpandedPopulation();
@@ -211,8 +214,7 @@ void TickGame() {
         RetainOwnedEnemyScales({});
         RetainOwnedEnemyStats({});
         EnemyDeaths().Enable(false);
-        StopTrackingEntities();
-        entity_epoch = Scripts().Epoch();
+        if (StopTrackingEntities()) entity_epoch = Scripts().Epoch();
     }
     if (!Scripts().HasGameplay()) {
         RetainOwnedEnemyScales({});
@@ -248,6 +250,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "entities.owned" || operation == "entities.spawn_check") return ReadActorOperation(operation, arguments);
         if (operation == "audio.bgm_state") return ReadRetailBgm();
         if (operation == "georama.placement_state") return ReadGeoramaPlacement();
         if (operation == "render.camera_get") return ReadDungeonCamera();
@@ -292,6 +295,8 @@ void TickGame() {
             return result;
         }
         if (operation.starts_with("entities.") || operation.starts_with("physics.")) {
+            if (HasBoundActorOwnership(ActorOwnershipUnit()) && ActorOwnershipEpoch() != Scripts().Epoch())
+                throw std::runtime_error("previous runtime actors are awaiting cleanup");
             return ReadEntities(world.playing && world.mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr, operation, arguments);
         }
         if (!SaveData || !world.playing){ throw std::runtime_error("game state unavailable");
@@ -305,6 +310,7 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto &c) { return c.operation == "entities.spawn" || c.operation == "entities.despawn"; })) return ApplyActorCommands(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.bgm_stop" || command.operation == "audio.bgm_play" || command.operation == "audio.bgm_load"; })) {
             if (!ShopWritesReady() || NextMapNo >= 0 || existFlag) { error = "BGM control requires stable gameplay"; return false; }
             if (commands.size() == 1 && commands[0].operation == "audio.bgm_load") {
@@ -335,6 +341,9 @@ void TickGame() {
             return QueuePartySwitch(commands, money, error);
         }
         for (const auto &command : commands) {
+            if (IsEntityWrite(command.operation) && HasBoundActorOwnership(ActorOwnershipUnit()) && ActorOwnershipEpoch() != Scripts().Epoch()) {
+                error = "previous runtime actors are awaiting cleanup"; return false;
+            }
             if (command.operation == "georama.request_set" && !ShopWritesReady()) {
                 error = "Georama request writes require stable play outside menus and transitions";
                 return false;
@@ -369,6 +378,7 @@ void TickGame() {
         }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
+    RetainGameActors();
     RetainPlayerTuningOwners();
     if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();

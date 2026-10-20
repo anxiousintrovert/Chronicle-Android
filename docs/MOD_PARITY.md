@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 136 implemented operations, native plugins and author
+a real host-call boundary, 140 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with placement checks and runtime cleanup | Spawn-time tuning, deterministic damage modifiers and broader actor lifecycle/platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -3375,3 +3375,40 @@ runtime or expose spawning/despawning. Public operations remain 136. The next
 integration must bind ownership on creation, retain using active owners and
 runtime epoch before tracking shutdown, expose pending reasons, and validate
 spawn/disable/failure/transition through the shared menu in PAL gameplay.
+
+
+### Public owned actors and runtime cleanup (2026-10-20)
+
+Added entities.spawn_check, entities.spawn, entities.despawn and entities.owned
+through the shared host boundary, bringing the operation count to 140. Creation
+uses a loaded floor-local model and an owner-local label, exact argument schemas,
+a sole deferred engine write, deterministic placement/obstruction preflight and
+native SetupViewMonstor. Inspection returns committed handles and cleanup reasons;
+retirement enforces the runtime-assigned owner and does not dispatch kill rewards.
+These APIs do not register custom content or increase capacity themselves.
+
+TickGame now retains actor owners before tracking shutdown and after callbacks.
+Ownership is bound to the runtime epoch; an old runtime cannot transfer actors to
+a new package with the same ID. Failed cleanup retains records/handles and retries
+in stable native context. Tracking shutdown reports whether it completed, so the
+runtime retries epoch invalidation instead of silently retaining old identities.
+Old-epoch entity operations reject while cleanup is pending. Native slot/floor
+notifications release ended lifetimes. No binding is created without explicit
+actor use, and no gameplay package is shipped or enabled.
+
+Clang 23.1.2 game/test builds passed. Full regression: 907 passed, 102 skipped and
+one disabled; all 38 Python author-tool tests passed. The final binary passed four
+PAL actors scenarios through the shared manager: model inspection, real loaded
+monster spawn/despawn, intentional owner failure with independent cleanup
+observation, and a live owned actor carried to native back-floor reset (record
+removed and old handle expired). Final evidence:
+actor-publish-7ffb7bf579eb44f584ca4b472096bd22/report.json in the local framework
+expansion evidence directory. The author runner now contains 42 scenarios.
+
+Fresh pinned-upstream comparisons covered 3,840 seeds in empty and disabled-mod
+profiles: only map_bytes differs (142512 versus 76576); no non-size difference.
+This is generator/RNG evidence, not proof of every no-mod gameplay/platform path.
+PS2 diff remains empty. Native dying/event-linked cleanup may wait for floor
+reset; broader boss/model/platform/exit scenarios remain to validate. Custom
+registered models, spawn-time tuning and deterministic damage modifiers remain
+outstanding, as do the other capability gaps listed in the matrix.

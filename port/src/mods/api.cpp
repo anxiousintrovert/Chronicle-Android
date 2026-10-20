@@ -8,6 +8,7 @@
 #include <set>
 
 #include "entities.hpp"
+#include "actor_runtime.hpp"
 #include "georama.hpp"
 #include "georama_placement.hpp"
 #include "camera_orbit.hpp"
@@ -89,6 +90,10 @@ constexpr Operation operations[] = {
     {"combat.damage",             "game.write",    "Apply bounded scripted enemy damage and queue native hit/death processing.",   true },
     {"combat.heal",               "game.write",    "Restore bounded HP to an active live enemy without exceeding native maximum.", true },
     {"combat.status_add",         "game.write",    "Extend an active live enemy's native slow or stop timer.",                     true },
+    {"entities.spawn", "game.write", "Create an owned actor from a loaded floor model at a validated position.", true},
+    {"entities.despawn", "game.write", "Retire a package-owned actor without kill rewards.", true},
+    {"entities.spawn_check", "game.read", "Check current native actor placement and resource readiness without spawning.", false},
+    {"entities.owned", "game.read", "Inspect owned actor identities and pending cleanup reasons.", false},
     {"entities.models", "game.read", "Inspect loaded floor monster models, free slots and creation resource readiness.", false},
     {"entities.list",             "game.read",     "List live revealed dungeon enemies with session-local handles.",               false},
     {"entities.get",              "game.read",     "Resolve a live enemy handle or report expiration.",                            false},
@@ -303,6 +308,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (retail::Handles(name)) {
         return retail::Validate(name, a);
     }
+    if (name == "entities.spawn" || name == "entities.despawn" || name == "entities.spawn_check" || name == "entities.owned") return ValidateActorOperation(name, a);
     if (IsEntityWrite(name)) {
         return ValidateEntityWrite(name, a);
     }
