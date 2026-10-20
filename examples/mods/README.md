@@ -7,6 +7,7 @@ Do not copy this enclosing `mods` directory as one package. Restart after instal
 |---|---|
 | [norune-welcome](norune-welcome) | Map quest plus one-time 50 Gilda Lua reward, using a saved guard |
 | [dungeon-contract](dungeon-contract) | Shared-menu start, named event objectives and transactional one-time reward |
+| [signal-provider](signal-provider) + [signal-quest](signal-quest) | Separate provider and dependent quest connected by a package-owned event |
 | [norune-visit](norune-visit) | Quest-only package with no script or currency permission |
 
 The packages use different IDs and can coexist. All record gameplay state in

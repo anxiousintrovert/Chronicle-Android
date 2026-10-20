@@ -213,3 +213,13 @@ existing output directories and PS2 paths. Neither creation nor installation
 enables the package; enable it through the shared mod manager, then restart.
 Offline validation checks package structure and declarations; it does not execute
 Lua or certify the authored quest in gameplay.
+
+## Connect separate packages with quest events
+
+The [signal provider](../examples/mods/signal-provider/README.md) and
+[dependent quest](../examples/mods/signal-quest/README.md) form a runnable
+example of `events.custom.v1` and `quests.custom_events.v1`. Install and enable
+both explicitly, then use the shared menu action to publish a signal. The quest
+filters by provider ID, event name and payload, and saves its completion. This
+pattern lets future content extensions integrate without sharing private state
+or requiring the loader to define their content formats.

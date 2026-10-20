@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "api_version": 1,
+  "version": "1.0.0",
+  "game": "chronicle",
+  "script": "main.lua",
+  "files": {},
+  "id": "example.signal-provider",
+  "name": "Quest Signal Provider",
+  "requires_capabilities": [
+    "scripts.lua.v1",
+    "host.calls.v1",
+    "menu.actions.v1",
+    "events.custom.v1"
+  ],
+  "permissions": [
+    "game.write"
+  ]
+}

@@ -476,3 +476,23 @@ TEST_F(ModDynamicQuestRuntime, RolledBackCustomEmissionCannotAdvanceSelfQuest) {
     Start();runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(runtime.Diagnostics().empty());
     runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(State()["mods"]["test.mod"].contains("quests"));
 }
+
+TEST_F(ModDynamicQuestRuntime, ShippedSignalPackagesRequireProviderAndPersistCompletion) {
+    const auto source=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path().parent_path()/"examples/mods";
+    for(const auto *name:{"signal-provider","signal-quest"}) {
+        std::filesystem::create_directories(root/name);
+        for(const auto *file:{"mod.json","main.lua"})std::filesystem::copy_file(source/name/file,root/name/file);
+    }
+    Start();EXPECT_FALSE(runtime.HasGameplay());EXPECT_TRUE(runtime.Actions("example.signal-provider").empty());
+    enabled["example.signal-quest"]=true;Start();EXPECT_FALSE(runtime.HasGameplay());EXPECT_TRUE(runtime.Quests().empty());
+    enabled["example.signal-provider"]=true;Start();ASSERT_TRUE(runtime.Diagnostics().empty());
+    const mods::World world{2,0,0,true,0,1};runtime.Tick(world);
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_EQ(runtime.Quests()[0].progress,0);
+    std::string error;ASSERT_TRUE(runtime.QueueAction("example.signal-provider","signal",error))<<error;
+    EXPECT_EQ(runtime.Quests()[0].progress,0);runtime.Tick(world);
+    EXPECT_EQ(runtime.Quests()[0].progress,0);runtime.Tick(world);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    const auto completed=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(completed,error))<<error;
+    runtime.Tick(world);ASSERT_TRUE(runtime.QueueAction("example.signal-provider","signal",error))<<error;
+    runtime.Tick(world);runtime.Tick(world);EXPECT_EQ(runtime.SaveState(),completed);
+    EXPECT_EQ(runtime.Quests()[0].progress,1);EXPECT_TRUE(runtime.Diagnostics().empty());
+}

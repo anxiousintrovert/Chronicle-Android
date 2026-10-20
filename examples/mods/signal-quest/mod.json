@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "api_version": 1,
+  "version": "1.0.0",
+  "game": "chronicle",
+  "script": "main.lua",
+  "files": {},
+  "id": "example.signal-quest",
+  "name": "Signal Quest",
+  "requires_capabilities": [
+    "scripts.lua.v1",
+    "host.calls.v1",
+    "quests.dynamic.v1",
+    "quests.objectives.v1",
+    "quests.custom_events.v1",
+    "save.metadata.v1"
+  ],
+  "permissions": [
+    "game.read",
+    "game.write"
+  ],
+  "requires": [
+    "example.signal-provider"
+  ]
+}
