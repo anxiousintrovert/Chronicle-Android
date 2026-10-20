@@ -3,9 +3,45 @@
 #include <array>
 #include <stdexcept>
 
+#include "mods/api.hpp"
+#include "mods/town.hpp"
 #include "mods/town_selection.hpp"
 
 namespace {
+TEST(ModTownApi, ExactHostSchemaAndDormantReadback) {
+    EXPECT_TRUE(mods::ValidateOperation("party.town_state", nlohmann::json::object()).empty());
+    EXPECT_FALSE(mods::ValidateOperation("party.town_state", {
+                                                                 {"character", 0}
+    })
+                     .empty());
+    EXPECT_TRUE(mods::ValidateOperation("party.town_set_active", {
+                                                                     {"character", 5}
+    })
+                    .empty());
+    EXPECT_FALSE(mods::ValidateOperation("party.town_set_active", {
+                                                                      {"character", 5.5}
+    })
+                     .empty());
+    EXPECT_FALSE(mods::ValidateOperation("party.town_set_active", {
+                                                                      {"character", 6}
+    })
+                     .empty());
+    EXPECT_FALSE(mods::ValidateOperation("party.town_set_active", {
+                                                                      {"character", 0      },
+                                                                      {"owner",     "spoof"}
+    })
+                     .empty());
+    const auto before = mods::ReadTownSelection();
+    EXPECT_EQ(before["storage_bytes"], 0);
+    srand(745);
+    const int next = rand();
+    srand(745);
+    mods::FinishTownSelection();
+    mods::RetireTownScene();
+    EXPECT_EQ(mods::ReadTownSelection(), before);
+    EXPECT_EQ(rand(), next);
+}
+
 class ModTownSelection : public testing::Test {
 protected:
     mods::TownSelection        selection;

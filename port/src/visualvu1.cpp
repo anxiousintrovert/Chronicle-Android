@@ -419,8 +419,25 @@ Draw3DVisual &Draw3DRegisterVisual(unsigned int *block, bool transient) {
     return *slot;
 }
 
-// Arenas are cleared or reused when the game moves on (BufferAllClear, a mode's own SetDataBuffer),
-// and nothing tells the records; a block whose tag is gone no longer holds a visual.
+void Draw3DRetireVisuals(const void *base, std::size_t bytes) {
+    if (!base || !bytes) {
+        return;
+    }
+    const auto begin = reinterpret_cast<std::uintptr_t>(base);
+    auto retire = [=](auto &entry) {
+        const auto address = reinterpret_cast<std::uintptr_t>(entry.first);
+        if (address < begin || address - begin >= bytes) {
+            return false;
+        }
+        Release(*entry.second);
+        return true;
+    };
+    std::erase_if(g_visuals, retire);
+    std::erase_if(g_transient, retire);
+}
+
+// Native arenas remain mapped when cleared or reused; missing tags retire their records.
+// Separately owned storage must explicitly retire records before unmapping.
 void Draw3DSweepVisuals() {
     g_transient.clear();
     std::erase_if(g_visuals, [](auto &entry) {

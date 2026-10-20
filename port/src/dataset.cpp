@@ -3,6 +3,7 @@
 #include "dataalloc.hpp"
 #include "dataread.hpp"
 #include "mglib.hpp"
+#include "mods/town.hpp"
 #include "platform/arena.hpp"
 
 namespace {
@@ -34,6 +35,7 @@ void CarveReadBuffer(int quads) {
 } // namespace
 
 void InitializeDataBuffer() {
+    mods::RetireTownScene();
     ArenaClearAll();
     GlobalDataBuffer.used = 0;
     Carve(&WaterData, 10);
@@ -52,6 +54,7 @@ PORT_OVERRIDE void SetPacketReadBuffer(int packet_quads, int read_quads) {
 }
 
 void BufferAllClear() {
+    mods::RetireTownScene();
     ArenaClearAll();
     GlobalDataBuffer.used = 0;
     Carve(&VisualData, 600000);

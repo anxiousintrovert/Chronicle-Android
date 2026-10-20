@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -146,6 +147,8 @@ Draw3DVisual *Draw3DFindVisual(const void *block);
 Draw3DVisual &Draw3DRegisterVisual(unsigned int *block, bool transient);
 // MGBeginFrame's: drops transient records and those whose block was cleared or reused.
 void Draw3DSweepVisuals();
+// Retire records before their backing storage is reset or unmapped, outside an active frame.
+void Draw3DRetireVisuals(const void *base, std::size_t bytes);
 // Uploads the record's vertices and indices as a mesh, or keeps them for immediate draws.
 void Draw3DFinishVisual(Draw3DVisual &visual);
 void Draw3DDrawVisual(const Draw3DVisual &visual, const float model[4][4], const RenderInfo &info, int program);

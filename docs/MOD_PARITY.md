@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 81 implemented operations, native plugins and author
+a real host-call boundary, 83 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -15,7 +15,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload | Town-character switching, temporary tuning ownership; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration | Broader town interaction validation, temporary tuning ownership; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
@@ -902,3 +902,39 @@ Validation receipt: llvm-mingw Clang 23.1.2 Release game/tests build passed; ful
 suite 730 registered, 718 passed, 11 skipped, one disabled, no failures. After
 making the coordinator non-copyable, the final rebuild and all eight focused
 tests passed again. No production caller instantiates this coordinator yet.
+
+## Native town selection API (2026-10-19)
+
+The coordinator is now connected through `party.town_state` and
+`party.town_set_active`, bringing the public operation count to 83. The host
+loads retail bodies after `MGEndFrame`, using optional storage allocated on the
+first replacement. Selecting Toan or stopping the owner restores the native body
+and releases storage; scene retirement clears ownership and storage without
+loading against a departed scene. Native loader notification and arena-clear
+hooks are port-side only. No-mod hooks return immediately without allocation,
+asset probes, owner scans or RNG use. The native town allocation is unchanged.
+
+Explicit visual-record retirement removes renderer pointers into mod storage
+before it is reused or unmapped. This fixes the access violation found by the
+retail runtime-stop test when storage was first made releasable. Only records
+within that storage are removed, preserving unrelated native visual records.
+
+Separate PAL runtime tests select all six bodies through an existing shared-menu
+action and Lua host calls, stop the script runtime to restore Toan, and initiate
+a native town map transition to retire ownership. They verify zero retained
+storage after cleanup and unchanged dungeon character/weapon save fields. Both
+pass on Windows with official Kazarov 04bd301e. Coordinator tests cover conflicts
+and deferred restoration; an additional API test checks exact schema and dormant
+state, and visual retirement tests cover persistent/transient range boundaries.
+
+Movement, conversations, interiors, every native reload path and other platforms
+remain unverified. Asset availability is not arbitrary pack validation. The
+retail run still logs existing unsupported native event calls. These results do
+not establish full MoonMod parity or current upstream Chronicle compatibility.
+All broader gaps in the coverage table remain open.
+
+Validation receipt: llvm-mingw Clang 23.1.2 builds passed. The full suite registered
+734 tests: 720 passed, 13 skipped and one disabled, with no failures. Both optional
+town API retail scenarios passed separately with PAL data. All 17 Python tests
+passed and the fresh 3,840-case empty/disabled seed comparison matched pinned
+upstream 50eaff63 exactly. No PS2 files changed.

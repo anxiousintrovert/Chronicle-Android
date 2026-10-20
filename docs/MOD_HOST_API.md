@@ -145,6 +145,39 @@ and party recruitment remain separate APIs, not aliases for this request.
 With no request pending, the end-of-frame hook returns immediately without reading
 game state, checking assets or loading resources.
 
+### Town character selection
+
+`party.town_state` (`game.read`, empty arguments) and `party.town_set_active`
+(`game.write`, exactly `{character=0..5}`) select a joined retail body for outdoor
+town walking. IDs are Toan, Xiao, Goro, Ruby, Ungaga and Osmond. This is temporary
+presentation ownership; it does not change the dungeon active character or weapons.
+Use a shared mod-manager action to arm an `on_tick` request after the menu closes.
+
+The write must be the callback's only engine write, including legacy currency.
+Success queues a request; native loading occurs after the frame ends. Read back
+`state`, `reason`, `owner`, `character` (last successful selection), `pending_owner`,
+`target` and `restore_pending`. Additional fields are `ready`, `unavailable`,
+`joined` and `storage_bytes`. Readiness is not ownership: another mod's lease or a
+missing asset can reject a request. A partial failure is not proof that the last
+successful character is still displayed. Loading is not a rollback transaction.
+
+Readiness requires outdoor walking in a retail town, outside menus, events,
+interiors and first-person view. The host rechecks readiness, membership and asset
+availability before loading. Availability checks do not validate arbitrary pack
+contents. Replacement packs must satisfy the native loader's format requirements.
+
+Only one mod owns the selection. Selecting Toan releases it. Owner shutdown,
+runtime restart or loss of joined membership requests Toan restoration; unsafe
+scenes or missing assets defer cleanup with a reason. Native scene retirement
+releases ownership and storage. Mod storage is allocated only for a replacement
+and released after restoration or retirement. Renderer records are retired before
+storage reuse/unmapping. No-mod post-frame hooks return without loading resources.
+Goro's unavailable motion 32 uses idle for the corresponding town motion.
+
+Retail tests exercise all six bodies through a shared-manager action, runtime
+shutdown/restoration and native map-transition retirement. Full movement,
+conversation, interior and cross-platform coverage remains outstanding.
+
 ### Retail player statuses
 
 `player.status_add/remove` accept exactly `freeze`, `stamina`, `poison`, `curse`

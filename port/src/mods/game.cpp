@@ -21,6 +21,7 @@
 #include "savedata.hpp"
 #include "shops.hpp"
 #include "party.hpp"
+#include "town.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -220,6 +221,7 @@ void TickGame() {
             result["writable"] = ShopWritesReady();
             return result;
         }
+        if (operation == "party.town_state") return ReadTownSelection();
         if (operation == "party.switch_state") return ReadPartySwitchState();
         if (operation == "weapons.refresh_state") {
             const auto equipment = CurrentEquipment();
@@ -251,6 +253,9 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "party.town_set_active"; })) {
+            return QueueTownSelection(commands, money, error);
+        }
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "party.set_active"; })) {
             return QueuePartySwitch(commands, money, error);
         }

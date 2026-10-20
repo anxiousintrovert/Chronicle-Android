@@ -33,6 +33,7 @@
 #include "menu_save.hpp"
 #include "mods/runtime.hpp"
 #include "mods/party.hpp"
+#include "mods/town.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
 #include "nowload.hpp"
@@ -974,6 +975,7 @@ int RunGame(int argc, char **argv) {
             GamePad.Step();
             MGEndFrame();
             mods::FinishPartySwitch();
+            mods::FinishTownSelection();
             ++g_frames;
             PresenceTick();
 
