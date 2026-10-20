@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 123 implemented operations, native plugins and author
+a real host-call boundary, 125 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -22,7 +22,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Native front/back lighting inspection, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera controls, lighting/audio controls, activated only by callers |
+| Rendering / audio | Owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -2723,3 +2723,34 @@ lighting_set/reset be registered. PS2 remains read-only.
 
 Clang 23.1.2 game/tests build and full regression pass: 845 passed, 91 skipped,
 one disabled; 35 Python checks pass. No live lighting hook was added.
+
+
+### Live owned lighting and view scale (2026-10-20)
+
+dungeon.lighting_set/reset now bind the detached controller to native front/back
+lighting globals and the active native map's draw scale. The getter reports
+writable/reason/owners. All batch validation and allocation finish before native
+publication; writes cannot mix with other engine domains. Group ownership and
+conditional restoration preserve later native changes. Public operation count 125.
+
+Checked port-generated overlay hooks release before GameInit, TEIGIMdsLoad,
+bound-map initialization and native view-scale reset. Existing port scene/run
+boundaries and pre/post callback checks retire owners. The native map objects
+have process lifetime; the adapter accepts only those two live maps. A constant-
+initialized inactive flag guards early global constructors and all dormant paths.
+Cleanup never unwinds through native loading; invalid snapshots discard claims
+without partial restoration. Original PS2 inputs are unchanged.
+
+Focused tests cover map identity, owner retirement, new-scene preservation and
+transaction invariants. A fresh PAL shared-menu-action replay sets both fog
+sides/background and view scale, verifies values/owners, measures a large red
+region in the rendered frame, resets and verifies the red region disappears,
+then completes native back-floor travel. Captured apply/reset frames were also
+visually inspected. The replay waits for initial fade completion and uses native
+fog factor 0 for full fog; factor 255 retains scene color. Other lighting groups,
+all floors and other platforms still need broader rendered gameplay coverage.
+
+Clang 23.1.2 builds; 846 tests passed, 92 skipped, one disabled; 35 Python checks
+passed. Regenerated 3840 seed cases: empty and disabled packages have no non-size
+difference from pinned upstream 50eaff63; only map_bytes differs 142512 vs 76576.
+This is generator evidence, not proof of all no-mod gameplay on every platform.

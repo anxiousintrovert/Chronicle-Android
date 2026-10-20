@@ -15,4 +15,5 @@ struct LightingState {
 };
 nlohmann::json ReadLightingSnapshot(const LightingState &state);
 nlohmann::json ReadDungeonLighting();
+bool ApplyDungeonLighting(const std::vector<GameCommand> &commands, int money, std::string &error);
 }

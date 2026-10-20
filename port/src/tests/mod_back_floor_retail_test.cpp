@@ -53,6 +53,8 @@ bool               fail_with_population = false;
 bool               audit_partial_population = false;
 bool               audit_chest_loot = false;
 bool audit_camera_write = false, camera_applied = false, camera_released = false;
+bool audit_lighting_write = false;
+std::array<int, 3> lighting_red{-1, -1, -1};
 std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
@@ -107,6 +109,22 @@ void BackPump() {
     WindowPollEvents();
     InputPoll();
     InputScriptApply(GameFrameCount());
+    if (audit_lighting_write && queued) {
+        const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
+        const auto values = saved.at("mods").at("audit.back").value("values", nlohmann::json::object());
+        const int phase = values.value("lighting_phase", 0), hold = values.value("lighting_hold", 0);
+        const int sample = phase == 1 && hold == 0 ? 0 : phase == 1 && hold >= 3 ? 1 : phase == 2 && hold >= 3 ? 2 : -1;
+        if (sample >= 0 && lighting_red[sample] < 0) {
+            std::vector<uint8_t> pixels;
+            uint32_t width, height;
+            ASSERT_TRUE(gfx::ReadbackFrame(pixels, width, height));
+            int red = 0;
+            for (std::size_t i = 0; i + 3 < pixels.size(); i += 4)
+                if (pixels[i] > 150 && pixels[i+1] < 50 && pixels[i+2] < 70) ++red;
+            lighting_red[sample] = red;
+            gfx::WritePng((std::filesystem::path(std::getenv("DC_BACK_FLOOR_AUDIT")) / ("lighting-" + std::to_string(sample) + ".png")).string().c_str(), pixels.data(), width, height);
+        }
+    }
     if (audit_camera_write && queued) {
         const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
         const auto values = saved.at("mods").at("audit.back").value("values", nlohmann::json::object());
@@ -327,7 +345,8 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false) {
+    audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
@@ -420,6 +439,42 @@ end}
  light.front.fog.far=-1
  local again=assert(chronicle.call('dungeon.lighting_get'))
  assert(again.front.fog.far==original,'lighting snapshots must be detached')
+)");
+        std::ofstream(script_path) << source;
+    }
+    if (lighting_write) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string source((std::istreambuf_iterator<char>(input_script)), {});
+        input_script.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local light=assert(chronicle.call('dungeon.lighting_get'))
+ if not light.writable then return end
+ local phase=chronicle.get('lighting_phase') or 0
+ if phase==0 then
+  local warmup=chronicle.get('lighting_warmup') or 0
+  chronicle.set('lighting_warmup',warmup+1)
+  if warmup<90 then return end
+  chronicle.set('lighting_far',light.front.fog.far)
+  chronicle.set('lighting_scale',light.view_scale)
+  assert(chronicle.call('dungeon.lighting_set',{side='both',fog={near=1,far=2,min=0,max=0,color={200,10,20}},background={200,10,20},view_scale=3}))
+  chronicle.set('lighting_phase',1); chronicle.set('lighting_hold',0)
+  return
+ end
+ local hold=chronicle.get('lighting_hold') or 0
+ chronicle.set('lighting_hold',hold+1)
+ if hold<4 then return end
+ if phase==1 then
+  assert(light.front.fog.far==2 and light.back.fog.far==2 and light.view_scale==3)
+  assert(light.owners['/front/fog']=='audit.back')
+  assert(chronicle.call('dungeon.lighting_reset',{}))
+  chronicle.set('lighting_phase',2); chronicle.set('lighting_hold',0)
+  return
+ end
+ assert(light.front.fog.far==chronicle.get('lighting_far') and light.view_scale==chronicle.get('lighting_scale'))
+ assert(next(light.owners)==nil)
 )");
         std::ofstream(script_path) << source;
     }
@@ -521,6 +576,11 @@ end}
     InputShutdown();
     EXPECT_EQ(result, 0);
     if (camera_write) { EXPECT_TRUE(camera_applied); EXPECT_TRUE(camera_released); }
+    if (lighting_write) {
+        EXPECT_GE(lighting_red[0], 0); EXPECT_GE(lighting_red[2], 0);
+        EXPECT_GT(lighting_red[1], lighting_red[0] + 1000);
+        EXPECT_GT(lighting_red[1], lighting_red[2] + 1000);
+    }
     EXPECT_EQ(queued, !quit_with_population) << last_state;
     EXPECT_TRUE(arrived) << last_state << " task=" << gameTask << " longest_play=" << maximum_stable;
     if (quit_with_population || expected_monsters > 16) {
@@ -620,4 +680,5 @@ TEST(ModBackFloorRetail, AtlaCollectionThroughSharedActionPreservesBackTransitio
 TEST(ModBackFloorRetail, CameraSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, true); }
 TEST(ModBackFloorRetail, CameraOrbitThroughSharedActionRestoresBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, true); }
 TEST(ModBackFloorRetail, LightingSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, true); }
+TEST(ModBackFloorRetail, LightingWriteResetRendersAndPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, true); }
 } // namespace

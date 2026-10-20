@@ -1846,5 +1846,49 @@ Directions are reported per light even though native storage uses matrix
 columns. `view_scale` is the current map's draw-distance multiplier, not a
 separate multiplier for each lighting side. The getter rejects a missing map,
 non-dungeon mode or non-finite native floating-point data. Results are detached;
-reading does not change lighting, advance rendering or consume RNG. Lighting
-writes and ownership cleanup are not exposed yet.
+reading does not change lighting, advance rendering or consume RNG. The live
+result also contains `writable`, `reason`, and `owners` keyed by lighting-group
+paths such as `/front/fog` or `/back/lights/0/direction`.
+
+`dungeon.lighting_set` (`game.write`) accepts this shape; omit any group that
+should stay unchanged:
+
+```lua
+assert(chronicle.call('dungeon.lighting_set', {
+  side = 'front', -- front, back, or both (default)
+  fog = {near=100, far=2000, min=0, max=255, color={40,50,60}},
+  background = {10,20,30},
+  ambient = {50,50,50},
+  lights = {{light=0, direction={1,-1,0}, color={128,128,128}}},
+  view_scale = 4
+}))
+```
+
+Fog fields can be supplied individually. Near/far are finite 0..100000 and
+must remain ordered (`near < far`) after native float conversion. Min/max
+are finite 0..255 and ordered (`min <= max`). These are native fog factors:
+0 blends toward fog color; 255 retains scene color. Fog/background colors
+require three integer bytes; ambient/light colors accept finite components
+0..255. Supply up to three distinct light indices, each with direction and/or
+color. Directions require three finite components within +/-1000000, must be
+nonzero, and are normalized. View scale is finite 0.1..10 and always applies
+to the current map, independently of the selected lighting side.
+
+Writes require stable dungeon gameplay outside events and transitions.
+Lighting commands cannot share a callback with other engine writes or currency
+changes. The entire batch validates before native state changes. Each side's
+fog is one owned group; background, ambient and each light's direction/color
+are separate groups. View scale is another group. Disjoint groups may have
+different owners; a conflict reports the group and its current owner.
+
+`dungeon.lighting_reset {}` releases the caller's groups. Reset or owner
+retirement restores a group's baseline only if the whole group still matches
+its last stored value. Later native changes are preserved. Claims are transient
+and expire on runtime restart, leaving stable play, scene initialization,
+model-definition loading, bound-map reset or game-run exit. They do not resume
+automatically. Declare set/reset in `requires_operations`.
+
+The native renderer consumes these values normally; no rendering replacement is
+introduced. Cleanup is dormant without claims and never invokes mod callbacks
+from a native loader. If invalid native data prevents a complete restoration,
+cleanup discards the claims without publishing a partial snapshot.

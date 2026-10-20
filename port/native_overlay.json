@@ -51,9 +51,34 @@
         }
       ]
     },
+    "src/itemdata.cpp": {
+      "sha256": "8c9dffdeabd41a76e65edbfa81b29c360a5d0a8d0bd92878bbd3b70885d606bd",
+      "replacements": [
+        {
+          "old": "#include \"itemdata.hpp\"",
+          "new": "#include \"itemdata.hpp\"\n#include \"chronicle/mod_lighting.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "void TEIGIMdsLoad(u_int *pack, int reuse_only) {",
+          "new": "void TEIGIMdsLoad(u_int *pack, int reuse_only) {\n    mods::ReleaseDungeonLighting();",
+          "count": 1
+        }
+      ]
+    },
     "src/dungeonmap.cpp": {
       "sha256": "b0740f8105e34863c5bf76933b123ca043061fe3c7c48a58f259cf2f84847f77",
       "replacements": [
+        {
+          "old": "#include \"dungeonmap.hpp\"",
+          "new": "#include \"dungeonmap.hpp\"\n#include \"chronicle/mod_lighting.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "void CDungeonMap::initalize() {",
+          "new": "void CDungeonMap::initalize() {\n    mods::ReleaseDungeonLightingForMap(this);",
+          "count": 1
+        },
         {
           "old": "s32 link[16];",
           "new": "s32 link[chronicle::dungeon::RoomCapacity];",
@@ -1244,6 +1269,21 @@
     "src/dun/gameloop.cpp": {
       "sha256": "6f23010e4f454f4092ac51e42b717aa889c6719546931ba52e883d64dba9ff50",
       "replacements": [
+        {
+          "old": "#include \"dun/gameloop.hpp\"",
+          "new": "#include \"dun/gameloop.hpp\"\n#include \"chronicle/mod_lighting.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "void GameInit() {",
+          "new": "void GameInit() {\n    mods::ReleaseDungeonLighting();",
+          "count": 1
+        },
+        {
+          "old": "    map_now->draw_dist_scale = 4.0f;",
+          "new": "    mods::ReleaseDungeonLightingForMap(map_now);\n    map_now->draw_dist_scale = 4.0f;",
+          "count": 1
+        },
         {
           "old": "\n                                                                        int          parts_no = cmap->cells[x + z * 20]\n",
           "new": "\n                                                                        int          parts_no = cmap->cells[x + z * chronicle::dungeon::GridStride]\n",
