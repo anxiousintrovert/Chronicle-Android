@@ -1,4 +1,5 @@
 #include "mods/player_tuning_native.hpp"
+#include "mods/quick_items.hpp"
 #include "dun/gameloop.hpp"
 
 #include <libvu0.h>
@@ -1005,7 +1006,8 @@ PORT_OVERRIDE void DunMoveChara() {
                                             }
                                             BtBySpeedFlag = 0;
 
-                                            if (GamePad.On(PAD_SQUARE) != 0 && BtActStatus.movement_locked == 0 && lockOnTargetFlag == 0) {
+                                            const auto mod_quick_use = mods::StepQuickUse();
+                                            if ((GamePad.On(PAD_SQUARE) != 0 || mod_quick_use.held) && BtActStatus.movement_locked == 0 && lockOnTargetFlag == 0) {
                                                 if (DebugStatus[5] == 0) {
                                                     BtBySpeedFlag = 1;
                                                 }
@@ -1035,7 +1037,8 @@ PORT_OVERRIDE void DunMoveChara() {
                                                 }
                                             }
 
-                                            if (GamePad.Down(PAD_SQUARE) != 0 && BtActStatus.movement_locked == 0 && BtActStatus.action_on == 0 && gameTask != GAME_TASK_UNK_F0 && BtActStatus.can_act != 0) {
+                                            if ((GamePad.Down(PAD_SQUARE) != 0 || mod_quick_use.down) && BtActStatus.movement_locked == 0 && BtActStatus.action_on == 0 && gameTask != GAME_TASK_UNK_F0 && BtActStatus.can_act != 0) {
+                                                mods::AcknowledgeQuickUsePress();
                                                 int  used;
                                                 s16 *slots = UserStatus->active_item;
 

@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 93 implemented operations, native plugins and author
+a real host-call boundary, 94 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness and transactional selection; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and quick-slot action use; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and thrown-item/overlapping-input retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
@@ -1180,3 +1180,44 @@ query tests cover byte/RNG preservation. All 18 Python checks and 3,840
 empty/disabled seed comparisons passed. CLI discovery lists both operations.
 PS2 files remain unchanged. Native action-use and retail smoke coverage remain
 outstanding as described above.
+
+### Native quick-slot action requests and retail verification
+
+The action-dispatch gap recorded above is now implemented as items.quick_slot_use.
+A validated callback stages one request, revalidates final inventory, then
+commits selection and request together. Pending input has an owner, runtime
+epoch, save/character/floor identity, selected item and four-frame deadline.
+A second pending use rejects. Runtime stop/failure, changed context/slot/model,
+expired deadline and arena retirement cancel pending input. Native dispatch
+receives held input and at most one press; physical input retains its original
+path. No pending request returns immediately without querying native resources
+or runtime ownership. No gameplay package is installed by this change.
+
+The request enters existing native drink/eat/throw/feather handling; acceptance
+is not proof of consumption or action completion. Once started, a native action
+is not undone by disabling its requesting mod. Throwing may leave normal aiming
+and player input outstanding. That behavior is deliberate native action parity,
+not an autonomous targeting API.
+
+Two additional unit tests cover atomic rollback, pending-use conflicts, one
+press, unchanged save bytes before dispatch, deadline expiry and cancellation
+on runtime, selected-slot, scene, resource and event changes. A new optional PAL
+test, run alone with DC_DATA and DC_QUICK_ITEMS_AUDIT, installs disposable fixture
+inventory in town before entering the dungeon through the native transition.
+An action registered with the shared manager then selects all three loaded
+slots and requests water, bread and feather use through Lua host calls.
+
+The retail test passed: native drinking restores water and removes its temporary
+hand model while retaining the cached slot model; eating heals and retires the
+last bread model; feather use reduces duration for the bounded hold without
+consuming its remaining item. Native dungeon initialization resets gauges, so
+the test establishes damaged/thirsty values after the native scene is ready.
+No model/resource loader is bypassed. This supersedes the earlier selection-only
+smoke-test gap. Thrown-item completion, overlapping physical input, all playable
+characters and platform variants still need retail validation.
+
+Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
+772 registered, 753 passed, 18 skipped and one disabled, with no failures. The
+optional PAL water/food/feather shared-action test passed separately in 9.331 s.
+All 18 Python checks and all 3,840 empty/disabled seed comparisons passed.
+CLI discovery includes items.quick_slot_use. PS2 files remain unchanged.

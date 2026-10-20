@@ -94,6 +94,7 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `items.use` | `item`, optional `character` | `game.write` | Consume one owned retail healing, water or ailment-cure item atomically |
 | `items.quick_slots` | none | `game.read` | Saved quick-slot contents plus native selection readiness/reasons |
 | `items.quick_slot_select` | `slot` (1–3) | `game.write` | Select an already-loaded dungeon quick slot after transaction validation |
+| `items.quick_slot_use` | `slot` (1–3) | `game.write` | Select and request a bounded native Square-button action; acceptance is not consumption |
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
 Status add/remove target only the controlled character and require its native
@@ -1324,6 +1325,31 @@ The change is one-shot, not an ownership lease; ordinary player input may change
 it, and disabling the mod does not restore a previous selection. Lua and native
 plugins use the existing host call and shared-manager action interfaces.
 
-`items.quick_slot_use` is not implemented yet. Selection alone does not synthesize
-Square input or start animations. Native quick-slot use has different behavior
-from `items.use`; the two operations must not be substituted for each other.
+`items.quick_slot_use {slot=1}` selects the slot and queues a native Square-button
+request after the callback commits. It uses the same readiness checks as
+selection and additionally requires a recognized native quick action. Only one
+use request can be pending globally. A callback may contain one use request,
+with no later selection/use command; later ordinary writes still participate in
+the transaction and final slot validation. Failure publishes neither selection
+nor input. The existing shared-manager action interface can initiate the call.
+
+The request supplies at most four subsequent game frames of held input and one
+press through the existing native dungeon action branch. It does not directly
+apply item effects or consume inventory. Native drinking, eating, throwing and
+feather handling retain their own eligibility, animations, sounds and effects.
+An ineffective or blocked action may consume nothing. In particular, native
+throwing can enter aiming and still require ordinary player input to finish.
+This API does not automate targeting. Acceptance must not be treated as success.
+
+`items.quick_slots` also reports `use_pending` and, while pending, `use_owner`
+and `use_slot`. A cleared request is not a consumption receipt: drinking may
+already be running under native control. Inspect inventory/effect state to
+confirm the result. Disabling/stopping an owner, runtime reset, expired deadline,
+scene/character/slot changes, unavailable resources or a busy player cancel
+pending input. Arena resets cancel before resources are retired. Cancellation
+does not rewind an action that native code has already started.
+
+Selection alone does not synthesize input. Native quick-slot use differs from
+inventory-menu `items.use`; the two operations must not be substituted for each
+other. With no pending request, the added native input check returns immediately
+without reading game resources, scanning owners or changing physical input.

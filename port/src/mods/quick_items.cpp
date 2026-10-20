@@ -1,8 +1,12 @@
 #include "quick_items.hpp"
 
+#include <algorithm>
+#include <optional>
+
 #include "btactstatus.hpp"
 #include "character.hpp"
 #include "dun/gameloop.hpp"
+#include "gameloop.hpp"
 #include "main.hpp"
 #include "mainitemmodel.hpp"
 #include "savedata.hpp"
@@ -13,6 +17,8 @@ extern int itemNowSel;
 
 namespace mods {
 namespace {
+std::optional<QuickUseRequest> pending_use;
+
 std::string Ready(CSaveData *save) {
     if (mode != GAME_MODE_DUNGEON || gameTask != GAME_TASK_PLAY || BtGameModeFlag != BT_GAME_MODE_PLAY || BtEventMode) {
         return "requires ordinary dungeon play outside events";
@@ -59,7 +65,7 @@ std::string ValidateQuickItems(std::string_view operation, const nlohmann::json 
     if (operation == "items.quick_slots") {
         return a.empty() ? "" : "items.quick_slots takes no arguments";
     }
-    if (operation != "items.quick_slot_select" || a.size() != 1 || !a.contains("slot") || !a["slot"].is_number_integer() ||
+    if ((operation != "items.quick_slot_select" && operation != "items.quick_slot_use") || a.size() != 1 || !a.contains("slot") || !a["slot"].is_number_integer() ||
         a["slot"].get<double>() < 1 || a["slot"].get<double>() > 3) {
         return "provide only slot, an integer from 1 to 3";
     }
@@ -73,6 +79,11 @@ nlohmann::json ReadQuickItems() {
         {"reason", reason                 },
         {"slots",  nlohmann::json::array()}
     };
+    result["use_pending"] = pending_use.has_value();
+    if (pending_use) {
+        result["use_owner"] = pending_use->owner;
+        result["use_slot"] = pending_use->slot;
+    }
     if (!SaveData) {
         return result;
     }
@@ -110,5 +121,75 @@ std::string ValidateQuickSelection(CSaveData &save, const CUserStatus &staged, i
 void CommitQuickSelection(int slot) noexcept {
     itemNowSel = slot;
     activeItem.now = slot;
+}
+
+QuickUseRequest PrepareQuickUse(CSaveData &save, const CUserStatus &staged, int slot, std::string owner) {
+    const auto reason = ValidateQuickSelection(save, staged, slot);
+    if (!reason.empty()) {
+        throw std::runtime_error(reason);
+    }
+    if (owner.empty()) {
+        throw std::runtime_error("quick use requires a runtime owner");
+    }
+    if (pending_use) {
+        throw std::runtime_error("another quick-item use request is pending");
+    }
+    auto selected = activeItem;
+    selected.now = slot;
+    if (selected.CheckStatusType() == ACTIVE_ITEM_NONE) {
+        throw std::runtime_error("item has no native quick-use action");
+    }
+    QuickUseRequest request;
+    request.owner = std::move(owner);
+    request.epoch = Scripts().Epoch();
+    request.slot = slot;
+    request.item = staged.item_pack.quick_item_slot[slot - 1];
+    request.character = staged.cur_chara;
+    request.dungeon = staged.cur_georama;
+    request.floor = staged.cur_floor;
+    request.save = &save;
+    request.deadline = GameFrameCount() + 4;
+    return request;
+}
+
+void CommitQuickUse(QuickUseRequest request) noexcept { pending_use = std::move(request); }
+
+void CancelQuickUse() noexcept { pending_use.reset(); }
+
+void RetainQuickUse() {
+    if (!pending_use) {
+        return;
+    }
+    const auto &request = *pending_use;
+    if (request.epoch != Scripts().Epoch() || GameFrameCount() > request.deadline ||
+        !Ready(request.save).empty() || UserStatus->cur_chara != request.character ||
+        UserStatus->cur_georama != request.dungeon || UserStatus->cur_floor != request.floor ||
+        itemNowSel != request.slot || activeItem.now != request.slot ||
+        UserStatus->item_pack.quick_item_slot[request.slot - 1] != request.item ||
+        !SlotReady(*UserStatus, request.slot).empty()) {
+        CancelQuickUse();
+        return;
+    }
+    const auto owners = Scripts().ActiveOwners();
+    if (std::ranges::find(owners, request.owner) == owners.end()) {
+        CancelQuickUse();
+    }
+}
+
+QuickUseInput StepQuickUse() {
+    if (!pending_use) {
+        return {};
+    }
+    RetainQuickUse();
+    if (!pending_use) {
+        return {};
+    }
+    return {true, !pending_use->pressed};
+}
+
+void AcknowledgeQuickUsePress() noexcept {
+    if (pending_use) {
+        pending_use->pressed = true;
+    }
 }
 } // namespace mods

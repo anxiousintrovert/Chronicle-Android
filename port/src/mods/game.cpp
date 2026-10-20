@@ -167,6 +167,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    RetainQuickUse();
     RetainPlayerTuningOwners();
     static std::uint64_t shop_epoch = 0;
     if (HasOwnedShops() && ShopTablesSafe()) {
@@ -300,6 +301,7 @@ void TickGame() {
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
     RetainPlayerTuningOwners();
+    RetainQuickUse();
     if (HasOwnedShops() && ShopTablesSafe()) {
         RetainOwnedShops(Scripts().ActiveOwners());
     }

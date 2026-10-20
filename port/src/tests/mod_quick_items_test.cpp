@@ -1,12 +1,15 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstring>
+#include <fstream>
 #include <memory>
 
 #include "btactstatus.hpp"
 #include "character.hpp"
 #include "dun/gameloop.hpp"
 #include "framevu1.hpp"
+#include "gameloop.hpp"
 #include "main.hpp"
 #include "mainitemmodel.hpp"
 #include "mods/api.hpp"
@@ -20,6 +23,21 @@ extern s32 mode, gameTask, itemNowSel;
 namespace {
 class ModQuickItems : public testing::Test {
 protected:
+    std::filesystem::path owner_root;
+
+    void StartOwner() {
+        owner_root = std::filesystem::temp_directory_path() / ("chronicle-quick-use-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(owner_root / "test.quick");
+        std::ofstream(owner_root / "test.quick/mod.json") << R"({"schema_version":1,"api_version":1,"id":"test.quick","name":"Quick test","version":"1.0.0","game":"chronicle","files":{},"script":"main.lua","permissions":["game.read","game.write"]})";
+        std::ofstream(owner_root / "test.quick/main.lua") << "return {on_tick=function() end}";
+        mods::Manager manager;
+        manager.Scan({
+                         owner_root
+        },
+                     {}, {{"test.quick", true}});
+        mods::Scripts().Start(manager);
+    }
+
     int                             old_mode = mode, old_task = gameTask, old_draw = BtAllDrawFlag, old_game = BtGameModeFlag, old_event = BtEventMode, old_selection = itemNowSel;
     CSaveData                      *old_save = SaveData;
     CUserStatus                    *old_user = UserStatus;
@@ -66,6 +84,12 @@ protected:
     }
 
     void TearDown() override {
+        mods::CancelQuickUse();
+        if (!owner_root.empty()) {
+            mods::Scripts().Start(mods::Manager{});
+            std::error_code ec;
+            std::filesystem::remove_all(owner_root, ec);
+        }
         mode = old_mode;
         gameTask = old_task;
         BtAllDrawFlag = old_draw;
@@ -186,5 +210,64 @@ TEST_F(ModQuickItems, ExactSchemaAndNoSaveQueryAreSafe) {
     EXPECT_FALSE(state["ready"]);
     EXPECT_TRUE(state["slots"].empty());
     EXPECT_FALSE(state.contains("selected"));
+}
+
+TEST_F(ModQuickItems, UseRequestsCommitAtomicallyAndPressOnlyOnce) {
+    StartOwner();
+    auto use = Select(2);
+    use.operation = "items.quick_slot_use";
+    auto before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(Apply({
+        use, {"fishing.spend", {{"amount", 9999}}, "test.quick"}
+    }));
+    EXPECT_FALSE(mods::ReadQuickItems()["use_pending"]);
+    EXPECT_EQ(itemNowSel, 1);
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    EXPECT_FALSE(Apply({use, Select(3)}));
+    ASSERT_TRUE(Apply({use})) << error;
+    EXPECT_TRUE(mods::ReadQuickItems()["use_pending"]);
+    auto input = mods::StepQuickUse();
+    EXPECT_TRUE(input.held);
+    EXPECT_TRUE(input.down);
+    mods::AcknowledgeQuickUsePress();
+    input = mods::StepQuickUse();
+    EXPECT_TRUE(input.held);
+    EXPECT_FALSE(input.down);
+    EXPECT_FALSE(Apply({use}));
+    EXPECT_EQ(std::memcmp(save.get(), before.get(), sizeof(CSaveData)), 0);
+    mods::Scripts().Start(mods::Manager{});
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    EXPECT_FALSE(mods::ReadQuickItems()["use_pending"]);
+}
+
+TEST_F(ModQuickItems, RequestsExpireOnDeadlineSlotSceneAndResourceChanges) {
+    StartOwner();
+    auto queue = [&] {
+        mods::CancelQuickUse();
+        auto use = Select(2);
+        use.operation = "items.quick_slot_use";
+        EXPECT_TRUE(Apply({use})) << error;
+    };
+    queue();
+    itemNowSel = 1;
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    queue();
+    UserStatus->cur_floor++;
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    queue();
+    activeItem.item[2] = ITEM_BREAD;
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    activeItem.item[2] = ITEM_TASTY_WATER;
+    queue();
+    BtEventMode = 1;
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    BtEventMode = 0;
+    auto expired = mods::PrepareQuickUse(*save, *UserStatus, 2, "test.quick");
+    expired.deadline = GameFrameCount() - 1;
+    mods::CommitQuickUse(std::move(expired));
+    EXPECT_FALSE(mods::StepQuickUse().held);
+    queue();
+    mods::CancelQuickUse();
+    EXPECT_FALSE(mods::StepQuickUse().held);
 }
 } // namespace

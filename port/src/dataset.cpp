@@ -4,6 +4,7 @@
 #include "dataread.hpp"
 #include "mglib.hpp"
 #include "mods/town.hpp"
+#include "mods/quick_items.hpp"
 #include "platform/arena.hpp"
 
 namespace {
@@ -35,6 +36,7 @@ void CarveReadBuffer(int quads) {
 } // namespace
 
 void InitializeDataBuffer() {
+    mods::CancelQuickUse();
     mods::RetireTownScene();
     ArenaClearAll();
     GlobalDataBuffer.used = 0;
@@ -54,6 +56,7 @@ PORT_OVERRIDE void SetPacketReadBuffer(int packet_quads, int read_quads) {
 }
 
 void BufferAllClear() {
+    mods::CancelQuickUse();
     mods::RetireTownScene();
     ArenaClearAll();
     GlobalDataBuffer.used = 0;
