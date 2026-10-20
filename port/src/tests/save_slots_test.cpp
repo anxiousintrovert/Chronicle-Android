@@ -21,6 +21,7 @@
 #include "save_slots.hpp"
 #include "savedata.hpp"
 #include "mods/runtime.hpp"
+#include "mods/api.hpp"
 
 #ifndef _WIN32
 #include <sys/stat.h>
@@ -596,4 +597,44 @@ TEST(SaveSlots, EndingSaveFailureCanBeLeft) {
     }
 
     fs::remove_all(root);
+}
+
+TEST(SaveSlots, ShippedQuestRewardAndNativeMoneyRestoreTogetherWithoutReplay) {
+    const auto root=UseTempSaveRoot();PrepareSave();g_save.GetDngStatus()->money=0;
+    struct Cleanup {fs::path root;~Cleanup(){mods::Scripts().Start(mods::Manager{});mods::Scripts().ResetState();std::error_code error;fs::remove_all(root,error);}} cleanup{root};
+    const auto source=fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path()/"examples/mods/dungeon-contract";
+    fs::create_directories(root/"mods/contract");
+    for(const auto *file:{"mod.json","main.lua"})fs::copy_file(source/file,root/"mods/contract"/file);
+    mods::Manager manager;manager.Scan({root/"mods"},{},{{"example.dungeon-contract",true}});
+    auto &runtime=mods::Scripts();runtime.Start(manager);
+    const mods::World first{2,0,0,true,0,1},second{2,0,0,true,0,2};
+    int grants=0;mods::CommitGame commit=[&](const auto &commands,int money,std::string &error){++grants;return mods::ApplySave(g_save,commands,money,error);};
+    runtime.Tick(first,{},{},{},commit);std::string error;
+    ASSERT_TRUE(runtime.QueueAction("example.dungeon-contract","start",error))<<error;runtime.Tick(first,{},{},{},commit);
+    runtime.Tick(second,{},{},{},commit);ASSERT_EQ(runtime.Quests()[0].progress,1);
+    ASSERT_EQ(SaveNew(0),1); // Partial quest, zero reward.
+    const std::array<mods::EnemyDeath,1> deaths{{{16,0,2,0,10,20,5,false}}};
+    runtime.Tick(second,{},{},{},commit,deaths);runtime.Tick(second,{},{},{},commit,deaths);
+    ASSERT_EQ(g_save.GetDngStatus()->money,50);ASSERT_EQ(grants,1);
+    const auto complete=runtime.SaveState();
+    g_mc.SetBuff(g_menu_buffer); // Opening the manual-save menu snapshots the current native image.
+    ASSERT_EQ(SaveNew(1),1);ASSERT_TRUE(SaveSlotWriteAutosave());
+    for(int slot:{1,kSaveSlotAutosave}) {
+        runtime.ResetState();g_save.GetDngStatus()->money=321;g_mc.file_no=slot;
+        ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);EXPECT_EQ(g_save.GetDngStatus()->money,50);
+        EXPECT_EQ(runtime.SaveState(),complete);
+        runtime.Tick(second,{},{},{},commit);runtime.Tick(second,{},{},{},commit,deaths);
+        EXPECT_EQ(grants,1);EXPECT_EQ(g_save.GetDngStatus()->money,50);
+    }
+    // Loading an older save restores both its uncompleted quest and its pre-reward money.
+    g_mc.file_no=0;ASSERT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),1);
+    EXPECT_EQ(g_save.GetDngStatus()->money,0);EXPECT_EQ(runtime.Quests()[0].progress,1);
+    runtime.Tick(second,{},{},{},commit,deaths);EXPECT_EQ(runtime.Quests()[0].progress,1); // No replay on load.
+    runtime.Tick(second,{},{},{},commit,deaths);runtime.Tick(second,{},{},{},commit,deaths);
+    EXPECT_EQ(g_save.GetDngStatus()->money,50);EXPECT_EQ(grants,2);
+    // Corrupt owned data must not replace either live section.
+    auto bytes=ReadSave(root,1);ASSERT_GT(bytes.size(),static_cast<std::size_t>(kImageSize));bytes.back()^=1;WriteSave(root,1,bytes);
+    const auto before=runtime.SaveState();g_save.GetDngStatus()->money=123;g_mc.file_no=1;
+    EXPECT_EQ(RunOperation(g_mc,MC_OPERATION_LOAD),-1);EXPECT_EQ(g_save.GetDngStatus()->money,123);EXPECT_EQ(runtime.SaveState(),before);
+    EXPECT_TRUE(runtime.Diagnostics().empty());
 }

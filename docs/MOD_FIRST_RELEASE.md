@@ -95,3 +95,18 @@ It is a controlled native-path probe, not a controller-driven melee playthrough,
 and does not complete the separate floor-transition or disk save/reload gates.
 Run the test alone with DC_DATA and a new DC_QUEST_RETAIL_AUDIT directory. Clang
 23.1.2 was used; no production engine, PS2 or Kazarov files changed.
+
+## Quest disk save/load integration (2026-10-20)
+
+The shipped Dungeon Contract is now exercised through CMemoryCardAccess manual
+save/load and SaveSlotWriteAutosave. Completed native money and the owned reward
+receipt restore together without regranting. Loading the earlier partial save
+restores its zero reward money and unfinished objective, which can then complete
+normally. A corrupt mod trailer rejects loading while preserving both live native
+money and owned quest state. The manual test refreshes SetBuff as opening the
+save menu does; reusing an old menu snapshot would test a stale native image.
+
+Clang 23.1.2 test build and all 40 focused save/quest/menu tests passed. Events
+are injected in this disk test; the separate retail native-poison probe validates
+the producer/queue path. These results do not certify a controller-driven full
+quest playthrough or other platforms. No production engine, PS2 or Kazarov edits.
