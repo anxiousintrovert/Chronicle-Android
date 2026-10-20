@@ -1512,6 +1512,16 @@ range. Exhaustion or bounded placement failure rejects the staged layout and
 falls back to retail generation. Larger capacity and chest loot overrides
 remain separate work.
 
+An optional `monsters=5` requests 1–15 placement attempts on each floor.
+Omission keeps native counts. The setting survives on the generated map for
+back-floor entry and is cleared by map initialization. It applies only to
+ordinary random-model placement with a positive native count; explicit-model
+and zero-count calls retain their native behavior. Native model choice,
+spacing, placement retry limits and key assignment remain in use, so the
+request is not a guarantee that every attempted placement succeeds.
+The current sixteen monster slots are unchanged. Larger populations require
+the remaining linked script/character/effect/combat storage work.
+
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is
 `{state="pending"}`, `{state="applied",floor,front_rooms,back_rooms,front_chests,back_chests}`, or
@@ -1527,7 +1537,7 @@ Declare the operations used in the package's `requires_operations` manifest.
 
 Expanded layouts use a 48×48 grid, with transport resources preflighted against
 the supported retail programs. Unknown transport resources reject the request.
-This API does not add monsters, extra floors, custom maps, items, weapons or
+This API does not add monster types, extra floors, custom maps, items, weapons or
 cutscenes. With no claims, the native generation path runs unchanged.
 
 `dungeon.loot_get {monster=0}` (`game.read`) reads a retail monster definition

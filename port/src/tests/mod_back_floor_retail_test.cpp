@@ -21,6 +21,7 @@
 #include "main.hpp"
 #include "mods/back_floor.hpp"
 #include "mods/dungeon_layout.hpp"
+#include "monstorunit.hpp"
 #include "mods/world_transition.hpp"
 #include "platform/clock.hpp"
 #include "platform/config.hpp"
@@ -80,6 +81,8 @@ void BackPump() {
                     EXPECT_EQ(state["last_build"]["state"], expected_expanded ? "applied" : "rejected") << state.dump();
                     if (expected_expanded) {
                         EXPECT_EQ(state["requested"]["chests"], 12);
+                        EXPECT_EQ(state["requested"]["monsters"], 5);
+                        EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), 5);
                         EXPECT_GE(MainDungeonMap.box_num, 12);
                         EXPECT_GE(UraDungeonMap.box_num, 12);
                         EXPECT_EQ(state["last_build"]["front_chests"], MainDungeonMap.box_num);
@@ -145,6 +148,9 @@ void BackPump() {
         ++stable;
         maximum_stable = std::max(maximum_stable, stable);
         if (stable >= 90) {
+            if (managed_layout && expected_expanded) {
+                EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), 5);
+            }
             if (expected_expanded) {
                 float pos[4]{};
                 CharaMain.GetPosition(pos);
@@ -213,7 +219,7 @@ end}
         std::ifstream input_script(script_path);
         std::string   source((std::istreambuf_iterator<char>(input_script)), {});
         input_script.close();
-        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12" : ",area=8,room_min=6,room_max=6";
+        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12,monsters=5" : ",area=8,room_min=6,room_max=6";
         const std::string init = "return {on_game_enter=function() assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
         source.replace(source.find("return {on_tick="), std::string("return {on_tick=").size(), init);
         std::ofstream(script_path) << source;

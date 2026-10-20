@@ -13,6 +13,7 @@ struct BuildLayout {
     int room_min;
     int room_max;
     int chests = 0; // Zero keeps the retail target; otherwise requested generated chests.
+    int monsters = 0; // Zero keeps native population; explicit requests reserve one of 16 slots.
 };
 
 inline thread_local const BuildLayout *requested_build = nullptr;
@@ -24,7 +25,8 @@ public:
             layout.area < 8 || layout.area > GridStride - 2 ||
             layout.room_min < 3 || layout.room_max > 6 ||
             layout.room_min > layout.room_max ||
-            (layout.chests != 0 && (layout.chests < 2 || layout.chests > 24))) {
+            (layout.chests != 0 && (layout.chests < 2 || layout.chests > 24)) ||
+            layout.monsters < 0 || layout.monsters > 15) {
             throw std::invalid_argument("invalid dungeon layout dimensions");
         }
         requested_build = &layout_;

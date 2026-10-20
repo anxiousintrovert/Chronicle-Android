@@ -43,6 +43,11 @@
           "old": "    int GridExtent() const {",
           "new": "    int MapEventLimit() const {\n        return GridExtent() == chronicle::dungeon::GridStride ? chronicle::dungeon::MapEventCapacity : chronicle::dungeon::RetailMapEventCapacity;\n    }\n    int GridExtent() const {",
           "count": 1
+        },
+        {
+          "old": "    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;",
+          "new": "    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;\n    s32 port_monster_count = 0;\n    int PopulationCount(int native_count, int model_no) const {\n        return GridExtent() == chronicle::dungeon::GridStride && native_count > 0 && model_no == -1 &&\n            port_monster_count >= 1 && port_monster_count <= 15 ? port_monster_count : native_count;\n    }",
+          "count": 1
         }
       ]
     },
@@ -1143,6 +1148,16 @@
           "old": "this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_SMALL, 0);",
           "new": "chronicle::dungeon::RequireBuild(this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_SMALL, 0) != -1, \"custom chest placement exceeds object capacity\");",
           "count": 1
+        },
+        {
+          "old": "    this->port_grid_extent = chronicle::dungeon::BuildExtent();",
+          "new": "    this->port_grid_extent = chronicle::dungeon::BuildExtent();\n    this->port_monster_count = chronicle::dungeon::CustomBuild() ? chronicle::dungeon::requested_build->monsters : 0;",
+          "count": 1
+        },
+        {
+          "old": "    this->port_grid_extent = chronicle::dungeon::RetailGridExtent;",
+          "new": "    this->port_grid_extent = chronicle::dungeon::RetailGridExtent;\n    this->port_monster_count = 0;",
+          "count": 2
         }
       ]
     },
@@ -1382,6 +1397,11 @@
         {
           "old": "SearchiDoPutArea(map->cells, 0, 0, 20, 20, position);",
           "new": "SearchMapPutArea(*map, position);",
+          "count": 1
+        },
+        {
+          "old": "void CMonstorUnit::ArrangementPos(CDungeonMap *map, int count, int model_no, int unused) {",
+          "new": "void CMonstorUnit::ArrangementPos(CDungeonMap *map, int count, int model_no, int unused) {\n    if (map) count = map->PopulationCount(count, model_no);",
           "count": 1
         }
       ]

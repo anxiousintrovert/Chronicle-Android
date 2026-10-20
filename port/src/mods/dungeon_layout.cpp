@@ -55,11 +55,14 @@ std::string ValidateLayout(std::string_view op, const Json &a) {
     if (op != "dungeon.layout_set") {
         return a.size() == 1 ? "" : "layout get/reset takes only dungeon";
     }
-    if (a.size() != 5 && !(a.size() == 6 && a.contains("chests"))) {
-        return "layout_set requires dungeon, rooms, area, room_min and room_max; chests is optional";
+    if (a.size() != 5 + a.contains("chests") + a.contains("monsters")) {
+        return "layout_set requires dungeon, rooms, area, room_min and room_max; chests and monsters are optional";
     }
     if (a.contains("chests") && (!a["chests"].is_number_integer() || a["chests"].get<double>() < 2 || a["chests"].get<double>() > 24)) {
         return "chests must be in 2..24";
+    }
+    if (a.contains("monsters") && (!a["monsters"].is_number_integer() || a["monsters"].get<double>() < 1 || a["monsters"].get<double>() > 15)) {
+        return "monsters must be in 1..15";
     }
     for (const auto &[field, bounds] : std::map<std::string, std::pair<int, int>>{
              {"rooms",    {2, 64}},
@@ -101,6 +104,7 @@ Json ReadLayout(const Json &a) {
         };
         out["last_build"] = claim.result;
         if (claim.layout.chests != 0) out["requested"]["chests"] = claim.layout.chests;
+        if (claim.layout.monsters != 0) out["requested"]["monsters"] = claim.layout.monsters;
     }
     return out;
 }
@@ -147,7 +151,7 @@ bool LayoutTransaction::Stage(const std::vector<GameCommand> &commands, std::str
             }
             const auto &a = command.arguments;
             staged_->values[dungeon] = {
-                command.owner, {a.at("rooms"), a.at("area"), a.at("room_min"), a.at("room_max"), a.value("chests", 0)},
+                command.owner, {a.at("rooms"), a.at("area"), a.at("room_min"), a.at("room_max"), a.value("chests", 0), a.value("monsters", 0)},
                  Scripts().Epoch(), {{"state", "pending"}}
             };
         }

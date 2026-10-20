@@ -26,6 +26,23 @@ TEST(ModDungeonBuild, ChestTargetIsExplicitAndScopeBounded) {
     EXPECT_EQ(ChestTarget(7), 7);
 }
 
+TEST(ModDungeonBuild, PopulationRequiresExplicitExpandedMapAndSurvivesCopy) {
+    auto map = std::make_unique<CDungeonMap>();
+    EXPECT_EQ(map->PopulationCount(15, -1), 15);
+    map->port_monster_count = 5;
+    EXPECT_EQ(map->PopulationCount(15, -1), 15);
+    map->port_grid_extent = 48;
+    EXPECT_EQ(map->PopulationCount(15, -1), 5);
+    EXPECT_EQ(map->PopulationCount(8, -1), 5);
+    EXPECT_EQ(map->PopulationCount(0, -1), 0);
+    EXPECT_EQ(map->PopulationCount(15, 2), 15);
+    auto copy = std::make_unique<CDungeonMap>(*map);
+    EXPECT_EQ(copy->PopulationCount(8, -1), 5);
+    copy->initalize();
+    EXPECT_EQ(copy->port_monster_count, 0);
+    EXPECT_EQ(copy->PopulationCount(8, -1), 8);
+}
+
 TEST(ModDungeonBuild, ScopeRestoresDefaultsAfterRejectedPacking) {
     using namespace chronicle::dungeon;
     CDngStatusData status{};

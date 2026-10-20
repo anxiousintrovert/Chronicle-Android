@@ -2024,3 +2024,25 @@ Clang 23.1.2 game/test builds pass: 796 tests passed, 57 skipped, one disabled.
 All 29 Python checks and seven first-floor PAL Lua-driven 12-chest/back-floor
 replays pass. Both 3,840-case empty/disabled seed exports match pinned upstream
 except map memory size. PS2 source is unchanged; other platforms unverified.
+
+
+### Owned native-slot population requests
+
+Owned layouts accept optional monsters (1-15). The request is stored on the
+generated map, survives copying/back-floor entry and clears on initialization.
+Only positive random-model placement calls use it; model-specific and zero
+counts preserve native behavior. Placement selection, spacing and key assignment
+remain native. Seven PAL first-floor replays each verified five monsters on
+both front and back floors through a real Lua request and shared-manager action.
+
+This is not expanded monster capacity. Sixteen native slots remain. Reaching
+the reference 256 slots requires coordinated CMonstorUnit script, character,
+interpreter, effect, sound, projectile and guard arrays; the shared
+MonstorScriptBuffer allocator and loading/transition bindings; per-frame loops;
+and framework handles/reaction/ownership storage. A blanket replacement of
+16 would also alter unrelated per-monster collision/sound arrays.
+
+Validation: Clang 23.1.2 game/test builds; 797 tests passed, 57 skipped,
+one disabled; 29 Python checks passed. Both 3,840-case empty/disabled
+exports match pinned upstream except map memory size. PS2 source unchanged.
+Other platforms and broader seed/key-route coverage remain unverified.

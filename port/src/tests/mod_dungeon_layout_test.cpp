@@ -85,6 +85,11 @@ TEST_F(ModDungeonLayout, ValidationAndOwnerRetirement) {
         EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
     }
     a["chests"] = 12;
+    a["monsters"] = 16;
+    EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    a["monsters"] = 0;
+    EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    a["monsters"] = 5;
     EXPECT_TRUE(mods::ValidateOperation(command.operation, a).empty());
     command.arguments = a;
     a["room_min"] = 6;
@@ -96,6 +101,7 @@ TEST_F(ModDungeonLayout, ValidationAndOwnerRetirement) {
     tx.Commit();
     EXPECT_TRUE(mods::HasOwnedLayouts());
     EXPECT_EQ(mods::ReadLayout({{"dungeon", 0}})["requested"]["chests"], 12);
+    EXPECT_EQ(mods::ReadLayout({{"dungeon", 0}})["requested"]["monsters"], 5);
     mods::RetainOwnedLayouts({});
     EXPECT_FALSE(mods::HasOwnedLayouts());
 }
