@@ -2145,3 +2145,23 @@ resource and collision budgets, and high-population playthrough validation.
 
 Clang 23.1.2 Windows game/test builds pass. Full suite: 803 passed, 59
 skipped, 1 disabled. Other platforms remain unverified.
+
+
+### External monster consumers (2026-10-20)
+
+Lock-on scratch and script variables now reserve 256 slots. Target selection,
+nearby-monster opcodes, thrown items, projectiles, battle music, detail drawing
+and damage-source recording obey the unit active limit. Per-monster hit spheres,
+sound slots and the shared sixteen-entry hit-effect pools remain unchanged.
+No public API activates expanded populations yet.
+
+Clang 23.1.2 Windows game/test builds pass. Three new tests cover slot-255
+targeting, nearby searches and independent script variables; the full suite
+has 806 passed, 59 skipped and 1 disabled. All 29 Python checks pass.
+Fresh PAL retail Cave and managed Cave/Forest transition replays pass.
+Both 3,840-case no-mod/disabled-mod seed comparisons differ from pinned
+upstream only in map storage size. PS2 diff remains empty. This does not
+prove high-population gameplay or other-platform behavior.
+
+Next gates remain load-boundary activation/reset, bounded collision/resource
+storage and high-population gameplay validation before exposing higher counts.

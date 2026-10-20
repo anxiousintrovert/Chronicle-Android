@@ -3106,7 +3106,7 @@ PORT_OVERRIDE int BtCheckDamageProc() {
                 monster = (owner - 200) / 5;
                 CMonstorUnit *unit = NowMonstorUnit;
 
-                if (monster >= 0 && monster < 16) {
+                if (monster >= 0 && monster < unit->SlotLimit()) {
                     unit->monster[monster].last_hit_damage = damage;
                 }
 

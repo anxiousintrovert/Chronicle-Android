@@ -1358,6 +1358,21 @@
           "old": "    for (slot = 0; slot < 16; slot++) {\n        unit->script[slot] = &MonstorScriptBuffer[slot];\n    }",
           "new": "    chronicle::monsters::BindScripts(*unit);",
           "count": 1
+        },
+        {
+          "old": "float MonstorPicupInner[36];",
+          "new": "float MonstorPicupInner[chronicle::monsters::StorageCapacity];",
+          "count": 1
+        },
+        {
+          "old": "if (monster >= 0 && monster < 16) {",
+          "new": "if (monster >= 0 && monster < unit->SlotLimit()) {",
+          "count": 1
+        },
+        {
+          "old": "int SetNearLockOnTarget(int from, int nearest_only) {\n    CUserStatus  *status = UserStatus;\n    sceVu0FVECTOR at;\n    sceVu0FVECTOR towards;\n    sceVu0FVECTOR pos[16];\n    float         dist[16];\n    int           found[16];\n    float         away;\n    float         rate;\n    int           place;\n    int           i;\n    int           count;\n    int           slot;\n    int           nearest;\n    int           other;\n\n    rate = CharaRangeRate(status);\n\n    CharaFrame->GetRotation(at);\n\n    // Declared here rather than with the rest: mwcc emits a local array's\n    // template copy where the declaration stands, and retail's lands after\n    // the two calls above, not before them. The slots still come out where\n    // they do above, because everything ahead of these is still ahead of them.\n    sceVu0FVECTOR forward = {0.0f, 0.0f, 1.0f, 1.0f};\n    sceVu0FMATRIX unit;\n    sceVu0FMATRIX turn;\n    int           order[16];\n    int           screen[4];\n\n    sceVu0UnitMatrix(unit);\n    sceVu0RotMatrixY(turn, unit, at[1]);\n    sceVu0ApplyMatrix(forward, turn, forward);\n    sceVu0Normalize(forward, forward);\n\n    count = 0;\n    sceVu0CopyVector(at, CharaFrame->position);\n\n    for (i = 0; i < 16; i++) {\n        found[i] = -1;\n    }\n\n    for (i = 0; i < 16; i++) {\n        int on;\n\n        MonstorPicupInner[i] = 0.0f;\n\n        CMonstorUnit *monsters = NowMonstorUnit;\n\n        if (monsters->monster[i].state != 2) {\n            continue;\n        }\n\n        if (monsters->monster[i].hp <= 0) {\n            continue;\n        }\n\n        if (i >= 0 && i < 17) {\n            on = monsters->monster[i].revealed;\n        }\n\n        if (on == 0) {\n            continue;\n        }\n\n        if (monsters->monster[i].lockon_enabled == 0) {\n            continue;\n        }\n\n        monsters->chara[i][0].GetPosition(pos[i]);\n\n        away = DistVector(at, pos[i]);\n\n        if (!(away < NowMonstorUnit->monster[i].lock_range * rate)) {\n            continue;\n        }\n\n        towards[0] = pos[i][0] - at[0];\n        towards[2] = pos[i][2] - at[2];\n        towards[1] = 0.0f;\n        towards[3] = 1.0f;\n        sceVu0Normalize(towards, towards);\n\n        MonstorPicupInner[i] = sceVu0InnerProduct(forward, towards);\n\n        if (MonstorPicupInner[i] < 0.25f) {\n            continue;\n        }\n\n        found[count] = i;\n        dist[count] = away;\n        count++;\n    }\n\n    if (count == 0) {\n        LockOffTargte();\n        return 0;\n    }\n\n    // Split from the loop below: mwcc emits the initialisation where the\n    // statement stands, which is ahead of the loop that clears order[].\n    place = 0;\n\n    for (slot = 0; slot < 16; slot++) {\n        order[slot] = -1;\n    }\n\n    // The nearest one that is still free goes into each place in turn.\n    for (; place < count; place++) {\n        nearest = 0;\n\n        while (found[nearest] == -1) {\n            nearest++;\n        }\n\n        float best = dist[nearest];\n\n        for (other = 0; other < count; other++) {\n            if (other == place) {\n                continue;\n            }\n\n            if (found[other] == -1) {\n                continue;\n            }\n\n            if (dist[other] < best) {\n                best = dist[other];\n                nearest = other;\n            }\n        }\n\n        order[place] = found[nearest];\n        found[nearest] = -1;\n    }\n\n    int target;\n\n    if (nearest_only == 0) {\n        if (count == 1) {\n            target = order[0];\n        } else {\n            if (from >= count) {\n                from = 0;\n            }\n\n            if (lockOnTargetNo == order[from]) {\n                from++;\n            }\n\n            if (from >= count) {\n                from = 0;\n            }\n\n            target = order[from];\n        }\n    } else {\n        target = order[0];\n    }\n\n    if (target == -1) {\n        LockOffTargte();\n        return 0;\n    }\n\n    if (lockOnTargetNo == target && nearest_only == 0) {\n        return count;\n    }\n\n    if (target != -1) {\n        NowMonstorUnit->chara[target][0].GetPosition(at);\n        at[1] += NowMonstorUnit->chara[target][0].body_height;\n        cursorFrame->SetPosition(at);\n        lockOnTargetDraw = 1;\n        targetCursorCnt = 8.0f;\n        at[3] = 1.0f;\n\n        if (MGRotTransPers(screen, at, 0) != 0) {\n            SetMonsterNameDrawFlag(1);\n            MonsterNamePosSet((screen[0] - 0x6C00) >> 4, (screen[1] - GS_Y_OFFSET) >> 4);\n            EnemyLifeGage.x = (screen[0] - 0x6C00) >> 4;\n            EnemyLifeGage.y = ((screen[1] - GS_Y_OFFSET) >> 4) + 42;\n        } else {\n            SetMonsterNameDrawFlag(0);\n            EnemyLifeGage.on = 0;\n        }\n\n        if (lockOnTargetNo != target) {\n            DngMes2.mes_made = -1;\n            MonsterNameMake(NowMonstorUnit->monster[target].name_no);\n        }\n    }\n\n    lockOnTargetNo = target;\n    return count;\n}",
+          "new": "int SetNearLockOnTarget(int from, int nearest_only) {\n    CUserStatus  *status = UserStatus;\n    sceVu0FVECTOR at;\n    sceVu0FVECTOR towards;\n    sceVu0FVECTOR pos[chronicle::monsters::StorageCapacity];\n    float         dist[chronicle::monsters::StorageCapacity];\n    int           found[chronicle::monsters::StorageCapacity];\n    float         away;\n    float         rate;\n    int           place;\n    int           i;\n    int           count;\n    int           slot;\n    int           nearest;\n    int           other;\n\n    rate = CharaRangeRate(status);\n\n    CharaFrame->GetRotation(at);\n\n    // Declared here rather than with the rest: mwcc emits a local array's\n    // template copy where the declaration stands, and retail's lands after\n    // the two calls above, not before them. The slots still come out where\n    // they do above, because everything ahead of these is still ahead of them.\n    sceVu0FVECTOR forward = {0.0f, 0.0f, 1.0f, 1.0f};\n    sceVu0FMATRIX unit;\n    sceVu0FMATRIX turn;\n    int           order[chronicle::monsters::StorageCapacity];\n    int           screen[4];\n\n    sceVu0UnitMatrix(unit);\n    sceVu0RotMatrixY(turn, unit, at[1]);\n    sceVu0ApplyMatrix(forward, turn, forward);\n    sceVu0Normalize(forward, forward);\n\n    count = 0;\n    sceVu0CopyVector(at, CharaFrame->position);\n\n    for (i = 0; i < NowMonstorUnit->SlotLimit(); i++) {\n        found[i] = -1;\n    }\n\n    for (i = 0; i < NowMonstorUnit->SlotLimit(); i++) {\n        int on;\n\n        MonstorPicupInner[i] = 0.0f;\n\n        CMonstorUnit *monsters = NowMonstorUnit;\n\n        if (monsters->monster[i].state != 2) {\n            continue;\n        }\n\n        if (monsters->monster[i].hp <= 0) {\n            continue;\n        }\n\n        if (i >= 0 && i < NowMonstorUnit->SlotLimit()) {\n            on = monsters->monster[i].revealed;\n        }\n\n        if (on == 0) {\n            continue;\n        }\n\n        if (monsters->monster[i].lockon_enabled == 0) {\n            continue;\n        }\n\n        monsters->chara[i][0].GetPosition(pos[i]);\n\n        away = DistVector(at, pos[i]);\n\n        if (!(away < NowMonstorUnit->monster[i].lock_range * rate)) {\n            continue;\n        }\n\n        towards[0] = pos[i][0] - at[0];\n        towards[2] = pos[i][2] - at[2];\n        towards[1] = 0.0f;\n        towards[3] = 1.0f;\n        sceVu0Normalize(towards, towards);\n\n        MonstorPicupInner[i] = sceVu0InnerProduct(forward, towards);\n\n        if (MonstorPicupInner[i] < 0.25f) {\n            continue;\n        }\n\n        found[count] = i;\n        dist[count] = away;\n        count++;\n    }\n\n    if (count == 0) {\n        LockOffTargte();\n        return 0;\n    }\n\n    // Split from the loop below: mwcc emits the initialisation where the\n    // statement stands, which is ahead of the loop that clears order[].\n    place = 0;\n\n    for (slot = 0; slot < NowMonstorUnit->SlotLimit(); slot++) {\n        order[slot] = -1;\n    }\n\n    // The nearest one that is still free goes into each place in turn.\n    for (; place < count; place++) {\n        nearest = 0;\n\n        while (found[nearest] == -1) {\n            nearest++;\n        }\n\n        float best = dist[nearest];\n\n        for (other = 0; other < count; other++) {\n            if (other == place) {\n                continue;\n            }\n\n            if (found[other] == -1) {\n                continue;\n            }\n\n            if (dist[other] < best) {\n                best = dist[other];\n                nearest = other;\n            }\n        }\n\n        order[place] = found[nearest];\n        found[nearest] = -1;\n    }\n\n    int target;\n\n    if (nearest_only == 0) {\n        if (count == 1) {\n            target = order[0];\n        } else {\n            if (from >= count) {\n                from = 0;\n            }\n\n            if (lockOnTargetNo == order[from]) {\n                from++;\n            }\n\n            if (from >= count) {\n                from = 0;\n            }\n\n            target = order[from];\n        }\n    } else {\n        target = order[0];\n    }\n\n    if (target == -1) {\n        LockOffTargte();\n        return 0;\n    }\n\n    if (lockOnTargetNo == target && nearest_only == 0) {\n        return count;\n    }\n\n    if (target != -1) {\n        NowMonstorUnit->chara[target][0].GetPosition(at);\n        at[1] += NowMonstorUnit->chara[target][0].body_height;\n        cursorFrame->SetPosition(at);\n        lockOnTargetDraw = 1;\n        targetCursorCnt = 8.0f;\n        at[3] = 1.0f;\n\n        if (MGRotTransPers(screen, at, 0) != 0) {\n            SetMonsterNameDrawFlag(1);\n            MonsterNamePosSet((screen[0] - 0x6C00) >> 4, (screen[1] - GS_Y_OFFSET) >> 4);\n            EnemyLifeGage.x = (screen[0] - 0x6C00) >> 4;\n            EnemyLifeGage.y = ((screen[1] - GS_Y_OFFSET) >> 4) + 42;\n        } else {\n            SetMonsterNameDrawFlag(0);\n            EnemyLifeGage.on = 0;\n        }\n\n        if (lockOnTargetNo != target) {\n            DngMes2.mes_made = -1;\n            MonsterNameMake(NowMonstorUnit->monster[target].name_no);\n        }\n    }\n\n    lockOnTargetNo = target;\n    return count;\n}",
+          "count": 1
         }
       ]
     },
@@ -1377,6 +1392,16 @@
         {
           "old": "    for (int record = 0; record < 96; record++) {\n        CDungeonEventData *data = &DngEventMan.event[record];",
           "new": "    DngEventMan.port_event_limit = chronicle::dungeon::RetailRuntimeEventCapacity;\n    for (int record = 0; record < chronicle::dungeon::RuntimeEventCapacity; record++) {\n        CDungeonEventData *data = &DngEventMan.event[record];",
+          "count": 1
+        },
+        {
+          "old": "no < 17",
+          "new": "no < NowMonstorUnit->SlotLimit()",
+          "count": 1
+        },
+        {
+          "old": "float SetBattleStyle(int map_no, int preserve_bgm) {\n    float         nearest = 10000;\n    sceVu0FVECTOR position;\n    sceVu0FVECTOR player;\n    float         bgm_volume;\n    float         ambient_volume;\n    int           alive;\n\n    sceVu0CopyVector(player, CharaMain.pos);\n\n    for (int i = 0; i < 16; i++) {\n        if (NowMonstorUnit->monster[i].state == -1) {\n            continue;\n        }\n\n        alive = MonstorAliveCheck(i, alive);\n\n        if (alive == 0) {\n            continue;\n        }\n\n        NowMonstorUnit->chara[i][0].GetPosition(position);\n        float distance = DistVector(player, position);\n\n        if (distance < nearest) {\n            nearest = distance;\n        }\n    }\n\n    if (map_no != 5) {\n        CUserStatus *status;\n        int          floors = maxFloorTbl[map_no];\n        status = UserStatus;\n\n        if (status->cur_floor < floors - 1) {\n            BtBattleMusic_Excg(nearest, &bgm_volume, &ambient_volume);\n\n            if (ambient_volume > 0.0f) {\n                SndAmbientPlay(0);\n            }\n\n            if (preserve_bgm == 0) {\n                SndSetBgmVolf(bgm_volume);\n            }\n\n            SndAmbientSetVolf(ambient_volume);\n        }\n    }\n\n    return nearest;\n}",
+          "new": "float SetBattleStyle(int map_no, int preserve_bgm) {\n    float         nearest = 10000;\n    sceVu0FVECTOR position;\n    sceVu0FVECTOR player;\n    float         bgm_volume;\n    float         ambient_volume;\n    int           alive;\n\n    sceVu0CopyVector(player, CharaMain.pos);\n\n    for (int i = 0; i < NowMonstorUnit->SlotLimit(); i++) {\n        if (NowMonstorUnit->monster[i].state == -1) {\n            continue;\n        }\n\n        alive = MonstorAliveCheck(i, alive);\n\n        if (alive == 0) {\n            continue;\n        }\n\n        NowMonstorUnit->chara[i][0].GetPosition(position);\n        float distance = DistVector(player, position);\n\n        if (distance < nearest) {\n            nearest = distance;\n        }\n    }\n\n    if (map_no != 5) {\n        CUserStatus *status;\n        int          floors = maxFloorTbl[map_no];\n        status = UserStatus;\n\n        if (status->cur_floor < floors - 1) {\n            BtBattleMusic_Excg(nearest, &bgm_volume, &ambient_volume);\n\n            if (ambient_volume > 0.0f) {\n                SndAmbientPlay(0);\n            }\n\n            if (preserve_bgm == 0) {\n                SndSetBgmVolf(bgm_volume);\n            }\n\n            SndAmbientSetVolf(ambient_volume);\n        }\n    }\n\n    return nearest;\n}",
           "count": 1
         }
       ]
@@ -1597,6 +1622,61 @@
         {
           "old": "    int GetCurrentMonsterIndex() { return current_monster; }",
           "new": "    unsigned port_slot_limit = chronicle::monsters::RetailSlots;\n\n    int GetCurrentMonsterIndex() { return current_monster; }",
+          "count": 1
+        }
+      ]
+    },
+    "include/runscript_opcodes.hpp": {
+      "sha256": "e92aee79eb853a020557c28ff98764758cc1dad5aa261abaeaa87b39cbc471a5",
+      "replacements": [
+        {
+          "old": "#pragma once",
+          "new": "#pragma once\n#include \"chronicle/monster_limits.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "PUSH_INT_DATA[16][8]",
+          "new": "PUSH_INT_DATA[chronicle::monsters::StorageCapacity][8]",
+          "count": 1
+        }
+      ]
+    },
+    "src/runscript_opcodes.cpp": {
+      "sha256": "761b5b9d2d1494e3d0b4f6c21362bad6af508792b6a7ea5315643022bb4c66ab",
+      "replacements": [
+        {
+          "old": "PUSH_INT_DATA[16][8]",
+          "new": "PUSH_INT_DATA[chronicle::monsters::StorageCapacity][8]",
+          "count": 1
+        },
+        {
+          "old": "int _GET_NEAR_MONSTER(RS_STACKDATA *stack, int argc) {\n    int   found;\n    int   i;\n    int   monster_no = NowMonstorUnit->current_monster;\n    float nearest = 240.0f;\n    float position[4];\n    float other_position[4];\n    float found_position[4];\n\n    found = -1;\n    NowMonstorUnit->chara[monster_no][0].GetPosition(position);\n\n    for (i = 0; i < 16; i++) {\n        if (i != monster_no && NowMonstorUnit->monster[i].state == 2) {\n            NowMonstorUnit->chara[i][0].GetPosition(other_position);\n            float distance = DistVector(position, other_position);\n\n            if (distance < nearest) {\n                sceVu0CopyVector(found_position, other_position);\n                nearest = distance;\n                found = i;\n            }\n        }\n    }\n\n    SetStack(stack++, found_position[0]);\n    SetStack(stack++, found_position[1]);\n    SetStack(stack++, found_position[2]);\n    SetStack(stack, found);\n}",
+          "new": "int _GET_NEAR_MONSTER(RS_STACKDATA *stack, int argc) {\n    int   found;\n    int   i;\n    int   monster_no = NowMonstorUnit->current_monster;\n    float nearest = 240.0f;\n    float position[4];\n    float other_position[4];\n    float found_position[4];\n\n    found = -1;\n    NowMonstorUnit->chara[monster_no][0].GetPosition(position);\n\n    for (i = 0; i < NowMonstorUnit->SlotLimit(); i++) {\n        if (i != monster_no && NowMonstorUnit->monster[i].state == 2) {\n            NowMonstorUnit->chara[i][0].GetPosition(other_position);\n            float distance = DistVector(position, other_position);\n\n            if (distance < nearest) {\n                sceVu0CopyVector(found_position, other_position);\n                nearest = distance;\n                found = i;\n            }\n        }\n    }\n\n    SetStack(stack++, found_position[0]);\n    SetStack(stack++, found_position[1]);\n    SetStack(stack++, found_position[2]);\n    SetStack(stack, found);\n}",
+          "count": 1
+        }
+      ]
+    },
+    "src/btitem.cpp": {
+      "sha256": "db5f96dea625f1c5eaa00a6ae44865c4b6be1db868dcaf030b6b092e66862e87",
+      "replacements": [
+        {
+          "old": "unit_no < 16",
+          "new": "unit_no < NowMonstorUnit->SlotLimit()",
+          "count": 1
+        }
+      ]
+    },
+    "src/shot_utils.cpp": {
+      "sha256": "e91737c9f005e9c3a8fa4facf68d17b25d54baaa8cfd72da6094cd6f1bfcd859",
+      "replacements": [
+        {
+          "old": "monster_no < 16",
+          "new": "monster_no < NowMonstorUnit->SlotLimit()",
+          "count": 1
+        },
+        {
+          "old": "monster_no < 17",
+          "new": "monster_no < NowMonstorUnit->SlotLimit()",
           "count": 1
         }
       ]

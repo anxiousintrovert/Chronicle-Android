@@ -122,9 +122,9 @@ extern s32             rogoY3;
 static void DrawMonstorDetail() {
     CMonstorUnit *unit = NowMonstorUnit;
     float         detail = ConfigDetailDistance();
-    bool          dormant[16];
+    bool          dormant[chronicle::monsters::StorageCapacity];
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < unit->SlotLimit(); i++) {
         MONSTOR *monster = &unit->monster[i];
         dormant[i] = monster->state == 1 && monster->revealed != 0 && monster->player_distance < detail;
 
@@ -135,7 +135,7 @@ static void DrawMonstorDetail() {
 
     unit->DrawMonstor();
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < unit->SlotLimit(); i++) {
         if (dormant[i]) {
             unit->monster[i].state = 1;
         }
