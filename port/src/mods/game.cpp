@@ -20,6 +20,7 @@
 #include "runtime.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
+#include "loot.hpp"
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning_native.hpp"
@@ -171,6 +172,12 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 void TickGame() {
     RetainQuickUse();
     RetainPlayerTuningOwners();
+    static std::uint64_t loot_epoch = 0;
+    if (HasOwnedLoot()) {
+        if (loot_epoch != Scripts().Epoch()) RetainOwnedLoot({});
+        else RetainOwnedLoot(Scripts().ActiveOwners());
+    }
+    if (!HasOwnedLoot()) loot_epoch = Scripts().Epoch();
     static std::uint64_t shop_epoch = 0;
     if (HasOwnedShops() && ShopTablesSafe()) {
         if (shop_epoch != Scripts().Epoch()) {
@@ -224,6 +231,11 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "dungeon.loot_get") {
+            auto result = ReadLoot(arguments);
+            result["writable"] = ShopWritesReady();
+            return result;
+        }
         if (operation.starts_with("shops.")) {
             auto result = ReadShop(operation, arguments);
             result["writable"] = ShopWritesReady();
@@ -312,6 +324,7 @@ void TickGame() {
         return true; }, deaths, dropped_deaths);
     RetainPlayerTuningOwners();
     RetainQuickUse();
+    if (HasOwnedLoot()) RetainOwnedLoot(Scripts().ActiveOwners());
     if (HasOwnedShops() && ShopTablesSafe()) {
         RetainOwnedShops(Scripts().ActiveOwners());
     }

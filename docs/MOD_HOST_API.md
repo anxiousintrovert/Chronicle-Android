@@ -1482,3 +1482,46 @@ These are explicit persistent save edits. Disabling the authoring mod does not
 undo them; record and restore originals if temporary behavior is desired.
 Existing native floor-entry logic reads the saved table. No generation, capacity,
 per-frame rules override or default gameplay package is added.
+
+### Owned monster loot definitions
+
+`dungeon.loot_get {monster=0}` (`game.read`) reads a retail monster definition
+with ID 0-166. It returns `monster`, `rare_item`, `steal_item`, `attachment_kind`,
+`drops_items`, per-field `owners`, `scope="future_model_loads"`, and live
+`writable` readiness. Empty owner strings mean unclaimed fields. Monster IDs
+identify definitions, not generation-checked live entity handles.
+
+`dungeon.loot_set {monster=0, rare_item=177, steal_item=148}` (`game.write`)
+sets repair powder as the rare drop and bread as the stolen item. Either field
+may be omitted; at least one is required. Each field is owned separately, so
+different packages can coexist on different fields. Same-field conflicts name
+the monster, field and existing package owner. Set -1 to disable that item.
+
+`dungeon.loot_reset {monster=0, field="rare_item"}` releases one field owned by
+the caller. Reset and owner/runtime retirement restore the original only when
+the current value still matches the owned value, preserving later external
+changes. An unclaimed reset is a no-op; resetting another owner's field fails.
+Writes require stable town walking or dungeon play outside events. Arm writes
+through shared-manager actions and apply them after menus close. Loot writes
+share callback rollback with inventory, currency, shops and entity commands.
+
+Native definitions are copied when monster models load and again when actors
+are created. Changes and restoration affect subsequent model loads; existing
+model caches and actors retain their copied values. These overrides are not
+save edits and must be reapplied by the mod after runtime reload. Reads within
+a callback see committed state, not earlier writes still staged in that callback.
+
+Values must resolve to existing native item, attachment or weapon definitions.
+Synthesis spheres are rejected because their weapon-derived payload cannot be
+represented by an item ID. This does not register contributor-owned custom
+items/weapons. `attachment_kind` is the monster's combat family and is read-only;
+`drops_items` is also read-only. Native rare-drop probability, steal checks,
+forced drops and gate-key handling are unchanged. Chest loot is a separate API gap.
+
+Native pickup semantics still apply. Full dungeon-item and attachment bags reject
+pickups. The native weapon acceptance check does not reject a full weapon array;
+when all eleven slots are occupied, the subsequent grant returns failure. A loot
+definition override is not a guarantee that a generated pickup grants an item.
+Authors should account for weapon capacity; this API does not change the retail
+pickup path or overflow behavior. No ownership table entries, definition writes
+or additional drop hooks exist without explicit calls.

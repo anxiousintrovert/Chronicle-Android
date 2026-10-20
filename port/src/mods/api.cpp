@@ -11,6 +11,7 @@
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
+#include "loot.hpp"
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning.hpp"
@@ -49,6 +50,9 @@ constexpr Operation operations[] = {
     {"party.town_set_active", "game.write", "Own the visible retail town character until released or disabled.", true},
     {"party.switch_state", "game.read", "Inspect native party-switch readiness and the last request.", false},
     {"party.set_active", "game.write", "Request a native character switch after the current frame.", true},
+    {"dungeon.loot_get", "game.read", "Inspect retail monster loot definitions and per-field owners.", false},
+    {"dungeon.loot_set", "game.write", "Own rare or stolen loot for future monster model loads.", true},
+    {"dungeon.loot_reset", "game.write", "Release one owned loot field with conditional restoration.", true},
     {"shops.list",                "game.read",     "List native shop lineups and shared base prices.",                             false},
     {"shops.get",                 "game.read",     "Inspect one native shop and its current resource owners.",                     false},
     {"shops.set_items",           "game.write",    "Own a native shop lineup of up to 20 retail goods.",                           true },
@@ -252,6 +256,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "dungeon.locations" || name == "dungeon.enter" || name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
+    if (name == "dungeon.loot_get" || IsLootWrite(name)) return ValidateLoot(name, a);
     if (name.starts_with("shops.")) {
         return ValidateShop(name, a);
     }
