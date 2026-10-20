@@ -1128,6 +1128,21 @@
           "old": "s32 roomStackCnt;",
           "new": "s32 roomStackCnt;\n\nstd::vector<std::byte> CaptureDungeonBuildScratch() {\n    std::vector<std::byte> bytes(sizeof(scanRoomInfoWork) + sizeof(buildMapDat) + sizeof(buildMapWork) + sizeof(roomStack) + sizeof(roomStackCnt));\n    std::size_t offset = 0;\n    auto copy = [&](const auto &state) {\n        std::memcpy(bytes.data() + offset, &state, sizeof(state));\n        offset += sizeof(state);\n    };\n    copy(scanRoomInfoWork); copy(buildMapDat); copy(buildMapWork); copy(roomStack); copy(roomStackCnt);\n    return bytes;\n}\n\nbool RestoreDungeonBuildScratch(std::span<const std::byte> bytes) noexcept {\n    if (bytes.size() != sizeof(scanRoomInfoWork) + sizeof(buildMapDat) + sizeof(buildMapWork) + sizeof(roomStack) + sizeof(roomStackCnt)) return false;\n    std::size_t offset = 0;\n    auto copy = [&](auto &state) {\n        std::memcpy(&state, bytes.data() + offset, sizeof(state));\n        offset += sizeof(state);\n    };\n    copy(scanRoomInfoWork); copy(buildMapDat); copy(buildMapWork); copy(roomStack); copy(roomStackCnt);\n    return true;\n}\n",
           "count": 1
+        },
+        {
+          "old": "while (object_count < target_count + 3) {",
+          "new": "while (object_count < chronicle::dungeon::ChestTarget(target_count + 3)) {",
+          "count": 1
+        },
+        {
+          "old": "this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_LARGE, trap_no);",
+          "new": "chronicle::dungeon::RequireBuild(this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_LARGE, trap_no) != -1, \"custom chest placement exceeds object capacity\");",
+          "count": 1
+        },
+        {
+          "old": "this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_SMALL, 0);",
+          "new": "chronicle::dungeon::RequireBuild(this->SetTreasureBox(box_pos, item_no, TREASURE_BOX_SMALL, 0) != -1, \"custom chest placement exceeds object capacity\");",
+          "count": 1
         }
       ]
     },

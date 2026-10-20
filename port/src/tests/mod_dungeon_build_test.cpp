@@ -9,6 +9,23 @@
 #include "dun/gameloop.hpp"
 #include "dungeonmap.hpp"
 
+TEST(ModDungeonBuild, ChestTargetIsExplicitAndScopeBounded) {
+    using namespace chronicle::dungeon;
+    EXPECT_EQ(ChestTarget(7), 7);
+    {
+        BuildScope layout({64, 46, 3, 6, 12});
+        EXPECT_EQ(ChestTarget(7), 12);
+        {
+            BuildScope nested({64, 46, 3, 6});
+            EXPECT_EQ(ChestTarget(4), 4);
+        }
+        EXPECT_EQ(ChestTarget(4), 12);
+        EXPECT_THROW(BuildScope({64, 46, 3, 6, 25}), std::invalid_argument);
+        EXPECT_EQ(ChestTarget(4), 12);
+    }
+    EXPECT_EQ(ChestTarget(7), 7);
+}
+
 TEST(ModDungeonBuild, ScopeRestoresDefaultsAfterRejectedPacking) {
     using namespace chronicle::dungeon;
     CDngStatusData status{};

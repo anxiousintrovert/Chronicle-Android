@@ -2009,3 +2009,18 @@ Validation: Clang 23.1.2 Windows game/test builds pass. Full suite: 795 passed,
 57 skipped, one disabled; all 29 Python checks pass. Both 3,840-case empty
 and disabled-mod exports match pinned upstream except map memory size.
 PS2 source is unchanged. Linux, macOS and Android remain unverified.
+
+
+### Explicit generated chest targets
+
+Owned layouts accept an optional chests field (2-24). Omission preserves the
+retail random target. Native map/crystal assignment and loot selection remain
+in use. Actual front/back totals are reported; existing generation chests
+consume the same 24 slots. Slot or placement exhaustion rejects staging and
+uses retail fallback. Larger chest storage, loot overrides and monster
+population controls remain outstanding.
+
+Clang 23.1.2 game/test builds pass: 796 tests passed, 57 skipped, one disabled.
+All 29 Python checks and seven first-floor PAL Lua-driven 12-chest/back-floor
+replays pass. Both 3,840-case empty/disabled seed exports match pinned upstream
+except map memory size. PS2 source is unchanged; other platforms unverified.

@@ -55,8 +55,11 @@ std::string ValidateLayout(std::string_view op, const Json &a) {
     if (op != "dungeon.layout_set") {
         return a.size() == 1 ? "" : "layout get/reset takes only dungeon";
     }
-    if (a.size() != 5) {
-        return "layout_set requires dungeon, rooms, area, room_min and room_max";
+    if (a.size() != 5 && !(a.size() == 6 && a.contains("chests"))) {
+        return "layout_set requires dungeon, rooms, area, room_min and room_max; chests is optional";
+    }
+    if (a.contains("chests") && (!a["chests"].is_number_integer() || a["chests"].get<double>() < 2 || a["chests"].get<double>() > 24)) {
+        return "chests must be in 2..24";
     }
     for (const auto &[field, bounds] : std::map<std::string, std::pair<int, int>>{
              {"rooms",    {2, 64}},
@@ -97,6 +100,7 @@ Json ReadLayout(const Json &a) {
             {"room_max", claim.layout.room_max}
         };
         out["last_build"] = claim.result;
+        if (claim.layout.chests != 0) out["requested"]["chests"] = claim.layout.chests;
     }
     return out;
 }
@@ -143,7 +147,7 @@ bool LayoutTransaction::Stage(const std::vector<GameCommand> &commands, std::str
             }
             const auto &a = command.arguments;
             staged_->values[dungeon] = {
-                command.owner, {a.at("rooms"), a.at("area"), a.at("room_min"), a.at("room_max")},
+                command.owner, {a.at("rooms"), a.at("area"), a.at("room_min"), a.at("room_max"), a.value("chests", 0)},
                  Scripts().Epoch(), {{"state", "pending"}}
             };
         }
@@ -186,7 +190,9 @@ bool BuildOwnedDungeonLayout() {
             {"state",       "applied"                          },
             {"floor",       SaveData->GetDngStatus()->cur_floor},
             {"front_rooms", prepared->front->room_num          },
-            {"back_rooms",  prepared->back->room_num           }
+            {"back_rooms",  prepared->back->room_num           },
+            {"front_chests", prepared->front->box_num},
+            {"back_chests", prepared->back->box_num}
         };
     } catch (const std::exception &e) {
         claim.result = {

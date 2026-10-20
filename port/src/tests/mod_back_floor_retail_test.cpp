@@ -78,6 +78,13 @@ void BackPump() {
                     });
                     EXPECT_EQ(state["owner"], "audit.back");
                     EXPECT_EQ(state["last_build"]["state"], expected_expanded ? "applied" : "rejected") << state.dump();
+                    if (expected_expanded) {
+                        EXPECT_EQ(state["requested"]["chests"], 12);
+                        EXPECT_GE(MainDungeonMap.box_num, 12);
+                        EXPECT_GE(UraDungeonMap.box_num, 12);
+                        EXPECT_EQ(state["last_build"]["front_chests"], MainDungeonMap.box_num);
+                        EXPECT_EQ(state["last_build"]["back_chests"], UraDungeonMap.box_num);
+                    }
                     if (!expected_expanded) {
                         EXPECT_FALSE(state["last_build"]["reason"].get<std::string>().empty());
                         EXPECT_EQ(MainDungeonMap.GridExtent(), 20);
@@ -206,7 +213,7 @@ end}
         std::ifstream input_script(script_path);
         std::string   source((std::istreambuf_iterator<char>(input_script)), {});
         input_script.close();
-        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6" : ",area=8,room_min=6,room_max=6";
+        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12" : ",area=8,room_min=6,room_max=6";
         const std::string init = "return {on_game_enter=function() assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
         source.replace(source.find("return {on_tick="), std::string("return {on_tick=").size(), init);
         std::ofstream(script_path) << source;

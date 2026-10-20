@@ -80,6 +80,13 @@ TEST_F(ModDungeonLayout, ValidationAndOwnerRetirement) {
         EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
     }
     auto a = command.arguments;
+    for (int count : {1, 25}) {
+        a["chests"] = count;
+        EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    }
+    a["chests"] = 12;
+    EXPECT_TRUE(mods::ValidateOperation(command.operation, a).empty());
+    command.arguments = a;
     a["room_min"] = 6;
     a["room_max"] = 3;
     EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
@@ -88,6 +95,7 @@ TEST_F(ModDungeonLayout, ValidationAndOwnerRetirement) {
     ASSERT_TRUE(tx.Stage({command}, error));
     tx.Commit();
     EXPECT_TRUE(mods::HasOwnedLayouts());
+    EXPECT_EQ(mods::ReadLayout({{"dungeon", 0}})["requested"]["chests"], 12);
     mods::RetainOwnedLayouts({});
     EXPECT_FALSE(mods::HasOwnedLayouts());
 }

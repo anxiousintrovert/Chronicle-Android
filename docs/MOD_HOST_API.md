@@ -1503,12 +1503,22 @@ dungeon (0–6). Rooms must be 2–64, area 8–46, and room sides 3–6 with
 One package owns each dungeon's layout; a conflicting write reports its owner.
 These writes participate in callback rollback.
 
+An optional `chests=12` requests 2–24 generated treasure chests on each front
+and back floor. Omit it to retain the retail random target. The first two front
+floor chests retain native map/crystal assignment; other contents still use
+retail loot selection. This does not increase the 24 chest slots: existing
+generation chests also occupy slots, so a request may fail within the numeric
+range. Exhaustion or bounded placement failure rejects the staged layout and
+falls back to retail generation. Larger capacity and chest loot overrides
+remain separate work.
+
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is
-`{state="pending"}`, `{state="applied",floor,front_rooms,back_rooms}`, or
+`{state="pending"}`, `{state="applied",floor,front_rooms,back_rooms,front_chests,back_chests}`, or
 `{state="rejected",reason}`. Acceptance of the configuration does not guarantee
 that a later floor can be built. Rejected preparation restores generation state
-and falls back to native retail generation.
+and falls back to native retail generation. Reported chest counts include
+preexisting generation chests.
 
 `dungeon.layout_reset {dungeon=0}` (`game.write`) removes the caller's claim.
 Owner retirement or runtime reset also removes claims. Existing loaded floors
