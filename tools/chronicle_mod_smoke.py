@@ -21,6 +21,18 @@ SUITES = {
                ('Forest', 'Shipwreck', 'Temple', 'MoonSea', 'Gallery', 'DemonShaft')],
     'lifecycle': ['MaximumPopulationReturnsToRetailLimits', 'QuitWithMaximumPopulation',
                   'ExceptionWithMaximumPopulation', 'PartialPopulationIsReported', 'RejectedManagedLayoutUsesRetail'],
+    'georama': ['ModGeoramaRetail.SharedActionsUpdateRequestCacheAndSurviveNativeSave',
+                'ModGeoramaRetail.SharedActionsPlaceRemoveAndPersistNativeTown',
+                'AtlaCollectionThroughSharedActionPreservesBackTransition'],
+    'rendering': ['CameraSnapshotThroughSharedActionPreservesBackTransition',
+                  'CameraOrbitThroughSharedActionRestoresBeforeBackTransition',
+                  'LightingSnapshotThroughSharedActionPreservesBackTransition',
+                  'LightingWriteResetRendersAndPreservesBackTransition'],
+}
+
+SCENARIO_PROFILES = {
+    'ModGeoramaRetail.SharedActionsUpdateRequestCacheAndSurviveNativeSave': 'DC_GEORAMA_REQUEST_AUDIT',
+    'ModGeoramaRetail.SharedActionsPlaceRemoveAndPersistNativeTown': 'DC_GEORAMA_PLACEMENT_AUDIT',
 }
 
 
@@ -76,7 +88,8 @@ def run_smoke(build, data, output, suites=None, timeout=120):
     require(not output.exists(), 'output must be a new directory; previous evidence is never reused')
     suites = suites or list(SUITES)
     require(all(suite in SUITES for suite in suites), 'unknown smoke suite')
-    names = list(dict.fromkeys('ModBackFloorRetail.' + name for suite in suites for name in SUITES[suite]))
+    names = list(dict.fromkeys(name if '.' in name else 'ModBackFloorRetail.' + name
+                              for suite in suites for name in SUITES[suite]))
     binary = build / ('darkcloud_tests.exe' if os.name == 'nt' else 'darkcloud_tests')
     require(binary.is_file(), f'missing test executable: {binary}')
     compiler = compiler_metadata(build)
@@ -102,8 +115,12 @@ def run_smoke(build, data, output, suites=None, timeout=120):
         xml = folder / 'result.xml'
         env = {key: value for key, value in os.environ.items()
                if not key.upper().startswith('GTEST_') and not key.upper().startswith('DC_')}
-        env.update(DC_DATA=str(data), DC_BACK_FLOOR_AUDIT=str(folder), DC_EXPANDED_BACK_FLOOR_AUDIT='1')
-        item.update(status='running', directory=str(folder))
+        profile_key = SCENARIO_PROFILES.get(item['name'], 'DC_BACK_FLOOR_AUDIT')
+        env.update(DC_DATA=str(data))
+        env[profile_key] = str(folder)
+        if profile_key == 'DC_BACK_FLOOR_AUDIT':
+            env['DC_EXPANDED_BACK_FLOOR_AUDIT'] = '1'
+        item.update(status='running', directory=str(folder), profile_environment=profile_key)
         save()
         start = time.monotonic()
         try:
@@ -119,6 +136,8 @@ def run_smoke(build, data, output, suites=None, timeout=120):
         except OSError as error:
             item.update(status='failed', reason=str(error))
         item['seconds'] = round(time.monotonic() - start, 3)
+        # Some rendering scenarios produce before/apply/reset evidence.
+        item['images'] = sorted(path.relative_to(output).as_posix() for path in folder.glob('*.png') if path.is_file())
         save()
         print(f"{item['status']}: {item['name']}", flush=True)
     report['complete'] = True

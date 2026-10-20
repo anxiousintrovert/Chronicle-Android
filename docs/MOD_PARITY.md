@@ -24,7 +24,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
-| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
+| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
@@ -2754,3 +2754,30 @@ Clang 23.1.2 builds; 846 tests passed, 92 skipped, one disabled; 35 Python check
 passed. Regenerated 3840 seed cases: empty and disabled packages have no non-size
 difference from pinned upstream 50eaff63; only map_bytes differs 142512 vs 76576.
 This is generator evidence, not proof of all no-mod gameplay on every platform.
+
+
+### Author scene-validation suites (2026-10-20)
+
+chronicle_mod_smoke.py now runs mixed native test suites, selecting the matching
+fresh Georama request/placement profile variable instead of assuming every test
+uses the back-floor profile. New georama and rendering suites cover seven
+shared-menu scenarios: request cache, placement/removal, Atla collection, camera
+read/write and lighting read/rendered write/reset. Default coverage is 33 scenarios.
+Each result identifies its profile variable and relative PNG evidence paths.
+Repeated suite selection remains deduplicated and inherited audit/sharding
+variables are removed. No user mod directory or personal save is used.
+
+All seven new scenarios passed through the author runner with Clang 23.1.2 build
+metadata, and all 36 Python checks pass. The mixed-suite test verifies profile
+isolation, deduplication and retained rendering artifacts. Existing executable
+behavior was unchanged in this tooling-only update; no C++ rebuild was needed.
+The public host operation count remains 125.
+
+Audio audit for subsequent work: the pinned official Kazarov exposes byte-based
+LoadPcmTrack (WAV/FLAC/Ogg Vorbis), PcmTrack, StreamChannel and Mixer stream-channel
+registration/removal. Chronicle sound.cpp uses audio::DefaultMixer. The pinned
+MoonMod reference uses those stream facilities for owned custom sounds and a
+separate sequence replacement map for music. No private audio backend is implied
+by these capabilities. Registration/decode budgets, asset ownership, callback
+transactions, audio-thread lifetime and disable cleanup still need implementation
+and verification; this audit does not expose audio operations.

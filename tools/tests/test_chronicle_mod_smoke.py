@@ -71,6 +71,32 @@ class RetailSmoke(unittest.TestCase):
         self.assertEqual(smoke.classify_result(xml, 'S.T', 0)[0], 'failed')
         self.assertEqual(smoke.classify_result(xml, 'S.T', 1)[0], 'failed')
 
+    def test_mixed_suites_select_native_profile_and_keep_render_evidence(self):
+        def run(args, **kwargs):
+            folder = Path(kwargs['cwd'])
+            (folder / 'lighting-1.png').write_bytes(b'fixture-image')
+            return self.fake_run(args, **kwargs)
+        with patch.dict(os.environ, {'DC_GEORAMA_REQUEST_AUDIT': 'stale',
+                                     'DC_GEORAMA_PLACEMENT_AUDIT': 'stale',
+                                     'DC_BACK_FLOOR_AUDIT': 'stale'}), \
+                patch.object(smoke.subprocess, 'run', side_effect=run) as calls, \
+                contextlib.redirect_stdout(io.StringIO()):
+            report = smoke.run_smoke(self.build, self.data, self.output,
+                                     ['georama', 'rendering', 'georama'])
+        self.assertTrue(report['passed'])
+        self.assertEqual(len(report['scenarios']), 7)
+        for item, call in zip(report['scenarios'], calls.call_args_list):
+            expected = smoke.SCENARIO_PROFILES.get(item['name'], 'DC_BACK_FLOOR_AUDIT')
+            env = call.kwargs['env']
+            self.assertEqual(env[expected], item['directory'])
+            for other in {'DC_GEORAMA_REQUEST_AUDIT', 'DC_GEORAMA_PLACEMENT_AUDIT',
+                          'DC_BACK_FLOOR_AUDIT'} - {expected}:
+                self.assertNotIn(other, env)
+            self.assertEqual('DC_EXPANDED_BACK_FLOOR_AUDIT' in env, expected == 'DC_BACK_FLOOR_AUDIT')
+            self.assertEqual(item['profile_environment'], expected)
+            self.assertEqual(len(item['images']), 1)
+            self.assertTrue((self.output / item['images'][0]).is_file())
+
     def test_timeout_is_recorded_and_other_scenarios_continue(self):
         attempts = 0
         def run(args, **kwargs):

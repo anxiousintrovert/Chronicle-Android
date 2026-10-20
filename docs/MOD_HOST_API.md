@@ -443,11 +443,19 @@ Supply your extracted PAL data and a **new** output directory:
 python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../smoke-results
 ```
 
-The default runs twenty-six built-in scenarios: seven retail back-floor transitions,
-seven public 256-monster layouts, seven owned chest-loot scenarios, and five
-population lifecycle/rejection cases.
-Use repeatable `--suite retail`, `--suite population`, `--suite chests`, or `--suite lifecycle` to
-select a subset. `--timeout 120` controls the per-process deadline in seconds.
+The default runs thirty-three built-in scenarios: seven retail back-floor transitions,
+seven public 256-monster layouts, seven owned chest-loot scenarios, five
+population lifecycle/rejection cases, three Georama/Atla scenarios and four
+camera/lighting scenarios. Use repeatable `--suite retail`, `--suite population`,
+`--suite chests`, `--suite lifecycle`, `--suite georama`, or `--suite rendering`
+to select a subset. `--timeout 120` controls the per-process deadline in seconds.
+
+For example, reproduce the shared-menu Georama request/placement/Atla tests and
+camera/lighting inspection, apply/reset and rendered lighting tests:
+
+```text
+python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../scene-smoke --suite georama --suite rendering
+```
 
 Each scenario runs sequentially in a fresh process with its own save profile,
 audit package, XML result and `process.log`. The packages exercise the shared
@@ -459,7 +467,8 @@ put llvm-mingw and SDL DLL directories on PATH as for the normal test command.
 Avoid running another graphics test simultaneously.
 
 `report.json` records the executable SHA-256, compiler metadata, selected suites,
-per-scenario status, duration and logs. It is updated after each scenario so an
+per-scenario status, duration, logs, profile environment key and relative PNG
+evidence paths when a scenario produces images. It is updated after each scenario so an
 interrupted run remains visibly incomplete. A successful exit requires every
 selected test to execute and pass: skips, missing or mismatched XML results,
 zero-test runs, process errors and timeouts all fail the command. Timeout kills
