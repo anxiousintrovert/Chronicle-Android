@@ -107,6 +107,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | Capability | Host service |
 |---|---|
 | `assets.replace.v1` | Existing same-size game asset replacement |
+| `quests.rewards.v1` | Transactional one-time quest currency/item/weapon rewards |
 | `quests.lifecycle.v1` | Opt-in explicit quest start and registered/active/completed status |
 | `quests.objectives.v1` | Dynamic quests with up to 16 independently tracked named objectives |
 | `quests.dynamic.v1` | Transactional registration and progression of owned saved objectives |
@@ -244,9 +245,9 @@ reject collisions with existing unrelated destinations. Removals are bounded to
 Defaults are up to 128 boolean, finite-number or at-most-256-byte string values;
 they only fill absent keys after renaming/removal and cannot recreate a removed
 key. Quest progress is preserved, not clamped or reset. Dynamic quest definitions move
-with their progress, named-objective counters and explicit-start records when `rename_quests` is used. Include any corresponding
-reward-granted flags in the migration design; the framework does not infer reward
-semantics or replay rewards for you.
+with their progress, named-objective counters, explicit-start records and reward receipts when `rename_quests` is used. Include any corresponding
+reward-granted flags in the migration design; declarative receipts migrate automatically. The framework does not infer
+semantics for author-managed reward flags or replay rewards on migration.
 
 Loading validates old state, applies each required owner's declared transform to
 a detached copy, validates the resulting state and initializes the new runtime

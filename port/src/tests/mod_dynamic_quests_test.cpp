@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
 #include "mods/quests.hpp"
+#include "mods/api.hpp"
+#include "savedata.hpp"
 #include "mods/runtime.hpp"
 #include <chrono>
 #include <filesystem>
@@ -84,6 +86,20 @@ TEST(ModDynamicQuests, ExplicitLifecycleRequiresStartAndCannotRestartCompletedQu
     Json legacy=Json::object();EXPECT_EQ(mods::CallOwnedQuest({},legacy,"quests.register",Definition())["status"],"active");
     const auto legacyBefore=legacy;mods::CallOwnedQuest({},legacy,"quests.start",{{"id","dynamic"}});EXPECT_EQ(legacy,legacyBefore);
 }
+TEST(ModDynamicQuests, RewardValidationAndClaimRecordsPreventReplay) {
+    auto definition=Definition();definition["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",7}}}}};
+    Json state=Json::object();mods::CallOwnedQuest({},state,"quests.register",definition);const auto before=state;
+    EXPECT_THROW(mods::CallOwnedQuest({},state,"quests.advance",{{"id","dynamic"},{"amount",3}}),std::runtime_error);EXPECT_EQ(state,before);
+    int grants=0;auto grant=[&](const Json &rewards){EXPECT_EQ(rewards,definition["rewards"]);++grants;};
+    auto result=mods::CallOwnedQuest({},state,"quests.advance",{{"id","dynamic"},{"amount",3}},grant);EXPECT_EQ(result["rewards_granted"],true);
+    mods::CallOwnedQuest({},state,"quests.advance",{{"id","dynamic"},{"amount",3}},grant);EXPECT_EQ(grants,1);
+    auto bad=state;bad.erase("quest_rewarded");EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+    bad=before;bad["quest_rewarded"]["dynamic"]=true;EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+    bad=state;bad["quest_rewarded"]["foreign"]=true;EXPECT_THROW(mods::QuestDefinitions({},bad),std::runtime_error);
+    for(const Json &rewards:std::vector<Json>{Json::array(),{{{"operation","economy.spend"},{"arguments",{{"amount",1}}}}},{{{"operation","economy.add"},{"arguments",{{"amount",0}}}}}}) {
+        auto invalid=definition;invalid["rewards"]=rewards;EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",invalid).empty());
+    }
+}
 class ModDynamicQuestRuntime:public testing::Test {
 protected:
     std::filesystem::path root=std::filesystem::temp_directory_path()/("chronicle-dynamic-quest-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -158,6 +174,70 @@ TEST_F(ModDynamicQuestRuntime, MultiObjectiveChangesRollBackWithRejectedGameComm
     end})");Start();runtime.Tick({1,2,0,true},[](int){return false;});
     EXPECT_FALSE(runtime.Diagnostics().empty());const auto state=State()["mods"]["test.mod"];
     EXPECT_FALSE(state.contains("quests"));EXPECT_FALSE(state.contains("quest_objectives"));EXPECT_FALSE(state.contains("quest_definitions"));EXPECT_FALSE(state.contains("quest_started"));
+}
+
+TEST_F(ModDynamicQuestRuntime, RewardsCommitOnceAndMigrateWithoutRegranting) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='reward',title='Reward',description='Finish this quest',goal=1,
+            rewards={{operation='economy.add',arguments={amount=7}},
+                     {operation='inventory.give',arguments={item=132,quantity=1,seed=42}},
+                     {operation='weapons.give',arguments={item=257,seed=42}}}}))
+        assert(chronicle.call('quests.advance',{id='reward',amount=1}).rewards_granted)
+    end})",Json{{{"from","1"},{"rename_quests",{{"reward","renamed"}}}}});
+    Start();auto save=std::make_unique<CSaveData>();save->GetDngStatus()->money=0;int commits=0;
+    mods::CommitGame commit=[&](const auto &commands,int money,std::string &error){++commits;EXPECT_EQ(commands.size(),3u);for(const auto &command:commands)EXPECT_EQ(command.owner,"test.mod");return mods::ApplySave(*save,commands,money,error);};
+    runtime.Tick({1,2,0,true},{},{},{},commit);ASSERT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(commits,1);EXPECT_EQ(save->GetDngStatus()->money,7);
+    runtime.Tick({1,2,7,true},{},{},{},commit);EXPECT_EQ(commits,1);
+    auto old=State();old["required"]["test.mod"]="1";std::string error;ASSERT_TRUE(runtime.LoadState(old.dump(),error))<<error;
+    EXPECT_EQ(State()["mods"]["test.mod"]["quest_rewarded"]["renamed"],true);EXPECT_FALSE(State()["mods"]["test.mod"]["quest_rewarded"].contains("reward"));
+    const auto saved=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(saved,error))<<error;EXPECT_EQ(runtime.SaveState(),saved);
+}
+TEST_F(ModDynamicQuestRuntime, RewardFailureRollsBackProgressAndCallbackCommands) {
+    const std::string script=R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='reward',title='Reward',description='Finish this quest',goal=1,
+            rewards={{operation='economy.add',arguments={amount=7}}}}))
+        assert(chronicle.quest_add('reward',1)==1)
+    end})";
+    Add("test.mod",script);Start();int commits=0;
+    runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &error){++commits;error="reward rejected";return false;});
+    EXPECT_EQ(commits,1);EXPECT_FALSE(runtime.Diagnostics().empty());const auto state=State()["mods"]["test.mod"];
+    EXPECT_FALSE(state.contains("quest_rewarded"));EXPECT_FALSE(state.contains("quest_definitions"));EXPECT_FALSE(state.contains("quests"));
+}
+
+TEST_F(ModDynamicQuestRuntime, DeniedRewardDoesNotLeakEarlierGrantsOrProgressWhenCaught) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='reward',title='Reward',description='Finish',goal=1,
+          rewards={{operation='inventory.give',arguments={item=132,quantity=1,seed=42}},
+                   {operation='economy.add',arguments={amount=7}}}}))
+        local result,err=chronicle.call('quests.advance',{id='reward',amount=1})
+        assert(not result and string.find(err,'permission denied'))
+        assert(chronicle.call('quests.get',{id='reward'}).progress==0)
+        assert(chronicle.set('caught',true))
+    end})");
+    auto manifestPath=root/"test.mod/mod.json";Json manifest;{std::ifstream in(manifestPath);in>>manifest;}manifest["permissions"]={"game.read","game.write"};std::ofstream(manifestPath)<<manifest.dump();
+    Start();int commits=0;runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &){++commits;return true;});
+    EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(commits,0);const auto state=State()["mods"]["test.mod"];
+    EXPECT_EQ(state["values"]["caught"],true);EXPECT_FALSE(state.contains("quest_rewarded"));EXPECT_FALSE(state.contains("quests"));
+}
+TEST_F(ModDynamicQuestRuntime, CallbackErrorAfterRewardQueuesNoNativeWrite) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='reward',title='Reward',description='Finish',goal=1,rewards={{operation='economy.add',arguments={amount=7}}}}))
+        assert(chronicle.call('quests.advance',{id='reward',amount=1}).rewards_granted)
+        error('reject after reward')
+    end})");Start();int commits=0;runtime.Tick({1,2,0,true},{},{},{},[&](const auto &,int,std::string &){++commits;return true;});
+    EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_EQ(commits,0);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_rewarded"));
+}
+
+TEST_F(ModDynamicQuestRuntime, RewardsShareCallbackBudgetWithoutLeakingPartialBatch) {
+    Add("test.mod",R"(return {on_tick=function()
+        assert(chronicle.call('quests.register',{id='reward',title='Reward',description='Finish',goal=1,
+          rewards={{operation='economy.add',arguments={amount=7}},{operation='economy.add',arguments={amount=8}}}}))
+        for i=1,63 do assert(chronicle.call('economy.add',{amount=1})) end
+        local result,err=chronicle.call('quests.advance',{id='reward',amount=1})
+        assert(not result and string.find(err,'budget'))
+        assert(chronicle.call('quests.get',{id='reward'}).progress==0)
+    end})");Start();int commits=0;runtime.Tick({1,2,0,true},{},{},{},[&](const auto &commands,int,std::string &){++commits;EXPECT_EQ(commands.size(),63u);for(const auto &command:commands)EXPECT_EQ(command.arguments["amount"],1);return true;});
+    EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(commits,1);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_rewarded"));
 }
 
 }

@@ -21,7 +21,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible assets, package resources and explicitly enabled existing-model mesh replacement with inherited native animation/materials and runtime fallback | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
-| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page | Quest stage lifecycle and declarative rewards, dialogue trees, native quest events, skill trees, native script interception |
+| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page | Quest stage lifecycle, dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
@@ -4026,3 +4026,29 @@ Kazarov diffs remain empty. Other platforms remain unverified.
 Local evidence: issue-evidence/framework-expansion-20261019/lifecycle-menu-d61690729d9d44409c1430a20a42f4a2.
 Stage sequencing, declarative rewards, native quest events, dialogue, skills and
 the remaining broader ledger are still outstanding.
+
+
+### Declarative transactional quest rewards (2026-10-20)
+
+Added quests.rewards.v1, with optional immutable reward lists on dynamic quests.
+Completion queues 1..16 currency, retail-item or retail-weapon grants through
+existing host operations, permission checks and the shared 64-command budget.
+Progress and owned receipts commit with native state; denied calls do not leak
+partial grants even if caught by Lua. Callback failure or native rejection rolls
+back completion and receipts. Repeated completion calls do not replay rewards.
+Receipts migrate with rename_quests and are validated against saved definitions
+and completion. Read results and the shared quest page expose reward summaries
+and receipt status. No default quests, rewards or custom content registries added.
+
+Clang 23.1.2 game/test builds passed. Six new tests cover validation/replay, an
+actual ApplySave currency+item+weapon batch, persistence/migration, native commit
+rejection, permission denial after an earlier queued grant, callback failure and
+shared command budgets. The real ABI-2 fixture also completes a rewarded quest
+twice with one grant commit. Full regression: 1003 passed, 105 skipped and one
+disabled benchmark. All 68 Python checks passed. PAL-backed shared menu and
+dormant combat checks passed; reward-page rendering was visually inspected.
+PS2 baseline and official Kazarov diffs remain empty. Other platforms unverified.
+
+Local visual evidence: issue-evidence/framework-expansion-20261019/rewards-menu-8cb0501f44fe419dbc7fccf0f772a23d.
+Quest stage sequencing/native events, dialogue, skills and the broader remaining
+coverage ledger are still outstanding.

@@ -21,7 +21,7 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
-| `quests.register` | `id`, `title`, `description`, `goal` or `objectives`, optional `explicit_start` | `game.write` | Register an owned saved objective; returns its status |
+| `quests.register` | `id`, `title`, `description`, `goal` or `objectives`, optional `explicit_start`, `rewards` | `game.write` | Register an owned saved objective; returns its status |
 | `quests.start` | `id` | `game.write` | Activate an owned registered quest; completed quests cannot restart |
 | `quests.advance` | `id`, `amount`, optional `objective` | `game.write` | Transactionally advance an owned objective; returns its status |
 | `quests.list` | none | `game.read` | This owner's declared quests and saved objective progress |
@@ -2375,9 +2375,9 @@ and the shared manager's filtered Quests page include dynamic definitions. Lists
 show manifest declaration order followed by dynamic IDs in lexical order.
 
 Dynamic objectives advance only through explicit calls. There are no automatic
-native event hooks, quest-start scenes, dialogue, item/weapon grants or rewards.
-Authors must verify their events and use existing transactional grant APIs plus
-owned reward flags. No registrations, storage or native changes occur merely from
+native event hooks, quest-start scenes or dialogue. Authors must verify their
+events. Rewards can use quests.rewards.v1 below, or explicit transactional grants
+plus author-managed reward flags. No registrations, storage or native changes occur merely from
 discovering a disabled package or starting with no gameplay mods.
 
 
@@ -2419,8 +2419,8 @@ rejects unknown/out-of-range counters, missing definitions, or aggregate totals
 that disagree with individual counts. The atomic `rename_quests` migration moves
 the definition, aggregate and objective counters together. Renaming objectives or
 changing definitions remains a separate migration feature; immutable registration
-still rejects changed saved definitions. No automatic rewards, native writes or
-new native quest hooks are introduced.
+still rejects changed saved definitions. Named objectives alone do not request native writes or install native quest hooks.
+Optional declarative rewards are described below.
 
 
 ## Explicit quest lifecycle
@@ -2446,7 +2446,7 @@ Starting an active quest is idempotent; starting a completed quest fails without
 resetting progress. Completion follows existing goal/objective counters. The
 shared menu shows Not started for registered quests; the noncompleted filter
 also includes these entries. Neither opening the menu nor reading a quest starts
-it. This introduces no automatic quest events, scenes, rewards or stage logic.
+it. This introduces no automatic quest events, scenes or stage logic. Rewards require the separate explicit declaration below.
 
 Omitting explicit_start (or setting false) preserves immediate progression for
 existing single-counter and named-objective packages. Their status begins active;
@@ -2455,3 +2455,49 @@ definition and cannot be changed by re-registration. Saved quest_started records
 are owner-local, move with rename_quests, and roll back with the callback. Save
 loading rejects orphan/nonboolean/false start records and progress on an unstarted
 quest. Start records exist only after explicit requests by participating mods.
+
+
+## Declarative quest rewards
+
+Require `quests.rewards.v1`. Dynamic single-counter or named-objective quests
+may include 1..16 immutable rewards, each `{operation = "...", arguments = {...}}`.
+Supported operations are economy.add (positive amount), inventory.give (retail
+item, quantity, seed), and weapons.give (retail item, seed), using their existing
+argument validation, native capacity checks and local deterministic RNG.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "treasures", title = "Three treasures", description = "Find all three.",
+    goal = 3, rewards = {
+        {operation = "economy.add", arguments = {amount = 50}},
+        {operation = "inventory.give", arguments = {item = 132, quantity = 1, seed = 42}},
+        {operation = "weapons.give", arguments = {item = 257, seed = 42}}
+    }
+}))
+assert(chronicle.call("quests.advance", {id = "treasures", amount = 3}))
+```
+
+Completion queues the reward list once in the current callback transaction.
+The package must have each grant operation's permission (economy.write for Gilda,
+game.write for items/weapons), and a game-write provider must be active. Rewards
+share the 64-command callback budget. Permission/budget/provider failure leaves
+that quest call's counters and command queue unchanged, even when Lua catches
+the error. A later script error or rejected native commit rolls back the entire
+callback, including completion and the owned reward receipt.
+
+Get/list/advance results include authored rewards and rewards_granted. Within a
+callback this flag is staged until the callback commits, like other owned state.
+Repeated advance, registration, reading, and save loading never replay a granted
+reward. The same guarantee applies through the legacy quest_add helper and ABI-2
+native calls. The shared quest page displays reward summaries and grant status.
+
+Receipts live under the owner's quest_rewarded map and migrate with rename_quests.
+Loading rejects orphan or malformed receipts, receipts for incomplete quests, and
+completed reward quests lacking receipts. Altering rewards requires a future
+definition migration; re-registering a different reward list fails. Loading an
+older valid game save restores that save's native inventory and owned receipts
+together; this is not a global account-level anti-replay system.
+
+No rewards or engine writes occur without an explicitly enabled, participating
+mod completing its authored quest. These grants target existing retail items and
+weapons and do not allocate custom item/weapon definitions or cutscene resources.

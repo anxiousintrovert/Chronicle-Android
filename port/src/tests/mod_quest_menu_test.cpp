@@ -41,6 +41,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     first_definition.erase("goal");first_definition["objectives"]={{{"id","home"},{"title","Return to Norune"},{"goal",1}},{{"id","people"},{"title","Speak to villagers"},{"goal",2}}};
     state["mods"]["test.quests"]["quest_objectives"]["quest.0"]={{"home",1},{"people",2}};
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["explicit_start"]=true;
+    state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",50}}}}};
     std::string error;ASSERT_TRUE(mods::Scripts().LoadState(state.dump(),error))<<error;
     const auto before=mods::Scripts().SaveState();
     InputSetMenuMouse(true);
@@ -59,6 +60,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     mods::menu::Run(PAD_L1);const auto all=draw("all.png");EXPECT_TRUE(all!=manager);
     mods::menu::Run(PAD_RIGHT);EXPECT_TRUE(draw("objectives-page.png")!=all);mods::menu::Run(PAD_LEFT);
     mods::menu::Run(PAD_DOWN);mods::menu::Run(PAD_DOWN);EXPECT_TRUE(draw("registered.png")!=all);
+    mods::menu::Run(PAD_RIGHT);EXPECT_TRUE(draw("rewards.png")!=all);mods::menu::Run(PAD_LEFT);
     mods::menu::Run(PAD_UP);mods::menu::Run(PAD_UP);
     mods::menu::Run(PAD_SQUARE);const auto ongoing=draw("ongoing.png");EXPECT_TRUE(ongoing!=all);
     mods::menu::Run(PAD_SQUARE);const auto complete=draw("complete.png");EXPECT_TRUE(complete!=ongoing);

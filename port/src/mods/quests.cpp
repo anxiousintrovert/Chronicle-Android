@@ -1,4 +1,5 @@
 #include "quests.hpp"
+#include "api.hpp"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -40,6 +41,10 @@ Json Status(const Quest &quest,const Json &state) {
             auto value=objective;value["progress"]=count;value["complete"]=count>=objective["goal"].get<int>();status["objectives"].push_back(std::move(value));
         }
     }
+    if(state.contains("quest_definitions")&&state["quest_definitions"].contains(quest.id)&&state["quest_definitions"][quest.id].contains("rewards")) {
+        status["rewards"]=state["quest_definitions"][quest.id]["rewards"];
+        status["rewards_granted"]=state.contains("quest_rewarded")&&state["quest_rewarded"].value(quest.id,false);
+    }
     return status;
 }
 }
@@ -50,9 +55,20 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
     if(!a.contains("id")||!Id(a["id"]))return "invalid quest id";
     if(operation=="quests.get"||operation=="quests.start")return a.size()==1?"":"provide only quest id";
     if(operation=="quests.register") {
-        if((a.size()!=4&&a.size()!=5)||(a.size()==5&&(!a.contains("explicit_start")||!a["explicit_start"].is_boolean()))||
-           (a.contains("explicit_start")&&!a["explicit_start"].is_boolean())||!a.contains("title")||!Text(a["title"])||!a.contains("description")||!Text(a["description"]))
-            return "quest registration requires only id, bounded title/description, and goal or objectives, with optional explicit_start boolean";
+        const auto fields=4u+unsigned(a.contains("explicit_start"))+unsigned(a.contains("rewards"));
+        if(a.size()!=fields||(a.contains("explicit_start")&&!a["explicit_start"].is_boolean())||
+           !a.contains("title")||!Text(a["title"])||!a.contains("description")||!Text(a["description"]))
+            return "quest requires id, title, description, goal or objectives; optional explicit_start and rewards";
+        if(a.contains("rewards")) {
+            if(!a["rewards"].is_array()||a["rewards"].empty()||a["rewards"].size()>16)return "rewards require 1..16 grants";
+            for(const auto &reward:a["rewards"]) {
+                if(!reward.is_object()||reward.size()!=2||!reward.contains("operation")||!reward["operation"].is_string()||!reward.contains("arguments"))return "reward requires operation and arguments";
+                const auto operation=reward["operation"].get<std::string>();
+                if(operation!="economy.add"&&operation!="inventory.give"&&operation!="weapons.give")return "unsupported quest reward operation";
+                const auto error=ValidateOperation(operation,reward["arguments"]);if(!error.empty())return error;
+                if(operation=="economy.add"&&reward["arguments"]["amount"]<=0)return "currency reward must be positive";
+            }
+        }
         if(a.contains("goal")&&a.contains("objectives"))return "choose goal or objectives";
         if(a.contains("goal"))return a["goal"].is_number_integer()&&a["goal"]>=1&&a["goal"]<=1000000?"":"quest goal must be integer 1..1000000";
         if(!a.contains("objectives")||!a["objectives"].is_array()||a["objectives"].empty()||a["objectives"].size()>16)return "quest requires 1..16 objectives";
@@ -78,7 +94,7 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
         const auto &definitions=state["quest_definitions"];
         Require(definitions.is_object()&&definitions.size()+result.size()<=64,"at most 64 combined manifest and dynamic quests per owner");
         for(const auto &[id,value]:definitions.items()) {
-            Require(value.is_object()&&(value.size()==3||value.size()==4)&&!value.contains("id"),"invalid saved quest definition");
+            Require(value.is_object()&&(value.size()>=3&&value.size()<=5)&&!value.contains("id"),"invalid saved quest definition");
             auto arguments=value;arguments["id"]=id;
             const auto error=ValidateQuestOperation("quests.register",arguments);if(!error.empty())throw std::runtime_error(error);
             Require(std::ranges::none_of(result,[&](const Quest &quest){return quest.id==id;}),"saved dynamic quest collides with a manifest quest");
@@ -111,9 +127,19 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
     }
     for(const auto &quest:result)if(!Started(quest.id,state))
         Require(!state.contains("quests")||state["quests"].value(quest.id,Json(0))==0,"unstarted quest has progress");
+    if(state.contains("quest_rewarded")) {
+        Require(state["quest_rewarded"].is_object()&&state["quest_rewarded"].size()<=64,"invalid reward records");
+        for(const auto &[id,claimed]:state["quest_rewarded"].items())
+            Require(state.contains("quest_definitions")&&state["quest_definitions"].contains(id)&&state["quest_definitions"][id].contains("rewards")&&claimed.is_boolean()&&claimed.get<bool>(),"invalid or orphan reward record");
+    }
+    for(const auto &quest:result)if(state.contains("quest_definitions")&&state["quest_definitions"].contains(quest.id)&&state["quest_definitions"][quest.id].contains("rewards")) {
+        const bool complete=state.contains("quests")&&state["quests"].value(quest.id,0)>=quest.goal;
+        const bool claimed=state.contains("quest_rewarded")&&state["quest_rewarded"].value(quest.id,false);
+        Require(complete==claimed,"reward record differs from quest completion");
+    }
     return result;
 }
-Json CallOwnedQuest(const Package &package,Json &state,std::string_view operation,const Json &arguments) {
+Json CallOwnedQuest(const Package &package,Json &state,std::string_view operation,const Json &arguments,const std::function<void(const Json &)> &enqueue_rewards) {
     const auto error=ValidateQuestOperation(operation,arguments);if(!error.empty())throw std::runtime_error(error);
     auto quests=QuestDefinitions(package,state);
     if(operation=="quests.list") {
@@ -162,6 +188,12 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
         } else {
             Require(!arguments.contains("objective"),"single-objective quest does not accept objective id");
             staged["quests"][id]=std::min<long long>(found->goal,staged["quests"].value(id,0)+arguments["amount"].get<long long>());
+        }
+        if(staged.contains("quest_definitions")&&staged["quest_definitions"].contains(id)&&staged["quest_definitions"][id].contains("rewards")&&
+           staged["quests"][id].get<int>()>=found->goal&&!(staged.contains("quest_rewarded")&&staged["quest_rewarded"].value(id,false))) {
+            Require(bool(enqueue_rewards),"quest reward write provider unavailable");
+            enqueue_rewards(staged["quest_definitions"][id]["rewards"]);
+            staged["quest_rewarded"][id]=true;
         }
         const auto result=Status(*found,staged);state.swap(staged);return result;
     }

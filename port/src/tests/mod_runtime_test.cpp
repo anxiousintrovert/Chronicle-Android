@@ -1056,11 +1056,14 @@ protected:
 };
 
 TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
-    LoadPlugin("quests");runtime.Tick({1,2,0,true});
+    LoadPlugin("quests");int commits=0;
+    const mods::CommitGame commit=[&](const auto &commands,int,std::string &){++commits;EXPECT_EQ(commands.size(),1u);EXPECT_EQ(commands[0].operation,"economy.add");EXPECT_EQ(commands[0].arguments["amount"],7);return true;};
+    runtime.Tick({1,2,0,true},{},{},{},commit);
+    runtime.Tick({1,2,7,true},{},{},{},commit);EXPECT_EQ(commits,1);
     EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["quest_read"],true);
     const auto state=Json::parse(runtime.SaveState())["mods"]["test.native.v2"];
-    EXPECT_EQ(state["quests"]["dynamic"],1);EXPECT_EQ(state["quest_definitions"]["dynamic"]["goal"],3);
-    EXPECT_EQ(state["quest_objectives"]["multi"]["people"],1);
+    EXPECT_EQ(state["quests"]["dynamic"],1);EXPECT_EQ(state["quest_definitions"]["dynamic"]["goal"],1);EXPECT_EQ(state["quest_rewarded"]["dynamic"],true);
+    EXPECT_EQ(state["quest_objectives"]["multi"]["people"],2);
 }
 
 TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {

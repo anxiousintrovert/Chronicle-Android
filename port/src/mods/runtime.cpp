@@ -222,6 +222,8 @@ int Set(lua_State *L) {
     return 1;
 }
 
+Json RuntimeQuestCall(Module &m,std::string_view operation,const Json &arguments);
+
 int QuestAdd(lua_State *L) {
     if (Self(L).read_only) {
         return Failure(L, "query exports cannot write owned or game state");
@@ -233,7 +235,7 @@ int QuestAdd(lua_State *L) {
     }
     auto &m=Self(L);
     try {
-        m.snapshot=CallOwnedQuest(m.package,*m.state,"quests.advance",{{"id",id},{"amount",amount}});
+        m.snapshot=RuntimeQuestCall(m,"quests.advance",{{"id",id},{"amount",amount}});
     } catch(const std::exception &error) {m.call_error=error.what();return Failure(L,m.call_error.c_str());}
     lua_pushinteger(L,m.snapshot["progress"].get<int>());return 1;
 }
@@ -434,6 +436,22 @@ bool InvokeQueryService(Module &m, const Json &a, Json &result, std::string &err
 }
 
 
+Json RuntimeQuestCall(Module &m,std::string_view operation,const Json &arguments) {
+    if(operation=="quests.get"||operation=="quests.list")return CallOwnedQuest(m.package,*m.state,operation,arguments);
+    auto state=*m.state;
+    auto commands=Transaction(m).commands;
+    auto result=CallOwnedQuest(m.package,state,operation,arguments,[&](const Json &rewards){
+        if(!m.commit_game||!*m.commit_game)throw std::runtime_error("quest reward write provider unavailable");
+        if(commands.size()+rewards.size()>64)throw std::runtime_error("quest rewards exceed callback write budget");
+        for(const auto &reward:rewards) {
+            const auto name=reward["operation"].get<std::string>();const auto *op=FindOperation(name);
+            if(!op||!Permitted(m,op->permission))throw std::runtime_error("quest reward permission denied");
+            commands.push_back({name,reward["arguments"],m.package.id});
+        }
+    });
+    m.state->swap(state);Transaction(m).commands.swap(commands);return result;
+}
+
 int ApiCall(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
     const auto *op = FindOperation(name);
@@ -459,7 +477,7 @@ int ApiCall(lua_State *L) {
     }
     if (op->name.starts_with("quests.")) {
         if (m.read_only && op->writes) return Failure(L,"query exports cannot write owned state");
-        try { m.snapshot=CallOwnedQuest(m.package,*m.state,op->name,m.arguments); }
+        try { m.snapshot=RuntimeQuestCall(m,op->name,m.arguments); }
         catch(const std::exception &error) { m.call_error=error.what(); return Failure(L,m.call_error.c_str()); }
         PushJson(L,m.snapshot);return 1;
     }
@@ -572,7 +590,7 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             throw std::runtime_error("query exports cannot write managed or game state");
         }
         if (op->name.starts_with("quests.")) {
-            m.native_result=CallOwnedQuest(m.package,*m.state,op->name,args).dump();
+            m.native_result=RuntimeQuestCall(m,op->name,args).dump();
             *result=m.native_result.c_str();return 1;
         }
         if (op->name == "services.query") {
@@ -1769,6 +1787,14 @@ std::vector<QuestStatus> Runtime::Quests() const {
             const auto status=QuestStatusJson(q,*m->state);
             if(status.contains("objectives"))for(const auto &objective:status["objectives"])
                 description+="\n\n"+objective["title"].get<std::string>()+": "+std::to_string(objective["progress"].get<int>())+" / "+std::to_string(objective["goal"].get<int>());
+            if(status.contains("rewards")) {
+                description+=status["rewards_granted"].get<bool>()?"\n\nRewards granted":"\n\nRewards on completion";
+                for(const auto &reward:status["rewards"]) {
+                    const auto &a=reward["arguments"];const auto op=reward["operation"].get<std::string>();
+                    if(op=="economy.add")description+="\nGilda: "+std::to_string(a["amount"].get<int>());
+                    else description+="\n"+std::string(op=="inventory.give"?"Item ":"Weapon ")+std::to_string(a["item"].get<int>())+" x "+std::to_string(a.value("quantity",1));
+                }
+            }
             result.push_back({m->package.id, q.id, q.title, description, std::min(value, q.goal), q.goal, status["status"].get<std::string>()});
         }
     }
