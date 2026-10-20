@@ -3,8 +3,8 @@
 namespace chronicle::monsters {
 inline constexpr unsigned RetailSlots = 16;
 inline constexpr unsigned StorageCapacity = 256;
-// Framework indexing stays retail until lifecycle, script allocation and
-// per-unit active bounds can activate the additional native storage together.
-inline constexpr unsigned SlotCapacity = RetailSlots;
+// Framework storage follows native storage; iteration uses each unit's active
+// limit, which remains retail unless explicitly changed at a loading boundary.
+inline constexpr unsigned SlotCapacity = StorageCapacity;
 static_assert(SlotCapacity <= StorageCapacity);
 }

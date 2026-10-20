@@ -68,6 +68,7 @@ void EntityUnitCleared(CMonstorUnit *unit) {
 }
 
 void EntitySlotConstructed(CMonstorUnit *unit, unsigned slot) {
+    if (!unit || slot >= unit->SlotLimit()) return;
     ClearOwnedEnemyScales(unit, static_cast<int>(slot));
     ClearOwnedEnemyStats(unit, static_cast<int>(slot));
     ClearEntityReactions(unit, static_cast<int>(slot));

@@ -43,6 +43,8 @@ class EntityLifecycleSource(unittest.TestCase):
             with self.subTest(signature=signature):
                 adapter = function(port, signature)
                 self.assertEqual(adapter.count(notification), 1)
+                self.assertEqual(adapter.count("i < SlotLimit()"), 1)
+                adapter = adapter.replace("i < SlotLimit()", "i < 16")
                 self.assertEqual(adapter.replace(notification, ""), function(native, signature))
 
 

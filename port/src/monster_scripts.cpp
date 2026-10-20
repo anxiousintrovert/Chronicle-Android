@@ -22,6 +22,8 @@ auto &ExtraScripts() {
 
 unsigned AllocatedExtraScriptSlots() { return allocated; }
 
+void BindScripts(CMonstorUnit &unit) { BindScripts(unit, unit.SlotLimit()); }
+
 void BindScripts(CMonstorUnit &unit, unsigned slots) {
     if (slots < RetailSlots || slots > StorageCapacity) {
         throw std::invalid_argument("monster script slots exceed supported storage");

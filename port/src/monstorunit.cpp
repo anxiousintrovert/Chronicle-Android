@@ -18,7 +18,7 @@ PORT_OVERRIDE void CMonstorUnit::DrawShadowMonstor() {
     sceVu0FVECTOR light = {0.0f, 1.0f, 0.0f, 0.0f};
     float         detail = ConfigDetailDistance();
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < SlotLimit(); i++) {
         bool drawn = monster[i].state == 2 || (monster[i].state == 1 && monster[i].player_distance < detail);
 
         if (drawn && monster[i].shadow_visible != 0 && monster[i].revealed != 0) {

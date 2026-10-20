@@ -1523,8 +1523,9 @@ spacing, placement retry limits and key assignment remain in use, so the
 request is not a guarantee that every attempted placement succeeds.
 The active limit remains sixteen monster slots. Paired native storage now
 reserves 256 slots, and an internal helper can allocate their scripts on demand.
-Larger populations still require lifecycle, resource-budget and active
-iteration support before they can be requested.
+Per-unit lifecycle and iteration can now address the additional storage
+internally. Larger public requests still require load-boundary activation/reset,
+external consumer checks, resource budgets and high-population gameplay validation.
 
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is

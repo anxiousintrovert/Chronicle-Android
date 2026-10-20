@@ -2118,3 +2118,30 @@ Clang 23.1.2 builds pass: 800 tests passed, 59 skipped, 1 disabled.
 All 29 Python checks pass. Both 3,840-case empty/disabled exports retain
 their hashes and match pinned upstream except map memory size. PS2 source
 is unchanged; other platforms remain unverified.
+
+
+### Per-unit monster lifecycle and iteration
+
+Units now default to sixteen active slots with a bounded internal limit up to
+256. Native unit counting, visibility, movement, drawing, cleanup and free-slot
+search use that limit; sorting scratch has full storage capacity. Inner sound,
+hit and collision-shape dimensions remain retail. Framework identities,
+transactions and ownership storage cover 256; queries obey the active limit.
+Reaction queue iteration retains retail bounds until an expanded unit explicitly
+queues work, then returns to retail bounds when drained. Script binding follows
+the unit limit. No public operation activates more than sixteen slots yet.
+
+Tests cover slot-255 cleanup/healing, hiding stale high-slot handles on shrink,
+two full 256-slot reaction queues, invalid internal bounds and cleanup of all
+extra script arenas. All 50 affected tests and 29 Python checks pass; native
+lifecycle statement comparison permits only the explicit actor-loop bound
+change. Seven retail and two managed PAL transition replays pass. Both
+3,840-case seed exports keep their hashes and differ from pinned upstream
+only by map memory size. PS2 files remain unchanged.
+
+Remaining before public high populations: load-boundary activation/reset,
+external actor consumers (including targeting/rendering/script access),
+resource and collision budgets, and high-population playthrough validation.
+
+Clang 23.1.2 Windows game/test builds pass. Full suite: 803 passed, 59
+skipped, 1 disabled. Other platforms remain unverified.

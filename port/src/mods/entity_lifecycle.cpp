@@ -41,7 +41,7 @@
 
 PORT_OVERRIDE void CMonstorUnit::CleanViewMonstor(int back_floor) {
     mods::EntityUnitCleared(this);
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < SlotLimit(); i++) {
         monster[i].state = -1;
         monster[i].stop_timer = 0;
         monster[i].poison_timer = 0;
@@ -136,7 +136,7 @@ PORT_OVERRIDE void CMonstorUnit::CleanViewMonstor(int back_floor) {
 PORT_OVERRIDE int CMonstorUnit::SetupViewMonstor(int model_no, float *position, int event_flag) {
     current_monster = -1;
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < SlotLimit(); i++) {
         if (monster[i].state == -1) {
             current_monster = i;
             break;

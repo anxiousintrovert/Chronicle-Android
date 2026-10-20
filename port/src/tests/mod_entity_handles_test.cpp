@@ -131,6 +131,59 @@ TEST(ModEntityHandles, ReactionCapacityIsBoundedAndReleasedByFloorCleanup) {
     second->CleanViewMonstor(0);
 }
 
+TEST(ModEntityHandles, ExpandedLifecycleAndTransactionsReachLastSlotAndShrinkHidesIt) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    mods::StopTrackingEntities();
+    unit->port_slot_limit = 256;
+    unit->CleanViewMonstor(0);
+    EXPECT_EQ(unit->monster[255].state, -1);
+    EXPECT_EQ(unit->sound[255].id[15], -1);
+    EXPECT_EQ(unit->effect[255].timer[15], 0);
+    auto &actor = unit->monster[255];
+    actor.state = 2;
+    actor.revealed = 1;
+    actor.hp = 10;
+    actor.max_hp = 20;
+    EXPECT_EQ(unit->GetMonstorNum(), 1);
+    unit->AllBin2();
+    EXPECT_EQ(actor.anger_timer, 300);
+    const auto handle = std::to_string(mods::TrackEntities(*unit).Get(255));
+    ASSERT_NE(handle, "0");
+    mods::EntityTransaction tx;
+    std::string error;
+    ASSERT_TRUE(tx.Stage(unit.get(), {{"combat.heal", {{"entity", handle}, {"amount", 5}}, "test.high"}}, error)) << error;
+    tx.Commit();
+    EXPECT_EQ(actor.hp, 15);
+    unit->port_slot_limit = 16;
+    EXPECT_EQ(unit->GetMonstorNum(), 0);
+    EXPECT_EQ(mods::ReadEntities(unit.get(), "entities.get", {{"entity", handle}})["status"], "expired");
+    EXPECT_FALSE(tx.Stage(unit.get(), {{"combat.heal", {{"entity", handle}, {"amount", 5}}, "test.high"}}, error));
+    unit->port_slot_limit = 257;
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    unit->port_slot_limit = 0;
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    unit->port_slot_limit = 16;
+    unit->CleanViewMonstor(0);
+    mods::StopTrackingEntities();
+}
+
+TEST(ModEntityHandles, ExpandedReactionQueueHoldsTwoFullUnitsAndReleasesHighSlots) {
+    auto first = std::make_unique<CMonstorUnit>();
+    auto second = std::make_unique<CMonstorUnit>();
+    auto third = std::make_unique<CMonstorUnit>();
+    first->port_slot_limit = second->port_slot_limit = third->port_slot_limit = 256;
+    for (unsigned i = 0; i < 256; ++i) {
+        mods::QueueEntityReaction(first.get(), i, MONSTER_DMG_HIT);
+        mods::QueueEntityReaction(second.get(), i, MONSTER_DMG_HIT);
+    }
+    EXPECT_FALSE(mods::CanQueueEntityReactions(third.get()));
+    EXPECT_EQ(mods::TakeEntityReaction(first.get(), 255), MONSTER_DMG_HIT);
+    first->CleanViewMonstor(0);
+    EXPECT_TRUE(mods::CanQueueEntityReactions(third.get()));
+    second->CleanViewMonstor(0);
+    EXPECT_EQ(mods::TakeEntityReaction(second.get(), 255), MONSTER_DMG_NONE);
+}
+
 TEST(ModEntityHandles, CombatWritesStageInOrderAndRejectWithoutPublishing) {
     auto unit = std::make_unique<CMonstorUnit>();
     mods::StopTrackingEntities();
@@ -392,7 +445,7 @@ TEST(ModEntityHandles, UnloadAndRetirementDoNotReuseIdentities) {
     const auto third = handles.Construct(0);
     EXPECT_NE(first, third);
     EXPECT_NE(second, third);
-    EXPECT_EQ(handles.Construct(16), 0);
-    EXPECT_EQ(handles.Get(16), 0);
+    EXPECT_EQ(handles.Construct(handles.Capacity), 0);
+    EXPECT_EQ(handles.Get(handles.Capacity), 0);
     EXPECT_FALSE(handles.Resolve(UINT64_MAX));
 }

@@ -65,6 +65,7 @@ bool Empty(const EnemyStatOwners::mapped_type &slots) {
 
 void ReleaseSlot(CMonstorUnit &unit, unsigned slot, EnemyStatClaims &claims,
                  std::span<const std::string> active) {
+    if (std::ranges::all_of(claims, [](const auto &claim) { return claim.owner.empty(); })) return;
     auto values = ReadEnemyStats(unit.monster[slot]);
     bool changed = false;
     for (const auto &claim : claims) {

@@ -48,3 +48,20 @@ TEST(ModMonsterScripts, ExpandedBindingIsAlignedDistinctAndReusableAfterClear) {
     EXPECT_EQ(unit->script[255]->used, 0);
     EXPECT_EQ(unit->SlotLimit(), 16u);
 }
+
+TEST(ModMonsterScripts, ActiveLimitBindingAndCleanupResetEveryExtraScript) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    unit->port_slot_limit = 256;
+    chronicle::monsters::BindScripts(*unit);
+    for (unsigned i = 16; i < unit->SlotLimit(); ++i) {
+        ASSERT_NE(unit->script[i], nullptr);
+        unit->script[i]->Alloc(1);
+        unit->script_state[i] = 1;
+    }
+    unit->CleanViewMonstor(1);
+    for (unsigned i = 16; i < unit->SlotLimit(); ++i) {
+        EXPECT_EQ(unit->script[i]->used, 0);
+        EXPECT_EQ(unit->script_state[i], 0);
+        EXPECT_EQ(unit->monster[i].state, -1);
+    }
+}

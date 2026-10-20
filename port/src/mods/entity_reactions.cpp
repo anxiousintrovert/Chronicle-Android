@@ -1,6 +1,7 @@
 #include "entity_reactions.hpp"
 
 #include <array>
+#include <algorithm>
 #include <cassert>
 
 #include "dngstatusdata.hpp"
@@ -19,6 +20,7 @@ struct Reaction {
 
 std::array<Reaction, 2 * chronicle::monsters::SlotCapacity> pending;
 unsigned                 count = 0;
+unsigned                 active_capacity = 2 * chronicle::monsters::RetailSlots;
 } // namespace
 
 bool CanQueueEntityReactions(CMonstorUnit *unit) {
@@ -26,17 +28,21 @@ bool CanQueueEntityReactions(CMonstorUnit *unit) {
         return false;
     }
     unsigned available = 0;
-    for (const auto &entry : pending) {
+    const unsigned capacity = std::max(active_capacity, 2 * unit->SlotLimit());
+    for (unsigned i = 0; i < capacity; ++i) {
+        const auto &entry = pending[i];
         if (!entry.unit || entry.unit == unit) {
             ++available;
         }
     }
-    return available >= chronicle::monsters::SlotCapacity;
+    return available >= unit->SlotLimit();
 }
 
 void QueueEntityReaction(CMonstorUnit *unit, unsigned slot, int result) noexcept {
-    assert(unit && slot < chronicle::monsters::SlotCapacity && (result == MONSTER_DMG_HIT || result == MONSTER_DMG_KILLED));
-    for (auto &entry : pending) {
+    assert(unit && slot < unit->SlotLimit() && (result == MONSTER_DMG_HIT || result == MONSTER_DMG_KILLED));
+    active_capacity = std::max(active_capacity, 2 * unit->SlotLimit());
+    for (unsigned i = 0; i < active_capacity; ++i) {
+        auto &entry = pending[i];
         if (entry.unit == unit && entry.slot == slot) {
             if (result == MONSTER_DMG_KILLED) {
                 entry.result = result;
@@ -44,7 +50,8 @@ void QueueEntityReaction(CMonstorUnit *unit, unsigned slot, int result) noexcept
             return;
         }
     }
-    for (auto &entry : pending) {
+    for (unsigned i = 0; i < active_capacity; ++i) {
+        auto &entry = pending[i];
         if (!entry.unit) {
             entry = {unit, slot, result};
             ++count;
@@ -59,11 +66,13 @@ int TakeEntityReaction(CMonstorUnit *unit, unsigned slot) noexcept {
     if (!count) {
         return MONSTER_DMG_NONE;
     }
-    for (auto &entry : pending) {
+    for (unsigned i = 0; i < active_capacity; ++i) {
+        auto &entry = pending[i];
         if (entry.unit == unit && entry.slot == slot) {
             const int result = entry.result;
             entry = {};
             --count;
+            if (!count) active_capacity = 2 * chronicle::monsters::RetailSlots;
             return result;
         }
     }
@@ -74,16 +83,18 @@ void ClearEntityReactions(CMonstorUnit *unit, int slot) noexcept {
     if (!count) {
         return;
     }
-    for (auto &entry : pending) {
+    for (unsigned i = 0; i < active_capacity; ++i) {
+        auto &entry = pending[i];
         if (entry.unit == unit && (slot < 0 || entry.slot == static_cast<unsigned>(slot))) {
             entry = {};
             --count;
         }
     }
+    if (!count) active_capacity = 2 * chronicle::monsters::RetailSlots;
 }
 
 int ConsumeEntityDamage(CMonstorUnit *unit, int slot) noexcept {
-    if (!count || !unit || slot < 0 || static_cast<unsigned>(slot) >= chronicle::monsters::SlotCapacity) {
+    if (!count || !unit || slot < 0 || static_cast<unsigned>(slot) >= unit->SlotLimit()) {
         return MONSTER_DMG_NONE;
     }
     const int result = TakeEntityReaction(unit, static_cast<unsigned>(slot));
