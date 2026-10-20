@@ -443,10 +443,10 @@ Supply your extracted PAL data and a **new** output directory:
 python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../smoke-results
 ```
 
-The default runs thirty-three built-in scenarios: seven retail back-floor transitions,
+The default runs thirty-four built-in scenarios: seven retail back-floor transitions,
 seven public 256-monster layouts, seven owned chest-loot scenarios, five
 population lifecycle/rejection cases, three Georama/Atla scenarios and four
-camera/lighting scenarios. Use repeatable `--suite retail`, `--suite population`,
+camera/lighting scenarios, plus one retail audio scenario. Use repeatable `--suite retail`, `--suite population`,
 `--suite chests`, `--suite lifecycle`, `--suite georama`, `--suite rendering`, or `--suite audio`
 to select a subset. `--timeout 120` controls the per-process deadline in seconds.
 
