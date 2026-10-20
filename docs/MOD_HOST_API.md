@@ -432,6 +432,46 @@ dimensions, rooms, links, boxes, extra cells or missing records. A successful
 size-only comparison establishes the exported fixture values, not identical
 memory footprint or all runtime behavior. The default command remains strict.
 
+## Reproducible retail smoke scenarios
+
+Use Python 3.11+ and an existing Clang CMake build containing `darkcloud_tests`.
+The runner reads the build's C++ compiler metadata and rejects non-Clang builds;
+it does not build the executable. Follow the platform build instructions first.
+Supply your extracted PAL data and a **new** output directory:
+
+```text
+python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../smoke-results
+```
+
+The default runs nineteen built-in scenarios: seven retail back-floor transitions,
+seven public 256-monster layouts, and five population lifecycle/rejection cases.
+Use repeatable `--suite retail`, `--suite population`, or `--suite lifecycle` to
+select a subset. `--timeout 120` controls the per-process deadline in seconds.
+
+Each scenario runs sequentially in a fresh process with its own save profile,
+audit package, XML result and `process.log`. The packages exercise the shared
+menu-action API. The runner does not install them in your normal mod directory.
+Output inside the supplied data tree or any `ps2` directory is rejected. Existing
+output directories are rejected rather than reused. The same graphics, driver,
+and runtime-library prerequisites as the test executable still apply; on Windows,
+put llvm-mingw and SDL DLL directories on PATH as for the normal test command.
+Avoid running another graphics test simultaneously.
+
+`report.json` records the executable SHA-256, compiler metadata, selected suites,
+per-scenario status, duration and logs. It is updated after each scenario so an
+interrupted run remains visibly incomplete. A successful exit requires every
+selected test to execute and pass: skips, missing or mismatched XML results,
+zero-test runs, process errors and timeouts all fail the command. Timeout kills
+and waits for that scenario's process before continuing. Inherited `GTEST_*`
+and `DC_*` overrides are cleared for the child processes so sharding, filters
+and old audit paths cannot silently change the requested run.
+
+Compiler metadata records the configured toolchain, not an attestation of binary
+provenance. These tests validate the built-in framework scenarios, not arbitrary
+third-party packages, every layout/seed, sustained combat or other platforms.
+They complement the separate same-seed comparisons above. Retail assets and
+output artifacts stay local; do not include them in distributed mod packages.
+
 ## Retail inventory adapter
 
 These operations are implemented separately in `port/src/mods/retail_inventory.cpp`.

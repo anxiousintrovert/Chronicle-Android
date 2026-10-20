@@ -24,7 +24,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Native enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
-| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
+| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
@@ -2465,3 +2465,23 @@ Clang 23.1.2 Windows game/test builds pass: 821 passed, 78 skipped, one disabled
 All 29 Python tests pass. Both 3,840-case no-mod/disabled-mod exports retain
 their prior hashes and differ from pinned upstream only in map storage size.
 PS2 unchanged; Linux/macOS/Android and broader capability parity remain open.
+
+
+### Reproducible retail smoke runner (2026-10-20)
+
+Added tools/chronicle_mod_smoke.py for nineteen built-in PAL scenarios: seven
+retail back-floor transitions, seven public maximum populations and five
+population lifecycle/rejection checks. Each runs in a fresh process and save
+profile, through the existing shared menu-action tests. The runner records
+Clang CMake metadata, executable hash, XML, logs and incremental JSON results.
+Only the matching completed test can pass; skipped/missing/wrong/empty results,
+crashes, launch errors and deadlines fail. Inherited test/game overrides are
+cleared. Existing output directories, output within game data and PS2 paths
+are rejected. No retail assets or generated profiles are distributed.
+
+All nineteen scenarios passed through the tool on the existing Clang 23.1.2
+Windows build. All 35 Python checks pass, including new isolation, environment,
+compiler, output, timeout, launch-error and result-classification cases. This
+change is tooling/docs only and does not change the game binary or no-mod path.
+PS2 unchanged. Other platforms, arbitrary package certification and broader
+API/content-tool coverage remain unfinished.
