@@ -28,6 +28,12 @@ struct MeshReplacement {
     }
 };
 
+struct TextureReplacement {
+    std::string name, original_sha256, source_sha256;
+    std::filesystem::path source, package_root;
+    std::string Key() const { return name + ":" + original_sha256; }
+};
+
 struct Package {
     std::filesystem::path                        root;
     std::string                                  id;
@@ -42,6 +48,7 @@ struct Package {
     std::vector<std::string>                     permissions;
     std::vector<Quest>                           quests;
     std::vector<MeshReplacement>                 meshes;
+    std::vector<TextureReplacement>              textures;
     std::filesystem::path                        script;
     std::filesystem::path                        native_library;
     std::string                                  native_fingerprint;
@@ -69,6 +76,7 @@ public:
 
     const FileIndex &Overrides() const { return overrides_; }
 
+    const std::map<std::string,TextureReplacement> &Textures() const { return textures_; }
     std::string Report() const;
 
 private:
@@ -76,6 +84,7 @@ private:
     std::vector<std::string> errors_;
     std::vector<std::string> order_;
     FileIndex                overrides_;
+    std::map<std::string,TextureReplacement> textures_;
 };
 
 } // namespace mods

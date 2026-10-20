@@ -31,6 +31,7 @@ schema 1; put release notes and attribution in a separate README.
 | `quests` | No | Array, `[]` | Up to 64 quest definitions, described below |
 | `resources` | No | Object, `{}` | Up to 16 resource ID → contained relative file mappings; each file at most 64 KiB |
 | `audio` | No | Object, `{}` | Up to 16 local IDs (`[a-z][a-z0-9._-]*`, at most 64 bytes) mapped to contained WAV/FLAC/Ogg Vorbis paths; nonempty, at most 32 MiB each and 64 MiB encoded per package; see audio support below |
+| `textures` | No | Array, `[]` | Up to 256 name/content-hash targets mapped to bounded full-resolution PNGs; see MOD_TEXTURES.md |
 | `meshes` | No | Array, `[]` | Up to 16 existing-model replacements, 16 MiB each/64 MiB total. Requires explicit enable and restart. See [mesh declarations](MOD_MESH_FORMAT.md#package-declarations). |
 | `native_library` | No | Relative path | Contained `.dll`, `.so`, or `.dylib`, 1 byte–64 MiB; requires `native.extension` and separate local trust |
 
@@ -106,6 +107,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 
 | Capability | Host service |
 |---|---|
+| `assets.textures.v1` | Full-resolution PNG replacement of named original texture content |
 | `assets.replace.v1` | Existing same-size game asset replacement |
 | `skills.training.v1` | Owner-scoped deferred shared-menu training requests |
 | `skills.effects.v1` | Explicit trained-rank outgoing enemy damage bonuses |

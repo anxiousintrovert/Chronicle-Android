@@ -13,6 +13,8 @@
 #include "api.hpp"
 #include "native.hpp"
 #include "mesh_asset.hpp"
+#include "texture_packages.hpp"
+#include "platform/png_image.hpp"
 #include "save_migrations.hpp"
 
 namespace mods {
@@ -145,7 +147,7 @@ void Read(Package &package, const FileIndex &base) {
     if (!json.is_object()) {
         throw std::runtime_error("mod.json must be an object");
     }
-    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio", "meshes", "save_migrations"};
+    const std::set<std::string> fields{"schema_version", "id", "name", "version", "game", "enabled", "requires", "conflicts", "files", "script", "api_version", "permissions", "exclusive", "quests", "requires_capabilities", "requires_operations", "dependency_versions", "resources", "native_library", "audio", "meshes", "textures", "save_migrations"};
     for (const auto &[key, value] : json.items()) {
         if (!fields.contains(key)) {
             throw std::runtime_error("unknown manifest field: " + key);
@@ -345,6 +347,23 @@ void Read(Package &package, const FileIndex &base) {
             package.meshes.push_back(std::move(replacement));
         }
     }
+    if(json.contains("textures")) {
+        const auto &textures=json["textures"];
+        if(!textures.is_array()||textures.size()>256)throw std::runtime_error("textures must contain at most 256 replacements");
+        std::set<std::string> targets;
+        for(const auto &item:textures) {
+            if(!item.is_object()||item.size()!=3)throw std::runtime_error("texture requires name, original_sha256 and source");
+            TextureReplacement texture;texture.name=Fold(String(item,"name"));texture.original_sha256=String(item,"original_sha256");
+            if(texture.name.size()>31||!std::ranges::all_of(texture.name,[](char c){return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-';}))throw std::runtime_error("invalid texture name");
+            if(texture.original_sha256.size()!=64||!std::ranges::all_of(texture.original_sha256,[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f');}))throw std::runtime_error("original_sha256 must be a lowercase SHA-256 digest");
+            if(!targets.insert(texture.Key()).second)throw std::runtime_error("duplicate texture target");
+            texture.package_root=package.root;texture.source=Contained(package.root,package.root/Path(Relative(String(item,"source"))));
+            int w=0,h=0;std::vector<std::uint8_t> pixels;std::string error;
+            if(!PngLoadRgbaBounded(texture.source,{},w,h,pixels,error))throw std::runtime_error(error);
+            PortDecodedTexture decoded;decoded.width=w;decoded.height=h;decoded.levels.push_back(std::move(pixels));
+            texture.source_sha256=TexturePixelIdentity(decoded);package.textures.push_back(std::move(texture));
+        }
+    }
     const auto &files = json.at("files");
     if (!files.is_object() || files.size() > 4096) {
         throw std::runtime_error("files must be an object with at most 4096 mappings");
@@ -383,7 +402,7 @@ void Problem(Package &package, const std::string &message) {
 } // namespace
 
 bool Supports(std::string_view capability) {
-    return capability == "skills.training.v1" || capability == "skills.effects.v1" || capability == "skills.trees.v1" || capability == "quests.events.v1" || capability == "quests.rewards.v1" || capability == "quests.lifecycle.v1" || capability == "quests.objectives.v1" || capability == "quests.dynamic.v1" || capability == "quests.read.v1" || capability == "save.migrations.v1" || capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
+    return capability == "assets.textures.v1" || capability == "skills.training.v1" || capability == "skills.effects.v1" || capability == "skills.trees.v1" || capability == "quests.events.v1" || capability == "quests.rewards.v1" || capability == "quests.lifecycle.v1" || capability == "quests.objectives.v1" || capability == "quests.dynamic.v1" || capability == "quests.read.v1" || capability == "save.migrations.v1" || capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
            capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
            capability == "party.read.v1" || capability == "inventory.read.v1" ||
@@ -396,6 +415,7 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
     errors_.clear();
     order_.clear();
     overrides_.clear();
+    textures_.clear();
     std::set<fs::path> seen;
     for (const auto &root : roots) {
         try {
@@ -478,6 +498,10 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
                 Problem(a, "Declared conflict with '" + b.id + "'");
                 Problem(b, "Declared conflict with '" + a.id + "'");
             }
+            for(const auto &left:a.textures)for(const auto &right:b.textures)if(left.Key()==right.Key()) {
+                Problem(a,"Texture '"+left.name+"' also replaced by '"+b.id+"'");
+                Problem(b,"Texture '"+right.name+"' also replaced by '"+a.id+"'");
+            }
             for (const auto &left : a.meshes) for (const auto &right : b.meshes) {
                 if (left.Overlaps(right)) {
                     const auto target = left.texture + " (native vertices " + (left.native_vertices ? std::to_string(left.native_vertices) : "any") +
@@ -556,6 +580,7 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
         if (packages_[i].Active()) {
             order_.push_back(packages_[i].id);
             overrides_.insert(packages_[i].files.begin(), packages_[i].files.end());
+            for(const auto &texture:packages_[i].textures)textures_.emplace(texture.Key(),texture);
         }
     }
 }
@@ -583,6 +608,7 @@ std::string Manager::Report() const {
                                                                               : "disabled"},
             {"problems",            package.problems                                                           },
             {"mesh_count",          package.meshes.size()},
+            {"texture_count",       package.textures.size()},
             {"file_count",          package.files.size()                                                       },
             {"dependencies",        package.dependencies                                                       },
             {"dependency_versions", version_rules                                                              },

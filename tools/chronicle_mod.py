@@ -14,7 +14,7 @@ import uuid
 import zipfile
 
 CAPABILITIES = {
-    "skills.training.v1", "skills.effects.v1", "skills.trees.v1", "quests.events.v1", "quests.rewards.v1", "quests.lifecycle.v1", "quests.objectives.v1", "quests.dynamic.v1", "quests.read.v1", "save.migrations.v1", "assets.mesh_replace.v1", "combat.rules.v1", "entities.spawn_tuning.v1",
+    "assets.textures.v1", "skills.training.v1", "skills.effects.v1", "skills.trees.v1", "quests.events.v1", "quests.rewards.v1", "quests.lifecycle.v1", "quests.objectives.v1", "quests.dynamic.v1", "quests.read.v1", "save.migrations.v1", "assets.mesh_replace.v1", "combat.rules.v1", "entities.spawn_tuning.v1",
     "assets.replace.v1", "scripts.lua.v1", "quests.progress.v1", "save.metadata.v1",
     "economy.write.v1", "events.map.v1", "events.tick.v1", "player.read.v1",
     "party.read.v1", "inventory.read.v1", "resources.read.v1", "logging.v1", "host.calls.v1", "plugins.native.v1", "plugins.native.v2", "events.custom.v1", "events.lifecycle.v1", "events.enemy_killed.v1", "services.native.v1", "services.command.v1", "services.query.v1", "menu.actions.v1", "menu.native.v1",
@@ -22,7 +22,7 @@ CAPABILITIES = {
 PERMISSIONS = {"economy.write", "game.read", "game.write", "resources.read", "native.extension"}
 REQUIRED = {"schema_version", "id", "name", "version", "game", "files"}
 FIELDS = REQUIRED | {"api_version", "enabled", "requires", "conflicts", "exclusive",
-                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio", "meshes", "save_migrations"}
+                     "requires_capabilities", "requires_operations", "dependency_versions", "permissions", "script", "quests", "resources", "native_library", "audio", "meshes", "textures", "save_migrations"}
 
 
 def require(condition, message):
@@ -202,6 +202,24 @@ def validate(root, data=None):
         size = path.stat().st_size
         audio_bytes += size
         require(0 < size <= 32 * 1024 * 1024 and audio_bytes <= 64 * 1024 * 1024, "audio exceeds file/package size limits or is empty")
+    textures = mod.get("textures", [])
+    require(isinstance(textures, list) and len(textures) <= 256, "textures must contain at most 256 replacements")
+    texture_targets = set()
+    for texture in textures:
+        require(isinstance(texture, dict) and set(texture) == {'name', 'original_sha256', 'source'}, "texture requires name, original_sha256 and source")
+        require(isinstance(texture['name'], str) and re.fullmatch(r'[A-Za-z0-9_.-]{1,31}', texture['name']), "invalid texture name")
+        require(isinstance(texture['original_sha256'], str) and re.fullmatch(r'[0-9a-f]{64}', texture['original_sha256']), "invalid original texture digest")
+        target = (texture['name'].lower(), texture['original_sha256'])
+        require(target not in texture_targets, "duplicate texture target")
+        texture_targets.add(target)
+        path = contained(root, texture['source'])
+        require(33 <= path.stat().st_size <= 32 * 1024 * 1024, "PNG encoded size exceeds limits or is truncated")
+        with path.open('rb') as stream:
+            header = stream.read(33)
+        require(header[:16] == b'\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR', "replacement must be PNG")
+        w, h = int.from_bytes(header[16:20], 'big'), int.from_bytes(header[20:24], 'big')
+        require(0 < w <= 8192 and 0 < h <= 8192 and w*h <= 16*1024*1024, "PNG dimensions exceed limits")
+    # Runtime activation additionally decodes the PNG pixels; offline checks above inspect headers.
     meshes = mod.get("meshes", [])
     require(isinstance(meshes, list) and len(meshes) <= 16, "meshes must be an array of at most 16 replacements")
     mesh_bytes, targets = 0, []
@@ -257,7 +275,7 @@ def pack(root, output):
     output = Path(output).resolve()
     require(not output.is_relative_to(root), "archive must be outside the package")
     # Do not accidentally ship saves, credentials, git metadata, or arbitrary files.
-    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values()) | set(mod.get("audio", {}).values()) | {m["source"] for m in mod.get("meshes", [])}
+    names = {"mod.json"} | set(mod["files"].values()) | set(mod.get("resources", {}).values()) | set(mod.get("audio", {}).values()) | {m["source"] for m in mod.get("meshes", [])} | {t["source"] for t in mod.get("textures", [])}
     if "script" in mod:
         names.add(mod["script"])
     if "native_library" in mod:
@@ -327,6 +345,10 @@ def check_set(root, enabled, data=None):
                 for other_mesh in candidate.get('meshes', []):
                     if mesh_overlap(mesh, other_mesh):
                         problems[key].append(f"mesh conflict {mesh['texture'].lower()} (native vertices {mesh.get('native_vertices', 'any')} / {other_mesh.get('native_vertices', 'any')}): {other}")
+            texture_left = {(t['name'].lower(), t['original_sha256']) for t in mod.get('textures', [])}
+            texture_right = {(t['name'].lower(), t['original_sha256']) for t in candidate.get('textures', [])}
+            for target in sorted(texture_left & texture_right):
+                problems[key].append(f'texture conflict {target[0]}: {other}')
             left = {relative(p).lower() for p in mod['files']}
             right = {relative(p).lower() for p in candidate['files']}
             for target in sorted(left & right):
@@ -403,7 +425,7 @@ def install(archive, mods_root, replace=False, data=None):
         package_root = stage / next(iter(roots))
         mod = validate(package_root, data)
         require(package_root.name == mod['id'], 'archive folder must match package ID')
-        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values()) | set(mod.get('audio', {}).values()) | {m['source'] for m in mod.get('meshes', [])}
+        declared = {'mod.json', 'README.md', 'LICENSE', 'LICENSE.txt', 'CHANGELOG.md'} | set(mod['files'].values()) | set(mod.get('resources', {}).values()) | set(mod.get('audio', {}).values()) | {m['source'] for m in mod.get('meshes', [])} | {t['source'] for t in mod.get('textures', [])}
         declared |= {mod[key] for key in ('script', 'native_library') if key in mod}
         allowed = {mod['id'] + '/' + relative(name) for name in declared}
         require(set(files) <= allowed, 'archive contains undeclared files; use the pack command')

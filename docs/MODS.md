@@ -47,6 +47,9 @@ not edit the distributed manifests. Conflicts are recomputed immediately.
 **Restart to apply changes**. Rescanning never reloads live scripts or assets.
 A corrupt profile blocks activation and is preserved for repair.
 
+Full-resolution PNG replacements use the separate [texture package path](MOD_TEXTURES.md).
+The same-size restriction below applies to raw `files` mappings.
+
 ## Install a mod
 
 Put one unpacked package in either `<save directory>/mods/<package>/` or

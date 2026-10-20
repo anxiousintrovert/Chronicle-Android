@@ -29,6 +29,23 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_full_texture_packages_pack_install_and_conflict(self):
+        import struct, zlib
+        def chunk(kind, data):
+            return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data))
+        png=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',2,1,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(b'\x00'+bytes([255,0,0,255])*2))+chunk(b'IEND',b'')
+        target={'name':'atlas','original_sha256':'a'*64,'source':'image.png'}
+        first=self.package('test.one',textures=[target],requires_capabilities=['assets.textures.v1'])
+        second=self.package('test.two',textures=[dict(target,name='ATLAS')])
+        for folder in [first,second]:(folder/'image.png').write_bytes(png);tool.validate(folder)
+        archive=self.root/'textures.zip';tool.pack(first,archive)
+        with zipfile.ZipFile(archive) as package:self.assertIn('test.one/image.png',package.namelist())
+        tool.install(archive,self.root/'installed')
+        result=tool.check_set(self.root/'mods',['test.one','test.two'])
+        self.assertIn('texture conflict',str(result))
+        manifest=first/'mod.json';value=json.loads(manifest.read_text());value['textures']*=2;manifest.write_text(json.dumps(value))
+        with self.assertRaises(ValueError):tool.validate(first)
+
     def test_skill_operations_are_discoverable_and_permission_checked(self):
         names=['skills.register','skills.list','skills.get','skills.unlock','skills.set_rank']
         operations={entry['name']:entry for entry in tool.apis()}
