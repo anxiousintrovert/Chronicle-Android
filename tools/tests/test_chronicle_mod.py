@@ -106,6 +106,28 @@ class AuthorTools(unittest.TestCase):
         self.assertFalse(mismatch['matches'])
         self.assertEqual(mismatch['first_differing_record'], 2)
 
+    def test_map_size_comparison_keeps_raw_failure_and_all_other_fields(self):
+        baseline, candidate = self.root / 'baseline.jsonl', self.root / 'candidate.jsonl'
+        row = {'map_bytes': 1000, 'grid': 20, 'rooms': [[1, 2, 3, 4]], 'cells': [[1, 2, 3, 0]], 'next_rng': 42}
+        baseline.write_text(json.dumps(row) + '\n')
+        row['map_bytes'] = 1960
+        candidate.write_text(json.dumps(row) + '\n')
+        report = tool.compare_seeds(baseline, [candidate], True)['candidates'][0]
+        self.assertFalse(report['matches'])
+        self.assertTrue(report['map_size_only'])
+        self.assertEqual(report['map_sizes'], {'baseline': [1000], 'candidate': [1960]})
+        for field, bad in [('grid', 48), ('next_rng', 43), ('rooms', []), ('cells', [[1, 2, 3, 0], [21, 2, 3, 0]])]:
+            changed = dict(row, **{field: bad})
+            candidate.write_text(json.dumps(changed) + '\n')
+            report = tool.compare_seeds(baseline, [candidate], True)['candidates'][0]
+            self.assertFalse(report['map_size_only'])
+            self.assertEqual(report['first_non_size_difference'], 1)
+        candidate.write_text('')
+        self.assertFalse(tool.compare_seeds(baseline, [candidate], True)['candidates'][0]['map_size_only'])
+        candidate.write_text(json.dumps(dict(row, map_bytes=True)))
+        with self.assertRaisesRegex(ValueError, 'positive integer map_bytes'):
+            tool.compare_seeds(baseline, [candidate], True)
+
     def test_dependency_versions_block_transitively_and_exact_legacy_versions_work(self):
         self.package('test.provider', version='2.0.0')
         self.package('test.consumer', requires=['test.provider'], dependency_versions={'test.provider': {'minimum': '1.2.0', 'before': '2.0.0'}})

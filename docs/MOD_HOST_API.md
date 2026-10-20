@@ -423,6 +423,15 @@ A mismatch exits nonzero, reports hashes/counts and the first differing record
 exports; it does not build upstream or run the game. Matching results prove only
 the fixture coverage described in [MOD_PARITY.md](MOD_PARITY.md).
 
+When testing a deliberate storage expansion, add `--allow-map-size-change` to
+compare every parsed field except the diagnostic `map_bytes`. Raw `matches`,
+hashes and first differing records remain in the report; `map_size_only`, both
+`map_sizes` and `first_non_size_difference` make the exception explicit. This
+mode requires positive integer sizes and still rejects changed RNG, grid
+dimensions, rooms, links, boxes, extra cells or missing records. A successful
+size-only comparison establishes the exported fixture values, not identical
+memory footprint or all runtime behavior. The default command remains strict.
+
 ## Retail inventory adapter
 
 These operations are implemented separately in `port/src/mods/retail_inventory.cpp`.

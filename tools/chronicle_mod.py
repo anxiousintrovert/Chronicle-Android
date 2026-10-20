@@ -357,8 +357,8 @@ def install(archive, mods_root, replace=False, data=None):
                 'next_step': 'Restart Chronicle. No profile entries were created; existing enable/trust selections remain unchanged. Review conflicts and native trust in the mod manager.'}
 
 
-def compare_seeds(baseline, candidates):
-    """Compare complete exports without filtering any native fields."""
+def compare_seeds(baseline, candidates, allow_map_size_change=False):
+    """Keep byte comparisons; optionally diagnose only map storage-size differences."""
     original = Path(baseline).read_bytes()
     records = original.splitlines()
     require(bool(records), "baseline seed export is empty")
@@ -373,6 +373,19 @@ def compare_seeds(baseline, candidates):
         result['candidates'].append({'path': str(path), 'matches': data == original,
                                     'cases': len(lines), 'first_differing_record': first,
                                     'sha256': hashlib.sha256(data).hexdigest()})
+        if allow_map_size_change:
+            left, right = [json.loads(line) for line in records], [json.loads(line) for line in lines]
+            for record in left + right:
+                require(isinstance(record, dict) and type(record.get('map_bytes')) is int
+                        and record['map_bytes'] > 0, 'size comparison requires positive integer map_bytes in every record')
+            sizes = {'baseline': sorted({record['map_bytes'] for record in left}),
+                     'candidate': sorted({record['map_bytes'] for record in right})}
+            for record in left + right:
+                del record['map_bytes']
+            different = next((i + 1 for i in range(max(len(left), len(right)))
+                              if i >= len(left) or i >= len(right) or left[i] != right[i]), None)
+            result['candidates'][-1].update(map_size_only=different is None,
+                                            map_sizes=sizes, first_non_size_difference=different)
     return result
 
 
@@ -396,12 +409,15 @@ def main(argv=None):
     doctor.add_argument("--data")
     seeds = commands.add_parser("compare-seeds", help="compare complete same-seed audit exports byte for byte")
     seeds.add_argument("baseline"); seeds.add_argument("candidates", nargs="+")
+    seeds.add_argument("--allow-map-size-change", action="store_true",
+                       help="also compare all parsed fields except map_bytes; retain raw hashes and mismatch results")
     args = parser.parse_args(argv)
     try:
         if args.command == "compare-seeds":
-            report = compare_seeds(args.baseline, args.candidates)
+            report = compare_seeds(args.baseline, args.candidates, args.allow_map_size_change)
             print(json.dumps(report, indent=2))
-            return int(any(not item['matches'] for item in report['candidates']))
+            return int(any(not (item['matches'] or (args.allow_map_size_change and item['map_size_only']))
+                           for item in report['candidates']))
         if args.command == "new":
             create(args.id, args.output)
         elif args.command == "install":

@@ -1598,3 +1598,38 @@ Expanded layout transformations, ownership APIs, requested-layout runtime tests
 and non-Windows builds remain outstanding. This integrates the build mechanism;
 it does not claim expanded-layout capability parity.
 
+### Expanded room storage foundation
+
+The checked overlay now raises native room descriptors, room-discovery flags,
+builder room stacks and per-cell room membership from 16 to 64. Exact patches
+update their initialization, copying and membership loops, and enlarge the
+room-link candidate list. The 20x20 cell grid, 16-cell build area, room-size RNG
+and caller-selected retail room counts are unchanged. There is no layout API
+yet: expanded grid addressing, collision/minimap handling and owned generation
+requests remain required to support the full target. This is an intermediate
+storage change, not a substitute for those capabilities.
+
+Storage has a measurable default footprint: on the tested Windows build,
+`sizeof(CDungeonMap)` increases from 76,576 to 77,536 bytes. The two global
+400-cell builder arrays also gain 153,600 bytes of room-membership storage in
+total, and the global room stack gains 768 bytes. These are allocated capacities,
+not extra generated rooms or enabled gameplay mods. Native PS2 files remain
+unchanged; the transformations apply only to the port build copies.
+
+The raw seed exports no longer match byte for byte because they include
+`map_bytes`. Across all 3,840 cases, that field is the only parsed difference
+for both empty and disabled frameworks. Rooms, every occupied cell, links,
+boxes, grid dimensions, gate keys, seed and next RNG value all match the pinned
+upstream. Raw hashes and mismatch results are retained. The author tool's
+explicit `--allow-map-size-change` comparison reports both sizes and rejects
+every other field difference, including extra occupied cells and truncation.
+Its default comparison remains byte-for-byte strict.
+
+Validation: Clang 23.1.2 Windows game/test builds passed. Two focused cases verify
+64-slot clearing without RNG/cell changes and native visibility handling of
+room slot 63. The full suite registered 811 tests: 776 passed, 34 skipped and
+one disabled. All seven PAL first-floor back-floor scenarios passed separately,
+covering native front/back loading and travel with the new class layout. All
+28 Python checks passed. These results do not prove all floors, platforms or
+larger-layout generation; those validation requirements remain open.
+

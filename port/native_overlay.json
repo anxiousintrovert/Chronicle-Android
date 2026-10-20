@@ -1,4 +1,70 @@
 {
   "schema_version": 1,
-  "files": {}
+  "files": {
+    "include/dungeonmap.hpp": {
+      "sha256": "ac5a31bff57e43ba7e1be913cdd5b6b0fc377e79fba0ae6e41643d5e0ee8d3b6",
+      "replacements": [
+        {
+          "old": "#pragma once",
+          "new": "#pragma once\n#include \"chronicle/dungeon_limits.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "room_seen[16]",
+          "new": "room_seen[chronicle::dungeon::RoomCapacity]",
+          "count": 1
+        },
+        {
+          "old": "rooms[16]",
+          "new": "rooms[chronicle::dungeon::RoomCapacity]",
+          "count": 1
+        }
+      ]
+    },
+    "src/dungeonmap.cpp": {
+      "sha256": "b0740f8105e34863c5bf76933b123ca043061fe3c7c48a58f259cf2f84847f77",
+      "replacements": [
+        {
+          "old": "s32 link[16];",
+          "new": "s32 link[chronicle::dungeon::RoomCapacity];",
+          "count": 1
+        },
+        {
+          "old": "ROOM_INFO roomStack[16];",
+          "new": "ROOM_INFO roomStack[chronicle::dungeon::RoomCapacity];",
+          "count": 1
+        },
+        {
+          "old": "for (room_no = 0; room_no < 16; room_no++)",
+          "new": "for (room_no = 0; room_no < chronicle::dungeon::RoomCapacity; room_no++)",
+          "count": 1
+        },
+        {
+          "old": "for (int j = 0; j < 16; j++) {\n            dst[i].link[j]",
+          "new": "for (int j = 0; j < chronicle::dungeon::RoomCapacity; j++) {\n            dst[i].link[j]",
+          "count": 1
+        },
+        {
+          "old": "for (j = 0; j < 16; j++) {\n                buildMapDat",
+          "new": "for (j = 0; j < chronicle::dungeon::RoomCapacity; j++) {\n                buildMapDat",
+          "count": 1
+        },
+        {
+          "old": "for (i = 0; i < 16; i++) {\n        this->room_seen[i]",
+          "new": "for (i = 0; i < chronicle::dungeon::RoomCapacity; i++) {\n        this->room_seen[i]",
+          "count": 3
+        },
+        {
+          "old": "memcpy(this->rooms, roomStack, 0x100);",
+          "new": "memcpy(this->rooms, roomStack, sizeof(this->rooms));",
+          "count": 1
+        },
+        {
+          "old": "int   room_list[32];",
+          "new": "int   room_list[chronicle::dungeon::RoomCapacity];",
+          "count": 1
+        }
+      ]
+    }
+  }
 }
