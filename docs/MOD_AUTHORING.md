@@ -171,3 +171,13 @@ ctest --test-dir <build> -R "ModManager|ModRuntime|DataRead|SaveSlots|MenuOption
 The published change was validated on Windows with Clang 23.1.2: 109 tests passed,
 one symlink test skipped, plus offscreen in-game manager/quest/conflict checks.
 Linux, macOS and Android behavior have not been validated for this framework.
+
+
+### Model target discovery
+
+Use Chronicle's opt-in `--discover-meshes DIR` and
+`python tools/chronicle_mesh.py targets DIR` to find actual native texture/count
+targets. `extract` produces framework mesh JSON and `export-obj` produces an
+editable OBJ. See [mesh discovery and formats](MOD_MESH_FORMAT.md#discovering-real-model-targets)
+for commands, limits and normal/degenerate-triangle adjustments. Mesh package
+activation is still gated pending retail replacement/animation validation.

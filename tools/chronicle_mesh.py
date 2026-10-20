@@ -3,6 +3,7 @@
 import argparse
 import json
 import math
+import re
 import os
 import struct
 from pathlib import Path
@@ -132,7 +133,12 @@ def from_obj(path):
 
 def write_new(mesh, output):
     payload = (json.dumps(validate(mesh),allow_nan=False,separators=(',',':'))+'\n').encode('utf-8')
+    return write_payload(payload, output)
+
+
+def write_payload(payload, output):
     require(len(payload) <= MAX_BYTES, 'converted mesh exceeds 16 MiB')
+    require(not any(part.lower() == 'ps2' for part in Path(output).parts), 'PS2 directories are read-only')
     output = Path(output).resolve()
     require(not any(part.lower() == 'ps2' for part in output.parts), 'PS2 directories are read-only')
     # Publish an already-complete file without overwriting an existing asset.
@@ -150,16 +156,82 @@ def write_new(mesh, output):
     return output
 
 
+def read_snapshot(path):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, 'duplicate snapshot field: ' + key)
+            result[key] = value
+        return result
+    snapshot = json.loads(read_text(path), object_pairs_hook=unique)
+    fields = {'schema_version', 'native_vertices', 'textures', 'mesh', 'fallback_normals', 'dropped_degenerate_triangles'}
+    require(isinstance(snapshot, dict) and set(snapshot) == fields, 'invalid model snapshot fields')
+    require(type(snapshot['schema_version']) is int and snapshot['schema_version'] == 1, 'unsupported model snapshot schema')
+    require(type(snapshot['native_vertices']) is int and 1 <= snapshot['native_vertices'] <= MAX_VERTICES, 'invalid native vertex count')
+    textures = snapshot['textures']
+    require(isinstance(textures, list) and len(textures) <= 256 and all(isinstance(x, str) and 1 <= len(x) <= 32 for x in textures), 'invalid snapshot texture names')
+    for key, limit in [('fallback_normals', MAX_VERTICES), ('dropped_degenerate_triangles', MAX_TRIANGLES)]:
+        require(type(snapshot[key]) is int and 0 <= snapshot[key] <= limit, 'invalid snapshot export count')
+    validate(snapshot['mesh'])
+    return snapshot
+
+
+def targets(directory):
+    directory = Path(directory)
+    require(directory.is_dir(), 'model discovery directory does not exist')
+    paths = sorted(directory.glob('*.model.json'))
+    require(len(paths) <= 256, 'discovery directory exceeds 256 snapshots')
+    result = []
+    for path in paths:
+        snapshot = read_snapshot(path)
+        candidates = sorted({t.lower() for t in snapshot['textures'] if re.fullmatch(r'[A-Za-z0-9_.-]{1,31}', t)})
+        result.append({'snapshot': path.name, 'native_vertices': snapshot['native_vertices'],
+                       'textures': snapshot['textures'], 'targetable_textures': candidates,
+                       'vertices': len(snapshot['mesh']['vertices']), 'triangles': len(snapshot['mesh']['triangles']),
+                       'fallback_normals': snapshot['fallback_normals'],
+                       'dropped_degenerate_triangles': snapshot['dropped_degenerate_triangles']})
+    return result
+
+
+def export_obj(snapshot, output):
+    geometry = snapshot['mesh']
+    validate(geometry)
+    lines = ['# Chronicle discovered geometry; native target metadata stays in the model snapshot.']
+    number = lambda x: format(x, '.9g')
+    for vertex in geometry['vertices']:
+        lines.append('v ' + ' '.join(number(x) for x in vertex[:3]))
+    for vertex in geometry['vertices']:
+        lines.append('vt ' + ' '.join(number(x) for x in vertex[6:]))
+    for vertex in geometry['vertices']:
+        lines.append('vn ' + ' '.join(number(x) for x in vertex[3:6]))
+    previous = None
+    for strip, *indices in geometry['triangles']:
+        if strip != previous:
+            lines.append('usemtl strip' + str(strip))
+            previous = strip
+        lines.append('f ' + ' '.join(f'{i+1}/{i+1}/{i+1}' for i in indices))
+    return write_payload(('\n'.join(lines) + '\n').encode('utf-8'), output)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command',required=True)
     convert = commands.add_parser('obj'); convert.add_argument('input',type=Path); convert.add_argument('output',type=Path)
     check = commands.add_parser('inspect'); check.add_argument('input',type=Path)
+    listing = commands.add_parser('targets'); listing.add_argument('directory', type=Path)
+    for name in ('extract', 'export-obj'):
+        command = commands.add_parser(name); command.add_argument('input', type=Path); command.add_argument('output', type=Path)
     args = parser.parse_args()
     try:
         if args.command == 'obj':
             output = write_new(from_obj(args.input),args.output)
             print(json.dumps({'output':str(output),**inspect(output)},indent=2))
+        elif args.command == 'targets':
+            print(json.dumps(targets(args.directory), indent=2))
+        elif args.command in ('extract', 'export-obj'):
+            snapshot = read_snapshot(args.input)
+            output = write_new(snapshot['mesh'], args.output) if args.command == 'extract' else export_obj(snapshot, args.output)
+            print(json.dumps({'output': str(output), 'native_vertices': snapshot['native_vertices'], 'textures': snapshot['textures']}, indent=2))
         else:
             print(json.dumps(inspect(args.input),indent=2))
         return 0

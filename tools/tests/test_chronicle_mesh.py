@@ -70,4 +70,28 @@ class MeshAuthoring(unittest.TestCase):
         with patch.object(mesh.os,'link',side_effect=OSError('publication failed')),self.assertRaises(OSError):mesh.write_new(result,self.root/'new.json')
         self.assertFalse((self.root/'new.json').exists());self.assertEqual(list(self.root.glob('.chronicle-mesh-*')),[])
 
+    def snapshot(self):
+        geometry=self.read(self.base+'usemtl strip2\nf 1 2 3\n')
+        value={'schema_version':1,'native_vertices':77,'textures':['HERO','hero','not/targetable'],
+               'mesh':geometry,'fallback_normals':0,'dropped_degenerate_triangles':0}
+        path=self.root/'example.model.json';path.write_text(json.dumps(value));return path,value
+    def test_snapshot_targets_extract_and_obj_round_trip(self):
+        with self.assertRaises(ValueError):mesh.targets(self.root/'missing')
+        path,value=self.snapshot();listed=mesh.targets(self.root)
+        self.assertEqual(listed[0]['targetable_textures'],['hero']);self.assertEqual(listed[0]['native_vertices'],77)
+        snapshot=mesh.read_snapshot(path);mesh.write_new(snapshot['mesh'],self.root/'output.mesh.json')
+        mesh.export_obj(snapshot,self.root/'output.obj');result=mesh.from_obj(self.root/'output.obj')
+        self.assertEqual(result,value['mesh']);self.assertEqual(mesh.inspect(self.root/'output.mesh.json')['strips'],[2])
+        with self.assertRaises(FileExistsError):mesh.export_obj(snapshot,self.root/'output.obj')
+        with self.assertRaisesRegex(ValueError,'PS2'):mesh.export_obj(snapshot,self.root/'PS2'/'output.obj')
+        self.assertFalse((self.root/'PS2').exists())
+    def test_snapshot_rejects_ambiguous_metadata_and_invalid_geometry(self):
+        path,value=self.snapshot()
+        for changes in ({'native_vertices':True},{'native_vertices':0},{'textures':['x'*33]},{'fallback_normals':-1},
+                        {'schema_version':2},{'mesh':{}},{'extra':True}):
+            path.write_text(json.dumps(dict(value,**changes)))
+            with self.assertRaises(ValueError):mesh.read_snapshot(path)
+        path.write_text('{"schema_version":1,"schema_version":1}')
+        with self.assertRaisesRegex(ValueError,'duplicate'):mesh.read_snapshot(path)
+
 if __name__=='__main__':unittest.main()

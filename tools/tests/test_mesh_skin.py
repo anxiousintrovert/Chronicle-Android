@@ -24,7 +24,8 @@ class MeshSkinSource(unittest.TestCase):
     def test_native_visual_construction_statements_remain_unchanged_around_mesh_capture(self):
         source=(ROOT/'port/src/visualvu1.cpp').read_text()
         body=function(source,'PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(')
-        for hook in ["    const bool mesh_packages = mods::PackageMeshesActive();\n",
+        for hook in ["    mods::MeshDiscoveryRecorder().Observe(visual, view.header->vertex_num);\n",
+                     "    const bool mesh_packages = mods::PackageMeshesActive();\n",
                      "    std::vector<std::uint32_t> mesh_sources;\n",
                      "            if (mesh_packages && mesh_sources.size() < 100000) mesh_sources.push_back(index[0]);\n",
                      "    if (mesh_packages) mods::AttachPackageMesh(block, data, view.vertex, view.header->vertex_num, mesh_sources);\n"]:

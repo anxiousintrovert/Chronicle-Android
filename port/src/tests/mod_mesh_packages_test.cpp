@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "mods/runtime.hpp"
 #include "mods/mesh_packages.hpp"
+#include "mods/mesh_discovery.hpp"
 #include "mods/mesh_visual_runtime.hpp"
 #include "mods/mesh_skin_runtime.hpp"
 #include <chrono>
@@ -45,7 +46,7 @@ protected:
         TexManager.BeginEnterTextureBlock(1);TexManager.EnterIMGFile(img.data(),1,0,0);TexManager.EndEnterTextureBlock(1);
     }
     void TearDown() override {
-        mods::Scripts().Start(mods::Manager{});Draw3DRetireVisuals(block.data(),sizeof(block));
+        mods::MeshDiscoveryRecorder().Stop();mods::Scripts().Start(mods::Manager{});Draw3DRetireVisuals(block.data(),sizeof(block));
         std::error_code ignored;fs::remove_all(root,ignored);
     }
     mods::Package Package(const std::string &id,const std::string &texture,unsigned strip=0) {
@@ -109,6 +110,14 @@ TEST_F(ModMeshPackages, CallbackFailureRetiresOwnedGeometryBeforeTheNextDraw) {
     EXPECT_TRUE(mods::Scripts().ActiveOwners().empty());EXPECT_FALSE(mods::PackageMeshesActive());
     EXPECT_EQ(&mods::ResolveReplacementVisual(source),&source);EXPECT_EQ(mods::MeshSkinBindingCount(),0u);
     ASSERT_FALSE(mods::Scripts().Diagnostics().empty());
+}
+TEST_F(ModMeshPackages, OptInDiscoveryCapturesNativeConstructionBeforeIndicesAreReleased) {
+    std::string error;ASSERT_TRUE(mods::MeshDiscoveryRecorder().Start(root/"export",error))<<error;
+    Model model;CVisualVu1 native;native.Initialize();auto &source=Build(native,model);
+    EXPECT_TRUE(source.indices.empty());EXPECT_EQ(mods::MeshDiscoveryRecorder().Count(),1u);
+    EXPECT_EQ(&mods::ResolveReplacementVisual(source),&source);EXPECT_EQ(mods::MeshSkinBindingCount(),0u);
+    Build(native,model);EXPECT_EQ(mods::MeshDiscoveryRecorder().Count(),1u);
+    EXPECT_TRUE(mods::MeshDiscoveryRecorder().Errors().empty());
 }
 TEST_F(ModMeshPackages, UnmatchedNativeModelDoesNotCreateBindingsOrDiagnostics) {
     Load(Package("test.mesh","unseen"));Model model;CVisualVu1 native;native.Initialize();auto &source=Build(native,model);

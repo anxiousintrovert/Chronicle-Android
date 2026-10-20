@@ -1,4 +1,5 @@
 #include "chronicle/mod_camera.hpp"
+#include "mods/mesh_discovery.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -54,6 +55,7 @@ struct Options {
     bool         offscreen = false;
     std::int64_t frames = -1;
     const char  *screenshot = nullptr;
+    const char  *discover_meshes = nullptr;
     const char  *input = nullptr;
     int          width = 0;
     int          height = 0;
@@ -85,6 +87,7 @@ Options g_options;
                  "                     --headless does when there is no VK_EXT_headless_surface)\n"
                  "  --frames N         stop after N frames of the game's main loop\n"
                  "  --screenshot PATH  write the last tick's image (no FPS counter) to PATH on exit\n"
+                 "  --discover-meshes DIR  export encountered model snapshots to a new directory (authoring only)\n"
                  "  --input FILE       drive pad 1 from a script (default: DC_INPUT); see docs/PC.md\n"
                  "  --width, --height  window size in pixels (default: config.json, then the monitor's)\n"
                  "  --screenshot-fps   with --screenshot and --show-fps: the image as a window shows it, the\n"
@@ -130,6 +133,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.frames = number();
         } else if (arg == "--screenshot") {
             options.screenshot = value();
+        } else if (arg == "--discover-meshes") {
+            options.discover_meshes = value();
         } else if (arg == "--input") {
             options.input = value();
         } else if (arg == "--width") {
@@ -410,6 +415,13 @@ int Run(int argc, const char **argv) {
         // The game's message files as language JSON for translators; no window, no game.
         return LocalizeExport(options.export_text, true) >= 0 ? kExitOk : kExitUsage;
     }
+    if (options.discover_meshes != nullptr) {
+        std::string error;
+        const auto utf8 = std::string(options.discover_meshes);
+        if (!mods::MeshDiscoveryRecorder().Start(std::filesystem::path(std::u8string(utf8.begin(),utf8.end())), error)) {
+            std::fprintf(stderr,"cannot start mesh discovery: %s\n",error.c_str());return kExitUsage;
+        }
+    }
     LoadInputScript(options.input);
 
     ConfigLoad();
@@ -457,6 +469,11 @@ int Run(int argc, const char **argv) {
         status = Screenshot(options.screenshot);
     }
     ReportPresentStats();
+    if (options.discover_meshes != nullptr) {
+        auto &discovery=mods::MeshDiscoveryRecorder();
+        discovery.Stop();
+        std::fprintf(stderr,"mesh discovery: %zu snapshots, %zu distinct errors\n",discovery.Count(),discovery.Errors().size());
+    }
 
     ConfigRemoveChangeHook(LocalizeConfigChanged);
     ConfigRemoveChangeHook(GameOptionsChanged);

@@ -1,6 +1,7 @@
 #include "mods/mesh_skin_runtime.hpp"
 #include "mods/mesh_visual_runtime.hpp"
 #include "mods/mesh_packages.hpp"
+#include "mods/mesh_discovery.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -689,6 +690,7 @@ PORT_OVERRIDE int CVisualVu1::CreateVUdataFromMDT(u_int *block, u_int *data, int
             strip.ground_uv_flip_v = true;
         }
     }
+    mods::MeshDiscoveryRecorder().Observe(visual, view.header->vertex_num);
     Draw3DFinishVisual(visual);
     if (mesh_packages) mods::AttachPackageMesh(block, data, view.vertex, view.header->vertex_num, mesh_sources);
     return vu_size;

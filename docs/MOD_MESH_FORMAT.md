@@ -292,4 +292,60 @@ messages are deduplicated and bounded to 64, with at most 64 live refresh messag
 Native fixture tests cover construction, unchanged MDT bytes, cached geometry
 after file removal, remake/morph updates, ambiguous two-texture models, material
 mismatch, refresh failure, and an actual Lua callback failure retiring its mesh.
-Actual retail model/animation screenshots and author target discovery remain open.
+Author target discovery/export is available below. Actual retail replacement
+model/animation screenshots remain open.
+
+
+## Discovering real model targets
+
+Start Chronicle with `--discover-meshes DIR`, where `DIR` does not exist and its
+parent does. Use your own extracted data and a separate authoring save. For
+example, with an existing `authoring` directory:
+
+```powershell
+.\build-mods\darkcloud.exe --data "C:\my-pal-data" --save ".\authoring\save" --discover-meshes ".\authoring\capture-01"
+python tools/chronicle_mesh.py targets .\authoring\capture-01
+```
+
+Visit the scenes containing the models you want. Discovery observes native MDT
+construction before the renderer releases its source triangle indices. It does
+not enable mods or rewrite native model data. Without the flag the observer
+returns immediately, without inspecting model geometry or accessing files.
+
+Each unique geometry/target snapshot is an atomically published
+`<sha256>.model.json`. Duplicate constructions produce no duplicate file. The
+hash includes target metadata and exported geometry, not native addresses. A
+capture stops after 256 unique snapshots or 64 MiB; each snapshot is at most
+16 MiB. Existing output directories and all PS2 paths are rejected. Individual
+unsupported models produce bounded, deduplicated stderr diagnostics while other
+models can still be captured. The exit summary reports snapshot/error counts.
+
+A snapshot contains exactly `schema_version: 1`, `native_vertices`, `textures`,
+`mesh`, `fallback_normals`, and `dropped_degenerate_triangles`. `mesh` is the
+schema-1 geometry above. Export normalizes native normals; zero-length normals
+use `(0,0,1)` and are counted. Degenerate native triangles are omitted and counted.
+Positions, UVs and strip indices remain references to the built visual. This is
+an editable geometry reference, not a skeleton, animation, texture-image or
+complete custom-model export. Native model data is unchanged by these adjustments.
+
+List candidates with `targets`. It shows the original vertex count, all texture
+names, manifest-compatible `targetable_textures`, geometry counts and export
+adjustments. Models sharing a texture/count can still differ; inspect all matching
+snapshots before declaring a broad replacement. A multi-texture model needs only
+one matching declaration; declaring separate replacements for its different
+textures makes runtime selection ambiguous.
+
+Extract a ready-to-inspect framework mesh, or export an OBJ for a model editor:
+
+```powershell
+python tools/chronicle_mesh.py extract .\authoring\capture-01\HASH.model.json .\authoring\reference.mesh.json
+python tools/chronicle_mesh.py export-obj .\authoring\capture-01\HASH.model.json .\authoring\reference.obj
+python tools/chronicle_mesh.py obj .\authoring\edited.obj .\authoring\edited.mesh.json
+```
+
+Replace `HASH` with a listed snapshot name. Outputs must be new files outside PS2
+folders. OBJ uses `usemtl strip0` through `strip255`; preserve those native strip
+assignments when editing. OBJ import can deduplicate identical flattened vertices,
+so use the snapshot's `native_vertices` for the manifest target, not the exported
+OBJ vertex count. Export and import never install or enable a package. Public mesh
+activation remains gated pending retail replacement/animation validation.

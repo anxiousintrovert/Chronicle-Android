@@ -3810,3 +3810,35 @@ The manager still explicitly blocks public mesh package activation. Native
 construction and diagnostic plumbing are integrated, but author target discovery
 and retail replacement-model/animation visual evidence remain outstanding before
 removing that gate and advertising a mesh capability. Full coverage is unfinished.
+
+
+## Opt-in native model discovery and reference export (2026-10-20)
+
+Added --discover-meshes DIR, disabled by default, observing native MDT construction
+before renderer indices are released. It requires a fresh directory, rejects PS2
+paths, rechecks output identity, atomically publishes without overwrite and
+SHA-256 deduplicates snapshots. Limits are 256 models, 64 MiB total and 16 MiB per
+snapshot. Exported geometry uses the existing strict mesh schema; normals are
+normalized (zero normals use a counted fallback) and degenerate triangles are
+omitted/counted. Native geometry is never changed. Inactive discovery returns
+before inspecting geometry or accessing files.
+
+chronicle_mesh.py now supports targets, extract and export-obj. Candidate reports
+preserve native vertex counts separately from flattened/exported counts; OBJ
+retains native strip assignments and can be reimported through the existing tool.
+These commands neither install nor enable packages. Documentation includes the
+snapshot fields, commands, budgets, output restrictions and export adjustments.
+
+Clang 23.1.2 game/test builds passed. All 11 discovery/native-package checks and
+58 Python checks passed. Full regression: 973 passed, 104 skipped, one disabled
+benchmark. The dormant PAL combat/shared-manager/back-floor replay passed.
+An actual 180-frame PAL run reached Divine Beast Cave floor selection and captured
+105 snapshots with zero discovery errors. Offline tooling validated all 105, and
+a real snapshot successfully extracted to mesh JSON, exported to OBJ and
+reimported. The screenshot was inspected. Evidence is local-only under
+issue-evidence/framework-expansion-20261019/mesh-discovery-7b751384a3c041708591007859dec9f8.
+PS2 and Kazarov diffs remain empty.
+
+Author target discovery is now usable. Public mesh activation remains blocked
+until retail replacement-model/animation rendering is validated; the discovery
+run is not replacement rendering evidence. Remaining coverage is still open.
