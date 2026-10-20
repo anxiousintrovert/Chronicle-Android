@@ -107,4 +107,55 @@ TEST(ModGeoramaValidation, RejectsOutOfBoundsTypesAndUnknownFields) {
     bad["extra"] = 0;
     EXPECT_FALSE(mods::ValidateOperation("georama.element_set", bad).empty());
 }
+TEST_F(ModGeorama, RequestCompletionPublishesMatchingCacheAndRollsBackWithOtherWrites) {
+    auto &town = *save->GetGrdData(0);
+    town.request_count = scene.request_count = 2;
+    town.request_complete[0] = scene.requests[0] = 0;
+    town.request_complete[1] = scene.requests[1] = 7;
+    const mods::GameCommand complete{"georama.request_set", {{"town", 0}, {"request", 0}, {"completed", true}}};
+    const auto before = std::make_unique<CSaveData>(*save);
+    EXPECT_FALSE(Apply({complete, Set(1, true)}));
+    EXPECT_EQ(std::memcmp(before.get(), save.get(), sizeof(CSaveData)), 0);
+    EXPECT_EQ(scene.requests[0], 0);
+    EXPECT_FALSE(scene.requests_changed);
+    ASSERT_TRUE(Apply({complete})) << error;
+    EXPECT_EQ(town.request_complete[0], 1);
+    EXPECT_EQ(scene.requests[0], 1);
+    EXPECT_EQ(scene.requests[1], 7);
+    EXPECT_TRUE(scene.requests_changed);
+    auto expected = std::make_unique<CSaveData>(*before);
+    expected->GetGrdData(0)->request_complete[0] = 1;
+    EXPECT_EQ(std::memcmp(expected.get(), save.get(), sizeof(CSaveData)), 0);
+    auto reset = complete; reset.arguments["completed"] = false;
+    ASSERT_TRUE(Apply({reset}));
+    EXPECT_EQ(town.request_complete[0], 0);
+    EXPECT_EQ(scene.requests[0], 0);
+    scene.request_count = 3;
+    EXPECT_FALSE(Apply({complete}));
+    EXPECT_EQ(town.request_complete[0], 0);
+}
+
+TEST_F(ModGeorama, RequestValidationAndUnloadedTownDoNotTouchOtherScene) {
+    save->GetGrdData(1)->request_count = 1;
+    mods::GameCommand command{"georama.request_set", {{"town", 1}, {"request", 0}, {"completed", true}}};
+    srand(145); const auto next = rand(); srand(145);
+    ASSERT_TRUE(Apply({command}));
+    EXPECT_EQ(save->GetGrdData(1)->request_complete[0], 1);
+    EXPECT_FALSE(scene.requests_changed);
+    EXPECT_EQ(rand(), next);
+    command.arguments["request"] = 1;
+    EXPECT_FALSE(Apply({command}));
+    command.arguments["request"] = 0;
+    for (int count : {-1, 25}) {
+        save->GetGrdData(1)->request_count = count;
+        EXPECT_FALSE(Apply({command}));
+    }
+    command.arguments["completed"] = 1;
+    EXPECT_FALSE(mods::ValidateOperation(command.operation, command.arguments).empty());
+    command.arguments["completed"] = true;
+    for (int town : {-1, 6}) {
+        command.arguments["town"] = town;
+        EXPECT_FALSE(mods::ValidateOperation(command.operation, command.arguments).empty());
+    }
+}
 } // namespace

@@ -111,6 +111,7 @@ constexpr Operation operations[] = {
     {"fishing.get",               "game.read",     "Fishing point balance.",                                                       false},
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
+    {"georama.request_set", "game.write", "Set saved request completion and synchronize a matching loaded town.", true},
     {"georama.satisfaction_get", "game.read", "Saved request completion totals and rounded satisfaction percentage.", false},
     {"georama.get",               "game.read",     "Saved plots, placements and request completion.",                              false},
     {"georama.elements_get",      "game.read",     "Inspect loaded retail optional plot elements and their prerequisites.",        false},
@@ -360,6 +361,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "georama.elements_get" || name == "georama.element_set") {
         return ValidateGeoramaElements(name, a);
     }
+    if (name == "georama.request_set") return ValidateGeoramaRequest(a);
     if (name == "georama.satisfaction_get") {
         if (a.size() != 1 || !a.contains("town") || !a["town"].is_number_integer() || a["town"].get<double>() < 0 || a["town"].get<double>() > 4)
             return "town must identify a Georama settlement in 0..4";
@@ -823,6 +825,8 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 retail::BuildUp(*staged, a, equipment != nullptr);
             } else if (op == "weapons.upgrade" || op == "weapons.attachment_set" || op == "weapons.attachment_remove") {
                 retail::Apply(*staged->GetDngStatus(), op, a, equipment != nullptr);
+            } else if (op == "georama.request_set") {
+                ApplyGeoramaRequest(*staged, staged_georama ? &*staged_georama : nullptr, a);
             } else if (op == "georama.element_set") {
                 if (!staged_georama) {
                     throw std::runtime_error("native Georama scene is unavailable");

@@ -1704,3 +1704,24 @@ current building placement, change completion flags, award rewards or run
 native Georama scripts. Returned data is detached from the save. Use
 `georama.get` for plot and placement details, and declare this operation in
 `requires_operations` when using it from a package.
+
+
+## Georama request completion
+
+`georama.request_set {town=0,request=0,completed=true}` (`game.write`) changes
+one saved native request flag. `town` is 0..5; `request` is zero-based 0..23
+and must exist in that town's saved request table. Counts outside 0..24 and
+non-boolean completion values are rejected. Declare the operation in
+`requires_operations`.
+
+The host requires stable town or dungeon play outside menus and transitions.
+When the selected town is loaded, its request cache is updated in the same
+transaction so the next native save preserves the change. Mismatched loaded
+and saved request counts are rejected. Other towns update only their saved
+flag. The whole callback rolls back if any command fails.
+
+This is an explicit save change, not a persistent override or content registry:
+disabling the mod does not undo it, and later native condition evaluation may
+replace it. It does not run reward scripts, satisfy placement prerequisites,
+change other flags, or add requests. Use `georama.get` or
+`georama.satisfaction_get` to inspect the result.

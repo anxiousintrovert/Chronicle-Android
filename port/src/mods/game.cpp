@@ -77,6 +77,8 @@ struct LoadedGeorama {
             return;
         }
         state.town = NowEditMap;
+        state.request_count = EditPartsInfo.parts_max;
+        std::copy_n(EditPartsInfo.request, 24, state.requests.begin());
         for (int i = 0; i < 24; ++i) {
             auto *plot = EditPartsInfo.GetPartsInfo(i);
             if (!plot || plot->parts_no != i) {
@@ -94,6 +96,7 @@ struct LoadedGeorama {
     void Commit() const {
         // Captured and committed synchronously on the game thread. No mod callback
         // or scene transition can run between capture, validation and publication.
+        if (state.requests_changed) std::copy(state.requests.begin(), state.requests.end(), EditPartsInfo.request);
         for (int i = 0; i < 24; ++i) {
             if (!plots[i]) {
                 continue;
@@ -298,6 +301,10 @@ void TickGame() {
             return QueuePartySwitch(commands, money, error);
         }
         for (const auto &command : commands) {
+            if (command.operation == "georama.request_set" && !ShopWritesReady()) {
+                error = "Georama request writes require stable play outside menus and transitions";
+                return false;
+            }
             if ((command.operation == "combat.damage" || command.operation == "player.status_add" || command.operation == "player.status_remove") &&
                 UserStatus != static_cast<CUserStatus *>(SaveData->GetDngStatus())) {
                 error = "native active-character status is unavailable";
@@ -305,7 +312,7 @@ void TickGame() {
             }
         }
         std::optional<LoadedGeorama> georama;
-        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "georama.element_set"; })) {
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "georama.element_set" || command.operation == "georama.request_set"; })) {
             georama.emplace();
         }
         std::optional<EquipmentContext> equipment;
