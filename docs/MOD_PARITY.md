@@ -1276,8 +1276,8 @@ and floor-generation overrides remain open. This is native settlement capability
 coverage, not a claim that those other travel domains are implemented.
 
 Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
-780 registered, 756 passed, 23 skipped and one disabled, with no failures (one
-additional mouse-capture test skipped in this environment). Both optional PAL
+780 registered, 755 passed, 24 skipped and one disabled, with no failures (two
+additional mouse-capture tests skipped in this environment). Both optional PAL
 travel tests passed separately: town 3.139 s, dungeon exit 11.472 s. All 18 Python
 checks and 3,840 empty/disabled seed comparisons passed. CLI discovery lists all
 three operations. PS2 files remain unchanged.
