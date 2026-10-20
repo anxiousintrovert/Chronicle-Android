@@ -1494,6 +1494,32 @@ per-frame rules override or default gameplay package is added.
 
 ### Owned monster loot definitions
 
+### Owned dungeon layouts
+
+`dungeon.layout_set {dungeon=0,rooms=64,area=46,room_min=3,room_max=6}`
+(`game.write`) claims generation settings for future floor loads in one retail
+dungeon (0–6). Rooms must be 2–64, area 8–46, and room sides 3–6 with
+`room_min <= room_max`. Requested room count is a packing target, not a guarantee.
+One package owns each dungeon's layout; a conflicting write reports its owner.
+These writes participate in callback rollback.
+
+`dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
+`scope="future_floor_loads"`, `requested`, and `last_build`. The latter is
+`{state="pending"}`, `{state="applied",floor,front_rooms,back_rooms}`, or
+`{state="rejected",reason}`. Acceptance of the configuration does not guarantee
+that a later floor can be built. Rejected preparation restores generation state
+and falls back to native retail generation.
+
+`dungeon.layout_reset {dungeon=0}` (`game.write`) removes the caller's claim.
+Owner retirement or runtime reset also removes claims. Existing loaded floors
+are not regenerated; declare settings again in `on_game_enter` when needed.
+Declare the operations used in the package's `requires_operations` manifest.
+
+Expanded layouts use a 48×48 grid, with transport resources preflighted against
+the supported retail programs. Unknown transport resources reject the request.
+This API does not add monsters, extra floors, custom maps, items, weapons or
+cutscenes. With no claims, the native generation path runs unchanged.
+
 `dungeon.loot_get {monster=0}` (`game.read`) reads a retail monster definition
 with ID 0-166. It returns `monster`, `rare_item`, `steal_item`, `attachment_kind`,
 `drops_items`, per-field `owners`, `scope="future_model_loads"`, and live

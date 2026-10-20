@@ -1,6 +1,7 @@
 #include "btsysscript.hpp"
 
 #include <cstdio>
+#include <stdexcept>
 
 #include "btitem_port.hpp"
 #include "chronicle/dungeon_transport.hpp"
@@ -36,6 +37,17 @@ int GetStackInt(RS_STACKDATA *argument) {
 }
 
 } // namespace
+
+void PrepareLoadedExpandedTransport(int dungeon) {
+    if (dungeon != g_event_dungeon || !g_event_data || g_event_size <= 0) {
+        throw std::runtime_error("expanded transport program is not loaded for this dungeon");
+    }
+    if (!g_transport_prepared) {
+        g_expanded_transport = ExpandedTransportScript(std::span<const char>(g_event_data, g_event_size), dungeon,
+                                                       chronicle::dungeon::GridStride, chronicle::dungeon::GridStride);
+        g_transport_prepared = true;
+    }
+}
 
 PORT_OVERRIDE void BtSystemScriptLoad(int floor) {
     char  path[32];

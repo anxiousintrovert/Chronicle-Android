@@ -20,6 +20,7 @@
 #include "gfx_fixture.hpp"
 #include "main.hpp"
 #include "mods/back_floor.hpp"
+#include "mods/dungeon_layout.hpp"
 #include "mods/world_transition.hpp"
 #include "platform/clock.hpp"
 #include "platform/config.hpp"
@@ -34,6 +35,7 @@ namespace {
 bool               queued = false, arrived = false;
 bool               expected_expanded = false, road_captured = false;
 int                expected_rooms = 6;
+bool               managed_layout = false;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
 std::string        last_state;
@@ -70,6 +72,18 @@ void BackPump() {
     if (!queued && state.value("ready", false)) {
         for (const auto &action : mods::Scripts().Actions("audit.back")) {
             if (action.id == "enter" && action.available) {
+                if (managed_layout) {
+                    const auto state = mods::ReadLayout({
+                        {"dungeon", selectMapNo}
+                    });
+                    EXPECT_EQ(state["owner"], "audit.back");
+                    EXPECT_EQ(state["last_build"]["state"], expected_expanded ? "applied" : "rejected") << state.dump();
+                    if (!expected_expanded) {
+                        EXPECT_FALSE(state["last_build"]["reason"].get<std::string>().empty());
+                        EXPECT_EQ(MainDungeonMap.GridExtent(), 20);
+                        EXPECT_EQ(UraDungeonMap.GridExtent(), 20);
+                    }
+                }
                 if (expected_expanded) {
                     EXPECT_EQ(MainDungeonMap.GridExtent(), 48);
                     EXPECT_EQ(UraDungeonMap.GridExtent(), 48);
@@ -156,7 +170,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -166,6 +180,7 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6) {
     }
     queued = arrived = false;
     expected_expanded = expanded;
+    managed_layout = managed;
     expected_rooms = rooms;
     road_captured = false;
     stable = maximum_stable = 0;
@@ -186,6 +201,16 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (managed) {
+        const auto    script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string   source((std::istreambuf_iterator<char>(input_script)), {});
+        input_script.close();
+        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6" : ",area=8,room_min=6,room_max=6";
+        const std::string init = "return {on_game_enter=function() assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
+        source.replace(source.find("return {on_tick="), std::string("return {on_tick=").size(), init);
+        std::ofstream(script_path) << source;
+    }
     PathsSetDataRoot(data);
     PathsSetSaveRoot(root);
     ConfigLoad();
@@ -206,7 +231,7 @@ end}
     GameSetAutosave(false);
     GameSetFrameBudget(18500);
     std::unique_ptr<chronicle::dungeon::BuildScope> layout;
-    if (expanded) {
+    if (expanded && !managed) {
         layout = std::make_unique<chronicle::dungeon::BuildScope>(chronicle::dungeon::BuildLayout{rooms, 46, 3, rooms > 6 ? 6 : 4});
     }
     const int result = RunGame(0, nullptr);
@@ -262,4 +287,13 @@ TEST(ModBackFloorRetail, MaximumMoonSeaTransport) { RunBackAudit(4, true, 64); }
 TEST(ModBackFloorRetail, MaximumGalleryTransport) { RunBackAudit(5, true, 64); }
 
 TEST(ModBackFloorRetail, MaximumDemonShaftTransport) { RunBackAudit(6, true, 64); }
+
+TEST(ModBackFloorRetail, ManagedCaveLayout) { RunBackAudit(0, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedWiseOwlLayout) { RunBackAudit(1, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedShipwreckLayout) { RunBackAudit(2, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedTempleLayout) { RunBackAudit(3, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedMoonSeaLayout) { RunBackAudit(4, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedGalleryLayout) { RunBackAudit(5, true, 64, true); }
+TEST(ModBackFloorRetail, ManagedDemonShaftLayout) { RunBackAudit(6, true, 64, true); }
+TEST(ModBackFloorRetail, RejectedManagedLayoutUsesRetail) { RunBackAudit(0, false, 2, true); }
 } // namespace

@@ -12,6 +12,7 @@
 #include "savedata.hpp"
 #include "shops.hpp"
 #include "loot.hpp"
+#include "dungeon_layout.hpp"
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning.hpp"
@@ -27,6 +28,9 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"dungeon.layout_get", "game.read", "Read future-floor layout ownership and last build result.", false},
+    {"dungeon.layout_set", "game.write", "Own procedural dimensions for future dungeon floor loads.", true},
+    {"dungeon.layout_reset", "game.write", "Release owned future-floor dimensions without rebuilding the live floor.", true},
     {"dungeon.back_floor_state", "game.read", "Read native back-floor availability and request state.", false},
     {"dungeon.back_floor_enter", "game.write", "Queue native back-floor transport from ordinary dungeon play.", true},
     {"dungeon.floor_rules_get", "game.read", "Read saved floor restrictions and active restriction.", false},
@@ -256,6 +260,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "dungeon.locations" || name == "dungeon.enter" || name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
+    if (name == "dungeon.layout_get" || IsLayoutWrite(name)) return ValidateLayout(name, a);
     if (name == "dungeon.loot_get" || IsLootWrite(name)) return ValidateLoot(name, a);
     if (name.starts_with("shops.")) {
         return ValidateShop(name, a);

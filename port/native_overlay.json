@@ -1288,6 +1288,16 @@
           "old": "    for (j = 0; j < 48; j++) {\n        UraDungeonMap.events[j].kind = DNG_EVENT_NONE;",
           "new": "    for (j = 0; j < chronicle::dungeon::MapEventCapacity; j++) {\n        UraDungeonMap.events[j].kind = DNG_EVENT_NONE;",
           "count": 1
+        },
+        {
+          "old": "#include \"dun/gameloop.hpp\"",
+          "new": "#include \"dun/gameloop.hpp\"\n#include \"chronicle/mod_dungeon_layout.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "void BtCleatRandomMap() {",
+          "new": "void BtCleatRandomMap() {\n    if (mods::BuildOwnedDungeonLayout()) return;",
+          "count": 1
         }
       ]
     },

@@ -21,6 +21,7 @@
 #include "savedata.hpp"
 #include "shops.hpp"
 #include "loot.hpp"
+#include "dungeon_layout.hpp"
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning_native.hpp"
@@ -170,6 +171,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();
     RetainPlayerTuningOwners();
     static std::uint64_t loot_epoch = 0;
@@ -231,6 +233,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "dungeon.layout_get") return ReadLayout(arguments);
         if (operation == "dungeon.loot_get") {
             auto result = ReadLoot(arguments);
             result["writable"] = ShopWritesReady();
@@ -323,6 +326,7 @@ void TickGame() {
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
     RetainPlayerTuningOwners();
+    if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();
     if (HasOwnedLoot()) RetainOwnedLoot(Scripts().ActiveOwners());
     if (HasOwnedShops() && ShopTablesSafe()) {
