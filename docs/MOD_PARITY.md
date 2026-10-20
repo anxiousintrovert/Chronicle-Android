@@ -4311,3 +4311,12 @@ without replaying rewards. The shipped completed-save migration preserves its
 receipt. Shared-menu, disk-save and migration checks passed (10 tests), along
 with all 81 Python author-tool tests. No engine behavior or PS2 source changed;
 no new retail playthrough is claimed.
+
+## Capability inventory consistency (2026-10-20)
+
+The format guide now includes the previously omitted quest ordering,
+failure/resume, custom-event objective, enemy-death event and native service
+capabilities. An author-tool regression compares all 43 capabilities in the
+native loader, offline CLI and guide. All 82 Python tests passed. This verifies
+inventory agreement, not implementation completeness or full gameplay coverage;
+remaining domains in the coverage matrix still apply. No engine sources changed.

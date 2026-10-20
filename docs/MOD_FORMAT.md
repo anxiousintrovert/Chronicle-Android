@@ -113,6 +113,9 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `skills.defense.v1` | Explicit trained-rank reduction of dungeon native life deductions |
 | `skills.effects.v1` | Explicit trained-rank outgoing enemy damage bonuses |
 | `skills.trees.v1` | Owned skill definitions, prerequisites, ranks and shared-manager browsing |
+| `quests.ordering.v1` | Objective prerequisites with saved progress validation; locked objectives cannot advance |
+| `quests.failure.v1` | Fail/resume owned dynamic quests while preserving progress and recording a reason |
+| `quests.custom_events.v1` | Bind quest objectives to own/dependency custom signals with explicit payload matching |
 | `quests.events.v1` | Owned objectives driven by existing map/floor/death events |
 | `quests.rewards.v1` | Transactional one-time quest currency/item/weapon rewards |
 | `quests.abandon.v1` | Cancel unfinished explicit-start dynamic quests and return to registered |
@@ -131,7 +134,9 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `player.read.v1`, `party.read.v1`, `inventory.read.v1` | Lazy, detached legacy snapshots; require `game.read` |
 | `events.transition_ready.v1` | Opt-in rising native world-transition readiness notification for Lua and ABI 2 |
 | `events.lifecycle.v1` | Owned Lua listeners for tick, map/floor entry, gameplay enter/leave, and deferred save-loaded notification |
+| `events.enemy_killed.v1` | Deferred bounded native/scripted enemy-death observations with source identity |
 | `events.custom.v1` | Deferred package-owned Lua/native events; dependency-scoped subscriptions and transactional publication |
+| `services.native.v1` | Optional ABI 2 query/command export descriptor shared with declared-dependent Lua/native callers |
 | `services.command.v1` | Explicit Lua/native command exports callable by Lua/native dependents; one shared managed/game transaction |
 | `services.query.v1` | Declared-dependency Lua/native query exports; bounded structured requests/results; no managed writes |
 | `menu.actions.v1` | Owned Lua actions in the shared mod manager; explicit user invocation queues a normal gameplay transaction |

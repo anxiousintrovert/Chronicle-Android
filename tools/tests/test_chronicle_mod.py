@@ -131,6 +131,18 @@ class AuthorTools(unittest.TestCase):
             path.write_bytes(raw+zlib.crc32(raw).to_bytes(4,'little'))
             with self.assertRaises(ValueError): tool.inspect_save(path)
 
+    def test_loader_cli_and_documented_capability_inventory_agree(self):
+        import re
+        repository=Path(tool.__file__).resolve().parents[1]
+        source=(repository/'port/src/mods/manager.cpp').read_text()
+        body=source.split('bool Supports(std::string_view capability) {',1)[1].split('\n}',1)[0]
+        native=set(re.findall(r'capability == "([^"]+)"',body))
+        self.assertEqual(tool.CAPABILITIES,native)
+        guide=(repository/'docs/MOD_FORMAT.md').read_text()
+        inventory=guide.split('## Capability inventory',1)[1].split('## Required host operations',1)[0]
+        documented=set(re.findall(r'`([a-z0-9_.]+\.v[0-9]+)`',inventory))
+        self.assertEqual(documented,native)
+
     def test_skill_template_pack_install_keeps_opt_in_training_script(self):
         folder=self.root/'authored';tool.create('test.training',folder,'skill')
         manifest=tool.validate(folder)
