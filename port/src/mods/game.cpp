@@ -22,6 +22,7 @@
 #include "shops.hpp"
 #include "party.hpp"
 #include "town.hpp"
+#include "player_tuning_native.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -163,6 +164,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    RetainPlayerTuningOwners();
     static std::uint64_t shop_epoch = 0;
     if (HasOwnedShops() && ShopTablesSafe()) {
         if (shop_epoch != Scripts().Epoch()) {
@@ -221,6 +223,7 @@ void TickGame() {
             result["writable"] = ShopWritesReady();
             return result;
         }
+        if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
         if (operation == "party.town_state") return ReadTownSelection();
         if (operation == "party.switch_state") return ReadPartySwitchState();
         if (operation == "weapons.refresh_state") {
@@ -289,6 +292,7 @@ void TickGame() {
         }
         for (unsigned i = 0; i < effects.status_sounds; ++i) { SndSePlay(SE_STATUS_AILMENT, -1, 0); }
         return true; }, deaths, dropped_deaths);
+    RetainPlayerTuningOwners();
     if (HasOwnedShops() && ShopTablesSafe()) {
         RetainOwnedShops(Scripts().ActiveOwners());
     }

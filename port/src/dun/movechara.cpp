@@ -1,3 +1,4 @@
+#include "mods/player_tuning_native.hpp"
 #include "dun/gameloop.hpp"
 
 #include <libvu0.h>
@@ -350,6 +351,7 @@ PORT_OVERRIDE void DunMoveChara() {
                         run_speed = 1.45f;
                     }
 
+                    mods::ScalePlayerValue(mods::PlayerTuning::RunSpeed, run_speed);
                     velo__2[0] = move_x * run_speed;
                     velo__2[2] = move_z * run_speed;
                 }
@@ -3297,6 +3299,7 @@ PORT_OVERRIDE int BtCheckDamageProc() {
                     driveNoInterpolate = 1;
                     lockOnTargetFlag = 0;
                     BtActStatus.recoil_frames = 0xA0;
+                    mods::TunePlayerHitFrames(BtActStatus.recoil_frames, BtActStatus.invincible_frames);
                 }
             }
 
@@ -3386,6 +3389,7 @@ PORT_OVERRIDE int BtCheckDamageProc() {
                     } else {
                         setUnitAmbientAnime(80.0f, 1.0f, 255.0f, 0.0f, 0.0f);
                     }
+                    mods::TunePlayerHitFrames(BtActStatus.recoil_frames, BtActStatus.invincible_frames);
                 }
             }
         }

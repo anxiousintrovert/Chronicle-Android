@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 83 implemented operations, native plugins and author
+a real host-call boundary, 86 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -15,14 +15,14 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration | Broader town interaction validation, temporary tuning ownership; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | No framework renderer/timing hooks; native enemy model/shadow scale on explicit request | Owned overlays/camera/lighting/audio controls, activated only by callers |
+| Rendering / audio | Native enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, automated retail smoke scenarios |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -974,3 +974,41 @@ registered 740 tests: 726 passed, 13 skipped and one disabled, with no failures.
 All 17 Python checks passed; 3,840 generator cases still match the pinned baseline
 with empty and disabled mods. PS2 remains unchanged. This validates the internal
 ownership foundation, not the as-yet-unimplemented native tuning controls.
+
+## Native player tuning APIs (2026-10-19)
+
+`player.tuning_state/set/clear` now publish the nine owned controls through the
+shared Lua/native host boundary (86 implemented operations). Save/entity/shop
+transactions stage tuning on a detached copy and publish only after every write
+validates. Ownership cleanup runs before native gameplay and after callbacks,
+with an immediate return when no claims exist. No gameplay package is installed.
+
+Port-side hooks cover dungeon movement, both native damage/recoil branches,
+action-gauge refill, water drain, base weapon wear and temporary minimap reveals.
+The four copied native functions have an executable source comparison requiring
+identity to the read-only PS2 bodies after removing only the declared hook calls.
+All storage/capacities and native timing remain unchanged. Swing tuning is scoped
+to one character step and restores its previous speed afterward; it scales the
+native recovery rate rather than replacing it with the reference's absolute
+rate. Toan's first swing has no eligible safe tail and remains native. The other
+four were exercised with actual PAL motion resources at 0.25, 1 and 4, including
+hit boundaries and the guarded completion region.
+
+Native tests cover water drain across dungeon/restriction/weapon modifiers,
+weapon wear and its unscaled hit-kind surcharge, dormant/neutral float identity,
+mode guards, recoil/invincibility/reveal helper behavior, cleanup and rollback
+with save writes. A separate PAL test invokes native motionDrive and verifies
+action-gauge values of 10.125, 10.5 and 12 from a starting value of 10 at the three
+scales. Another fresh PAL run uses a shared-manager action and Lua host calls to
+apply all fields, verify their owners/values, clear, reapply and stop the runtime;
+cleanup removes claims before the next gameplay update. Author-tool API discovery
+also lists the three operations. Runtime-only claims are not persisted as saves;
+previously consumed resources and hit timers are not rewound when tuning stops.
+
+Clang 23.1.2 Windows Release builds passed. The full suite registered 747 tests:
+731 passed, 15 skipped and one disabled, with no failures. Both optional retail
+tests passed separately. All 18 Python checks passed, and the 3,840-case generator
+matrix still matches pinned upstream for empty and disabled mods. No PS2 files
+changed. These checks do not prove rendered minimap output, every live movement
+or damage scenario, custom motion behavior, other platforms, or full parity.
+Those validation gaps and all other unfinished coverage remain open.

@@ -34,6 +34,7 @@
 #include "mods/runtime.hpp"
 #include "mods/party.hpp"
 #include "mods/town.hpp"
+#include "mods/player_tuning_native.hpp"
 #include "mglib.hpp"
 #include "mglib_port.hpp"
 #include "nowload.hpp"
@@ -942,6 +943,7 @@ int RunGame(int argc, char **argv) {
             PolyCount = 0;
             old_main_mode = mode;
 
+            mods::RetainPlayerTuningOwners();
             result = ModeLoop(skip_title);
             GameApplyLoopResult(old_main_mode, result);
             if (result == 0 && LocalizeLanguagePending() && !MenuOptionOpen() &&

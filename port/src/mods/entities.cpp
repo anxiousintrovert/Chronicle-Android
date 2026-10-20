@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <optional>
 #include <stdexcept>
 
 #include "api.hpp"
@@ -11,6 +12,7 @@
 #include "monstorunit.hpp"
 #include "runtime.hpp"
 #include "shops.hpp"
+#include "player_tuning_native.hpp"
 #include "userstatus.hpp"
 #include "weaponelement.hpp"
 
@@ -105,24 +107,31 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
         *effects = {};
     }
     ShopTransaction shops;
+    const bool has_tuning = std::ranges::any_of(commands, [](const auto &command) { return PlayerTuning::IsWrite(command.operation); });
+    std::optional<PlayerTuning> tuning;
+    if (has_tuning) {
+        tuning = OwnedPlayerTuning();
+        if (!tuning->Stage(commands, Scripts().Epoch(), error)) return false;
+    }
     if (!shops.Stage(commands, shops_writable, error)) {
         return false;
     }
     std::vector<GameCommand> filtered;
     const bool               has_shops = std::ranges::any_of(commands, [](const auto &command) { return IsShopWrite(command.operation); });
-    if (has_shops) {
+    if (has_shops || has_tuning) {
         for (const auto &command : commands) {
-            if (!IsShopWrite(command.operation)) {
+            if (!IsShopWrite(command.operation) && !PlayerTuning::IsWrite(command.operation)) {
                 filtered.push_back(command);
             }
         }
     }
-    const auto &batch = has_shops ? filtered : commands;
+    const auto &batch = has_shops || has_tuning ? filtered : commands;
     if (!std::ranges::any_of(batch, [](const auto &command) { return IsEntityWrite(command.operation); })) {
         if (!ApplySave(save, batch, money, error, effects, georama, equipment)) {
             return false;
         }
         shops.Commit();
+        if (tuning) OwnedPlayerTuning().Swap(*tuning);
         return true;
     }
     if (effects) {
@@ -143,6 +152,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
     }
     entities.Commit();
     shops.Commit();
+    if (tuning) OwnedPlayerTuning().Swap(*tuning);
     return true;
 }
 

@@ -609,3 +609,199 @@ PORT_OVERRIDE void CDungeonMap::DrawAtraBoll(float *pos) {
         }
     }
 }
+
+#include "mods/player_tuning_native.hpp"
+
+PORT_OVERRIDE void CDungeonMap::DrawMiniMap(float *pos, float angle) {
+    int           status;
+    unsigned char red;
+    int           saved_map;
+    int           saved_crystal;
+    unsigned char green;
+    unsigned char blue;
+    int           row;
+    int           col;
+    int           direction;
+    int           map_x;
+    int           map_y;
+    int           cellx;
+    int           visible;
+    int           show;
+    float         player_screen_x;
+    CTexture     *map_texture;
+    CTexture     *symbol_texture;
+    unsigned char alpha;
+    int           masked;
+    int           cell_no;
+    CRect_i_      map_dst;
+    CRect_i_      map_src;
+    CRect_i_      player_dst;
+    CRect_i_      player_src;
+    CRect_i_      trap_dst;
+    CRect_i_      trap_src;
+    CRect_i_      box_dst;
+    CRect_i_      box_src;
+    CRect_i_      atra_dst;
+    CRect_i_      atra_src;
+    status = UserStatus->minimap_status;
+
+    if (status == 3) {
+        return;
+    }
+
+    unsigned char red_table[3] = {0x20, 0x40, 0x60};
+    unsigned char green_table[3] = {0x60, 0x80, 0xA2};
+    unsigned char blue_table[3] = {0x40, 0x60, 0xA2};
+
+    red = red_table[status];
+    green = green_table[status];
+    blue = blue_table[status];
+    saved_map = BtEquipMap;
+    saved_crystal = BtEquipMasuisyou;
+
+    if (DebugStatus[3] != 0) {
+        BtEquipMap = 1;
+        BtEquipMasuisyou = 1;
+    }
+
+    mods::ApplyPlayerMapReveal(BtEquipMap, BtEquipMasuisyou);
+    visible = BtEquipMap ? 0 : 1;
+    map_texture = TexManager.GetTexture("minimap1", -1);
+    symbol_texture = TexManager.GetTexture("itempack", -1);
+
+    for (row = 0; row < 20; row++) {
+        for (col = 0; col < 20; col++) {
+            cell_no = col + row * 20;
+            masked = this->mask[cell_no];
+            show = masked;
+
+            if (visible == 0 && masked == 0) {
+                show = 1;
+                alpha = red;
+            } else {
+                alpha = green;
+            }
+
+            if (this->cells[cell_no].parts_no != MAP_PARTS_NONE && show == 1) {
+                direction = this->cells[cell_no].direction + this->parts[this->cells[cell_no].parts_no].direction_offset;
+                map_src.x = (direction % 8) * 16;
+                map_src.y = (direction / 8) * 16;
+                map_src.width = 16;
+                map_src.height = 16;
+                map_dst.x = col * 16 + 380;
+                map_dst.y = row * 16 + 64;
+                map_dst.width = 16;
+                map_dst.height = 16;
+                set2DSprite(Vif1Packet, map_texture, map_dst, map_src, alpha, alpha, alpha, blue);
+            }
+        }
+    }
+
+    pos[0] *= 0.1f;
+    pos[2] *= 0.1f;
+    player_src.x = 88;
+    player_src.y = 96;
+    player_src.width = 12;
+    player_src.height = 12;
+    map_x = (int) (pos[2] + 64.0f + 8.0f);
+    player_screen_x = pos[0] + 380.0f + 8.0f;
+    map_y = (int) player_screen_x;
+    player_dst.x = (int) player_screen_x;
+    player_dst.y = map_x;
+    player_dst.width = 12;
+    player_dst.height = 12;
+    set2DSprite(Vif1Packet, symbol_texture, player_dst, player_src, 7, 7, angle);
+
+    for (int i = 0; i < 3; i++) {
+        int cell;
+
+        if (this->trap_circle[i].state == 0) {
+            continue;
+        }
+
+        map_x = (int) (this->trap_circle[i].pos[0] * 0.1f);
+        map_y = (int) (this->trap_circle[i].pos[2] * 0.1f);
+        cellx = (int) ((80.0f + this->trap_circle[i].pos[0]) / 160.0f);
+        cell = cellx + (int) ((80.0f + this->trap_circle[i].pos[2]) / 160.0f) * 20;
+        show = this->mask[cell];
+
+        if (BtEquipMasuisyou == 1) {
+            show = 1;
+        }
+
+        if (this->cells[cell].parts_no != MAP_PARTS_NONE && show == 1) {
+            trap_src.x = 88;
+            trap_src.y = 112;
+            trap_src.width = 8;
+            trap_src.height = 8;
+            trap_dst.x = map_x + 384;
+            trap_dst.y = map_y + 68;
+            trap_dst.width = 8;
+            trap_dst.height = 8;
+            set2DSprite(Vif1Packet, symbol_texture, trap_dst, trap_src, blue);
+        }
+    }
+
+    for (int i = 0; i < 24; i++) {
+        int cell;
+
+        if (this->boxes[i].used == 0 || this->boxes[i].closed == 0) {
+            continue;
+        }
+
+        map_x = (int) (this->boxes[i].pos[0] * 0.1f);
+        map_y = (int) (this->boxes[i].pos[2] * 0.1f);
+        cellx = (int) ((80.0f + this->boxes[i].pos[0]) / 160.0f);
+        cell = cellx + (int) ((80.0f + this->boxes[i].pos[2]) / 160.0f) * 20;
+        show = this->mask[cell];
+
+        if (BtEquipMasuisyou == 1) {
+            show = 1;
+        }
+
+        if (this->cells[cell].parts_no != MAP_PARTS_NONE && show == 1) {
+            box_src.x = 80;
+            box_src.y = 96;
+            box_src.width = 8;
+            box_src.height = 8;
+            box_dst.x = map_x + 384;
+            box_dst.y = map_y + 68;
+            box_dst.width = 8;
+            box_dst.height = 8;
+            set2DSprite(Vif1Packet, symbol_texture, box_dst, box_src, blue);
+        }
+    }
+
+    for (int i = 0; i < 8; i++) {
+        int cell;
+
+        if (this->atra[i].used == 0) {
+            continue;
+        }
+
+        map_x = (int) (this->atra[i].pos[0] * 0.1f);
+        map_y = (int) (this->atra[i].pos[2] * 0.1f);
+        cellx = (int) ((80.0f + this->atra[i].pos[0]) / 160.0f);
+        cell = cellx + (int) ((80.0f + this->atra[i].pos[2]) / 160.0f) * 20;
+        show = this->mask[cell];
+
+        if (BtEquipMasuisyou == 1) {
+            show = 1;
+        }
+
+        if (this->cells[cell].parts_no != MAP_PARTS_NONE && show == 1) {
+            atra_src.x = 72;
+            atra_src.y = 104;
+            atra_src.width = 8;
+            atra_src.height = 8;
+            atra_dst.x = map_x + 384;
+            atra_dst.y = map_y + 68;
+            atra_dst.width = 8;
+            atra_dst.height = 8;
+            set2DSprite(Vif1Packet, symbol_texture, atra_dst, atra_src, blue);
+        }
+    }
+
+    BtEquipMap = saved_map;
+    BtEquipMasuisyou = saved_crystal;
+}

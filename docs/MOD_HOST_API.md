@@ -21,6 +21,9 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `player.tuning_state` | none | `game.read` | Effective dungeon tuning and owners per control |
+| `player.tuning_set` | selected tuning fields | `game.write` | Replace this package's owned tuning request atomically |
+| `player.tuning_clear` | none | `game.write` | Release this package's tuning request |
 | `shops.list` | none | `game.read` | All 18 native shop lists, base prices, resource owners and write readiness |
 | `shops.get` | `shop` | `game.read` | One native shop (0–17), capacity 20, stocked goods and write readiness |
 | `shops.set_items` | `shop`, `items` | `game.write` | Own and replace a native list with up to 20 existing retail item IDs |
@@ -177,6 +180,55 @@ Goro's unavailable motion 32 uses idle for the corresponding town motion.
 Retail tests exercise all six bodies through a shared-manager action, runtime
 shutdown/restoration and native map-transition retirement. Full movement,
 conversation, interior and cross-platform coverage remains outstanding.
+
+### Owned player tuning
+
+`player.tuning_set` accepts an object containing any of these fields. Omitted
+fields release that package's previous claims; `{}` is equivalent to clear.
+
+| Field | Accepted values | Native effect |
+|---|---|---|
+| `run_speed` | finite multiplier 0.25–4 | Dungeon walk/dash speed |
+| `attack_anim_speed` | finite multiplier 0.25–4 | Safe recovery portion of retail Toan sword swings; hit/sound windows and the final completion window retain native stepping |
+| `recoil_scale` | finite multiplier 0.25–4 | Newly applied hit recoil, rounded and at least one frame |
+| `gauge_refill` | finite multiplier 0.25–4 | Native action-gauge gain after character/status rules |
+| `thirst_drain` | finite multiplier 0.25–4 | Native water drain after floor/weapon modifiers; disabled drain and drinking behavior remain native |
+| `durability_wear` | finite multiplier 0.25–4 | Base per-hit wear; the native hit-kind surcharge remains additive |
+| `invincible_bonus_frames` | integer 0–120 | Invincibility through scaled recoil plus this bonus, never shortening existing invincibility |
+| `map_reveal`, `monster_reveal` | boolean | Temporary minimap Map/Crystal behavior; does not grant inventory items |
+
+Effects apply in dungeon mode. Requests can be configured during town or dungeon
+gameplay and survive ordinary scene changes until cleared or their owner stops.
+Each field has one owner. Different mods can own different fields; a competing
+claim fails with the field and existing package ID. Explicit `1`, `0` and `false`
+values still claim their controls. There is no implicit multiplier stacking.
+
+`player.tuning_state` returns `active`, `epoch`, `effective` and `owners`, with
+each control represented in the latter two objects. `active` means claims exist,
+even in town where effects are dormant. Writes share callback transaction
+validation with save/entity/shop writes; query readback observes committed state.
+A failed transaction publishes neither new tuning nor partial claims.
+
+Ownership is reconciled before gameplay updates and after script callbacks.
+Runtime restart, disabled/failed owners and explicit clear stop future tuning.
+Already consumed water/WHP or hit timers are not rewound. These requests are
+ephemeral, not save data; reapply deliberately after a runtime restart if desired.
+With no claims, hooks return without scaling native values or scanning owners.
+Neutral values also preserve the original float operations.
+
+The swing multiplier applies to the current native recovery speed and is capped
+before the completion window. Unlike the reference's absolute recovery speed,
+it is a multiplier. Retail Toan's first swing has no eligible interval under these
+guards and stays unchanged; the other four have verified recovery intervals.
+Other characters, custom motion layouts, cutscenes and contributor frameworks
+are not assigned new motion contracts by this API.
+
+Use `chronicle.action` in the existing shared manager to arm a tuning request,
+then submit it from `on_tick` after gameplay resumes. No tuning gameplay package
+is bundled or enabled. Windows PAL tests cover native thirst/wear calculations,
+gauge and swing recovery, host calls, clear and runtime-stop cleanup. Full rendered
+minimap comparisons, live movement/hit scenarios and other platforms remain
+unverified.
 
 ### Retail player statuses
 

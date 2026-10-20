@@ -832,3 +832,540 @@ PORT_OVERRIDE int LoaderLoop() {
     CDbgMsg.Draw();
     return chosen;
 }
+
+#include "mods/player_tuning_native.hpp"
+#include "menuitemstep.hpp"
+#include "objanime.hpp"
+extern CSHOT_MACHINGUN OzumondShot;
+extern s32 defWeapon__6[6];
+
+PORT_OVERRIDE void motionDrive() {
+    sceVu0FVECTOR pos;
+    sceVu0FVECTOR rotation;
+    sceVu0FVECTOR hand;
+    int           chara = UserStatus->cur_chara;
+    int           i;
+
+    if (BtAllDrawFlag == 0) {
+        return;
+    }
+
+    if (BtEventMode == 0) {
+        NowMonstorUnit->Step(driveStepHold | CMonUnitHold);
+    }
+
+    if (BtActStatus.player_visible != 0 && EdEventInfo.player_draw != 0) {
+        sceVu0CopyVector(pos, CharaFrame->position);
+        CharaFrame->GetRotation(rotation);
+        CharaMain.SetPosition(pos);
+        CharaMain.SetRotation(rotation[0], rotation[1], rotation[2]);
+
+        int blend = 0;
+
+        if (driveNoInterpolate != 0) {
+            blend = 4;
+            driveNoInterpolate = 0;
+        }
+
+        // A held step, an event or a status ailment restarts the motion
+        // outright; otherwise it only changes where it differs.
+        if (driveStepHold != 0 || EdEventInfo.player_stop != 0 || BtActStatus.movement_locked != 0) {
+            CharaMain.motion_no = BtActStatus.motion_no;
+            CharaMain.motion_flags = 1;
+            CharaMain.motion_speed = -1.0f;
+
+            if (chara == CHARA_XIAO) {
+                CCharacter *weapon = NowWeapon;
+
+                weapon->motion_no = BtActStatus.motion_no;
+                weapon->motion_flags = 1;
+                weapon->motion_speed = -1.0f;
+            }
+
+            BtActStatus.main_motion = -1;
+        } else if (BtActStatus.main_motion != BtActStatus.motion_no) {
+            CharaMain.motion_no = BtActStatus.motion_no;
+            CharaMain.motion_flags = blend;
+            CharaMain.motion_speed = -1.0f;
+
+            if (chara == CHARA_XIAO) {
+                CCharacter *weapon = NowWeapon;
+
+                weapon->motion_no = BtActStatus.motion_no;
+                weapon->motion_flags = blend;
+                weapon->motion_speed = -1.0f;
+            }
+
+            BtActStatus.main_motion = BtActStatus.motion_no;
+        }
+
+        // Osmond's tail keeps turning on its own.
+        if (UserStatus->cur_chara == CHARA_OSMOND) {
+            CFrame *tail = CharaMain.frame->SearchFrame("tukene1");
+            CFrame *tail_shadow = CharaMain.shadow_frame->SearchFrame("obj46");
+
+            if (tail != NULL) {
+                static float y = 0.0f;
+
+                y += 0.35699910f;
+
+                if (!(y < PI_SHORT)) {
+                    y = y - TWO_PI_SHORT;
+                }
+
+                tail->SetRotType(2);
+                tail->SetRotation(0.0f, AngleLimit(y), 0.0f);
+
+                if (tail_shadow != NULL) {
+                    tail_shadow->SetRotType(2);
+                    tail_shadow->SetRotation(0.0f, AngleLimit(y), 0.0f);
+                }
+            }
+        }
+
+        if (lockOnTargetFlag != 0 && UserStatus->cur_chara == CHARA_XIAO && CharaMainHandViewFlag == 0) {
+            CharaMain.motion_type.state.look_frame = (CFrameVu1 *) CharaFrame->SearchFrame("jnt2_1");
+            sceVu0CopyVector(CharaMain.motion_type.state.look_position, BtActStatus.target_position);
+            CharaMain.motion_type.state.look_at = true;
+            CharaMain.motion_type.state.look_constraint = FRAME_CONSTRAINT_X;
+        } else {
+            CharaMain.motion_type.state.look_at = false;
+        }
+
+        mods::StepPlayerMotion();
+
+        if (chara == CHARA_XIAO) {
+            NowWeapon->Step();
+        }
+
+        if (BtActStatus.shadow_visible != 0) {
+            CharaMain.ShadowStep();
+        }
+    }
+
+    if ((CharaMainHandViewFlag != 0 && UserStatus->cur_chara == CHARA_XIAO) || UserStatus->cur_chara == CHARA_RUBY) {
+        sceVu0CopyVector(hand, CharaFrame->position);
+
+        float height = CharaHeight(UserStatus);
+
+        hand[1] += height - 3.0f;
+        CharaHand.SetPosition(hand);
+
+        int blend = 0;
+
+        if (driveNoInterpolate != 0) {
+            blend = 4;
+            driveNoInterpolate = 0;
+        }
+
+        if (driveStepHold != 0 || BtActStatus.movement_locked != 0) {
+            CharaHand.motion_no = BtActStatus.motion_no;
+            CharaHand.motion_flags = 1;
+            CharaHand.motion_speed = -1.0f;
+
+            if (chara == CHARA_XIAO) {
+                CCharacter *weapon = NowWeapon;
+
+                weapon->motion_no = BtActStatus.motion_no;
+                weapon->motion_flags = 1;
+                weapon->motion_speed = -1.0f;
+            }
+
+            BtActStatus.hand_motion = -1;
+        } else if (BtActStatus.hand_motion != BtActStatus.motion_no) {
+            CharaHand.motion_no = BtActStatus.motion_no;
+            CharaHand.motion_flags = blend;
+            CharaHand.motion_speed = -1.0f;
+
+            if (chara == CHARA_XIAO) {
+                CCharacter *weapon = NowWeapon;
+
+                weapon->motion_no = BtActStatus.motion_no;
+                weapon->motion_flags = blend;
+                weapon->motion_speed = -1.0f;
+            }
+
+            BtActStatus.hand_motion = BtActStatus.motion_no;
+        }
+
+        if (chara == CHARA_XIAO) {
+            NowWeapon->Step();
+        }
+
+        CharaHand.Step();
+    }
+
+    if (BtEventMode != 0) {
+        for (int i = 0; i < 6; i++) {
+            if (EdEventInfo.npc_stop[i] == 0) {
+                NPCUnit[i].ShadowStep();
+                NPCUnit[i].Step();
+            }
+        }
+    }
+
+    if (driveStepHold == 1) {
+        return;
+    }
+
+    if (BtActStatus.event_block_frames > 0) {
+        BtActStatus.event_block_frames--;
+    }
+
+    // A weapon that is nearly broken keeps saying so.
+    if (BtEventMode == 0) {
+        WEAPON_HAVE *weapon;
+        CUserStatus *status;
+        s8          *slots;
+        s8          *check_slots;
+        s8           owner;
+        s8           check_owner;
+
+        status = UserStatus;
+        owner = check_owner = status->cur_chara;
+        slots = status->equipped_weapon_slot;
+        check_slots = status->equipped_weapon_slot;
+        weapon = &status->chara_weapons[owner][(s8) slots[owner]];
+
+        if (weapon->durability_f <= 10.0f && status->chara_weapons[check_owner][(s8) check_slots[check_owner]].item_no != defWeapon__6[(s8) owner]) {
+            static int  warning_cnt;
+            static char init;
+            int         wait;
+
+            if (init == 0) {
+                warning_cnt = 0;
+                init = 1;
+            }
+
+            wait = (int) weapon->durability_f * 10;
+
+            if (wait < 11) {
+                wait = 10;
+            }
+
+            if (warning_cnt <= 0) {
+                warning_cnt = wait;
+                SndSePlay(SE_WARNING, -1, 0);
+            } else {
+                warning_cnt--;
+            }
+        }
+    }
+
+    if (BtActStatus.player_visible != 0 && EdEventInfo.player_draw != 0) {
+        CharaMain.ClothStep(0);
+    }
+
+    if (BtActStatus.camera_hold == 0) {
+        NowCamera__3->Step(1);
+    }
+
+    if (Water_Splash_actFlag != 0) {
+        Water_Splash.Step();
+
+        float end = (float) Water_Splash.motion_type.motion_info[0].end;
+
+        if (Water_Splash.motion_type.state.time >= end - 0.5f && Water_Splash.motion_type.state.time < end) {
+            Water_Splash_actFlag = 0;
+        }
+    }
+
+    StepWaterLing();
+    NowDngMap->StepTrapCircle();
+    Trap_Circle.Step();
+
+    if (EscapeFlag != 0) {
+        EscapeEffect.Step();
+    }
+
+    ItemVolumeStep.LoopStep(60);
+    NowDngMap->StepNPC();
+    NowDranMapField->CDranMapField::Step();
+    DngMesStb.Step();
+
+    if (DngMessMan.timer > 0) {
+        DngMessMan.timer--;
+
+        if (DngMessMan.timer == 0) {
+            DngMessMan.steev_window = false;
+            DngMessMan.message = -1;
+        }
+    }
+
+    if (DngMessMan.hide_timer > 0) {
+        DngMessMan.hide_timer--;
+    } else {
+        DngMessMan.hide_timer = 0;
+    }
+
+    // Every hit that is still in the air counts down and drifts.
+    CCollisionData *collision = NowColData;
+
+    for (i = 0; i < 96; i++) {
+        if (collision->active[i] == 0) {
+            continue;
+        }
+
+        if (collision->hit[i].phase > 0) {
+            collision->hit[i].phase--;
+        } else {
+            collision->hit[i].phase = collision->hit[i].ready_phase;
+        }
+
+        collision->hit[i].life--;
+
+        if (collision->hit[i].life <= 0) {
+            collision->active[i] = 0;
+            collision->hit[i].scale_rate = 0.0f;
+            continue;
+        }
+
+        collision->hit[i].radius += collision->hit[i].unk_40;
+
+        if (collision->hit[i].scale_rate != 0.0f) {
+            sceVu0ScaleVectorXYZ(collision->hit[i].base_point, collision->hit[i].base_point, collision->hit[i].scale_rate);
+        }
+    }
+
+    if (StatusErrCheck(AILMENT_FREEZE) != 0 || StatusErrCheck(AILMENT_STAMINA) != 0) {
+        CUserStatus *status = UserStatus;
+        s8           owner = status->cur_chara;
+        s16         *left = status->ailment_frames;
+
+        if (left[status->cur_chara] > 0) {
+            left[owner]--;
+
+            CUserStatus *now = UserStatus;
+            s8           who = now->cur_chara;
+
+            if (now->ailment_frames[now->cur_chara] == 0) {
+                now->ailments[who] = 0;
+                BtActStatus.movement_locked = 0;
+            }
+        }
+    }
+
+    if (BtActStatus.special_cooldown > 0) {
+        BtActStatus.special_cooldown--;
+    }
+
+    // The action gauge fills back up at a rate the weapon sets.
+    if ((int) BtActStatus.action_gauge < 100) {
+        if (BtActStatus.refill_frames < 10) {
+            BtActStatus.refill_frames++;
+        }
+
+        float gain = (float) NowWeaponHave->speed / 30.0f;
+
+        if (StatusErrCheck(AILMENT_GOO) != 0) {
+            gain /= 2.0f;
+        }
+
+        if (StatusErrCheck(AILMENT_STAMINA) != 0) {
+            gain *= 2.0f;
+        }
+
+        if (gain < 1.0f) {
+            gain = 1.0f;
+        }
+
+        CUserStatus *status = UserStatus;
+        s8          *who_ref = &status->cur_chara;
+
+        if (status->cur_chara == CHARA_TOAN) {
+            if (BtActStatus.swinging == 0) {
+                gain *= 0.25f;
+            } else {
+                gain = 0.0f;
+            }
+
+            BtActStatus.swinging = 0;
+        }
+
+        if (*who_ref == CHARA_UNGAGA) {
+            if (BtActStatus.swinging == 0) {
+                gain *= 0.25f;
+            } else {
+                gain = 0.0f;
+            }
+
+            BtActStatus.swinging = 0;
+        }
+
+        s8 who = *who_ref;
+        s8 who_copy = *who_ref;
+
+        if (*who_ref == CHARA_OSMOND) {
+            if (BtActStatus.gun_type != 1) {
+                if (BtActStatus.gauge_exhausted == 0) {
+                    gain = 0.0f;
+                } else {
+                    gain *= 0.5f;
+                }
+            } else {
+                gain *= 1.5f;
+            }
+        }
+
+        if (who == CHARA_XIAO) {
+            gain *= 1.5f;
+        }
+
+        if (who_copy == CHARA_RUBY) {
+            gain *= 1.5f;
+        }
+
+        mods::ScalePlayerValue(mods::PlayerTuning::GaugeRefill, gain);
+        BtActStatus.action_gauge += gain;
+
+        if (!((int) BtActStatus.action_gauge < 100)) {
+            BtActStatus.action_gauge = 100.0f;
+            BtActStatus.gauge_flash = 10;
+            BtActStatus.gauge_exhausted = 0;
+        }
+    } else if (BtActStatus.gauge_flash > 0) {
+        BtActStatus.gauge_flash--;
+    }
+
+    if (BtActStatus.hud_shake_frames > 0) {
+        BtActStatus.hud_shake_y = (int) (16.0f * (float) rand() / 2147483648.0f) - 8;
+        BtActStatus.hud_shake_frames--;
+    }
+
+    BtActStatus.frames_since_attack++;
+
+    if (!(BtActStatus.frames_since_attack < 3600)) {
+        BtActStatus.frames_since_attack = 3600;
+    }
+
+    if (UserStatus->step_disable == 0) {
+        BtStatusErrStep();
+    }
+
+    CUserStatus *status = UserStatus;
+    s8          *healed_ref = &status->cur_chara;
+    float        water_max = status->water_max[*healed_ref];
+    float        water_now = status->water_now[*healed_ref];
+    static int   heal_counter = 0;
+
+    heal_counter++;
+
+    if (!(heal_counter < 240)) {
+        if ((NowWeaponHave->flags & 0x800) && status->hp[*healed_ref] > 0) {
+            status->AddNowLife((s8) *healed_ref, 1, 255.0f);
+        }
+
+        heal_counter = 0;
+    }
+
+    UserStatus->Step(0);
+    float dry = UserStatus->water_now[UserStatus->cur_chara];
+
+    DngMessMan.SetStatus_Dry(water_max, water_now, dry);
+    BtStatusAlarmAnime();
+
+    for (int i = 0; i < FrameObjAnimCnt; i++) {
+        ObjAnimePlay(&FrameObjAnim[i]);
+    }
+
+    CDungeonMap *map = NowDngMap;
+
+    map->fire.FireStep();
+    map->fire.RasterStep();
+    CWeaponFx.Step();
+
+    for (int i = 0; i < 4; i++) {
+        CWeaponElFx[i].Step();
+    }
+
+    for (int i = 0; i < 32; i++) {
+        HitValue[i].Step();
+    }
+
+    mainItemModel.Step();
+    WeaponCrashEffect.Step();
+
+    for (int i = 0; i < 16; i++) {
+        HitMark[i].Step();
+        HitPointMark[i].Step();
+        MyHitPointMark[i].Step();
+    }
+
+    if (NewChangeFxFlag != 0) {
+        NewChangeFx.Step();
+
+        float end = (float) NewChangeFx.motion_type.motion_info[0].end;
+
+        if (NewChangeFx.motion_type.state.time >= end - 0.3f && NewChangeFx.motion_type.state.time < end) {
+            NewChangeFxFlag = 0;
+        }
+    }
+
+    if (atraShortGetType != 0 && atraGetStatus != 0) {
+        shortAtraEffect.Step();
+    }
+
+    if (itemOpenSmallFlag == 1) {
+        itemOpenSmall.Step();
+        itemOpenSmallFx.Step();
+    }
+
+    if (itemOpenBigFlag == 1) {
+        itemOpenBig.Step();
+        itemOpenBigFx.Step();
+    }
+
+    if (CEffectHold != 0 || BtEventMode != 0) {
+        return;
+    }
+
+    if (BtActStatus.camera_shake_frames > 0) {
+        float shake = BtActStatus.camera_shake;
+
+        BtActStatus.camera_shake_offset = 2.0f * (shake * (float) rand()) / 2147483648.0f - shake;
+        BtActStatus.camera_shake -= BtActStatus.camera_shake_decay;
+        BtActStatus.camera_shake_frames--;
+    } else {
+        BtActStatus.camera_shake_offset = 0.0f;
+    }
+
+    if (BtActStatus.fast_camera_frames > 0) {
+        BtActStatus.fast_camera_frames--;
+    }
+
+    int          picked_up = RandomItem->CheckPosition();
+    CUserStatus *collector = UserStatus;
+    int          total = collector->money + picked_up;
+
+    if (!(total < 0xFFFF)) {
+        collector->money = 0xFFFF;
+    } else {
+        collector->money = total;
+    }
+
+    RandomItem->Step();
+    StealItem.Step();
+
+    for (int i = 0; i < 3; i++) {
+        CBomb__2[i].Step();
+    }
+
+    for (int i = 0; i < 5; i++) {
+        MasekiEffect[i].Step();
+    }
+
+    NowShockWave->Step();
+
+    CSHOT_EFFECT *effects = NowShotEffect->effect;
+
+    for (i = 0; i < 5; i++) {
+        effects[i].Step();
+    }
+
+    OzumondShot.Step();
+    OzumondFire.Step();
+    OzumondShotEffect.Step();
+    NowMainEffect->Step();
+    NowShotData->step();
+    HealEffect.Step();
+}
