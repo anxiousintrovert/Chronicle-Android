@@ -107,6 +107,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | Capability | Host service |
 |---|---|
 | `assets.replace.v1` | Existing same-size game asset replacement |
+| `quests.dynamic.v1` | Transactional registration and progression of owned saved objectives |
 | `quests.read.v1` | Shared Lua/native owner-scoped quest metadata and progress queries |
 | `save.migrations.v1` | Explicit declarative migration of package-owned saved values and quest IDs |
 | `assets.mesh_replace.v1` | Declarative existing-model geometry replacement with inherited native animation/materials |
@@ -240,7 +241,8 @@ reject collisions with existing unrelated destinations. Removals are bounded to
 128 distinct value keys and cannot overlap either side of a value rename.
 Defaults are up to 128 boolean, finite-number or at-most-256-byte string values;
 they only fill absent keys after renaming/removal and cannot recreate a removed
-key. Quest progress is preserved, not clamped or reset. Include any corresponding
+key. Quest progress is preserved, not clamped or reset. Dynamic quest definitions move
+with their progress when `rename_quests` is used. Include any corresponding
 reward-granted flags in the migration design; the framework does not infer reward
 semantics or replay rewards for you.
 

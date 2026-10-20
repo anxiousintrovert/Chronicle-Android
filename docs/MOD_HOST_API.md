@@ -21,6 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `quests.register` | `id`, `title`, `description`, `goal` | `game.write` | Register an owned saved objective; returns its status |
+| `quests.advance` | `id`, `amount` | `game.write` | Transactionally advance an owned objective; returns its status |
 | `quests.list` | none | `game.read` | This owner's declared quests and saved objective progress |
 | `quests.get` | `id` | `game.read` | One declared quest owned by the caller; unknown IDs fail |
 | `weapons.equip_state` | none | `game.read` | Town loadout readiness/reason and saved equipped slots for joined characters |
@@ -2331,5 +2333,48 @@ progress/description details, and filters All/In progress/Completed with Square
 or a mouse click. Controller navigation, mouse selection/wheel, and Circle/right
 click use the existing menu framework. It reflects the current session even when
 next-launch enable preferences have changed. Inactive packages do not gain a
-quest page merely from discovery. Runtime registration of new quest definitions,
-dialogue/skill trees and native quest events remain separate unfinished services.
+quest page merely from discovery. Dynamic registration is described below. Dialogue/skill trees and native quest
+events remain separate unfinished services.
+
+
+## Dynamic owned objectives
+
+`quests.dynamic.v1` supplies `quests.register` and `quests.advance` to Lua and
+native plugins during writable gameplay callbacks. Both require `game.write`.
+They update the caller's managed state immediately within the current transaction
+and return a detached quest status object, rather than queuing an engine command.
+Callback errors and rejected game commits roll back definitions and progress
+along with other owned values. Read-only dependency query exports cannot use them.
+
+```lua
+local objective = assert(chronicle.call("quests.register", {
+    id = "treasure", title = "Lost treasures",
+    description = "Recover three treasures for the villagers.", goal = 3
+}))
+-- Call in response to a verified event, not unconditionally every tick:
+objective = assert(chronicle.call("quests.advance", {id = "treasure", amount = 1}))
+```
+
+IDs use the existing quest syntax, title/description require 1..256 UTF-8 bytes
+without control characters, and goal is an integer 1..1000000. Amount is an integer
+0..1000000; progress is capped at the goal. No unknown fields are accepted. The
+64-definition limit is shared by manifest and dynamic quests. Definitions are
+immutable within a saved version: identical re-registration is idempotent, but a
+changed definition or manifest-owned ID fails without replacing anything.
+Registration preserves saved progress already associated with that owner's ID.
+Other packages can use the same local ID without sharing state.
+
+Definitions persist in the owning mod's checksummed save namespace alongside
+progress. Save load validates definitions, combined limits and collisions against
+the active manifest before publishing anything. An explicit `rename_quests` save
+migration moves dynamic definitions and their progress together. Changing goal or
+other definition fields requires a separate future migration operation; do not
+silently reinterpret a saved objective. `quests.list/get`, `quest_get/quest_add`,
+and the shared manager's filtered Quests page include dynamic definitions. Lists
+show manifest declaration order followed by dynamic IDs in lexical order.
+
+Dynamic objectives advance only through explicit calls. There are no automatic
+native event hooks, quest-start scenes, dialogue, item/weapon grants or rewards.
+Authors must verify their events and use existing transactional grant APIs plus
+owned reward flags. No registrations, storage or native changes occur merely from
+discovering a disabled package or starting with no gameplay mods.

@@ -744,6 +744,8 @@ TEST_F(ModRuntime, QueryExportsCannotMutateProviderStateOrGameButCanReadWithProv
         assert(chronicle.export_query('read',function()
             assert(chronicle.set('bad',1)==nil)
             assert(chronicle.quest_add('visit',1)==nil)
+            assert(chronicle.call('quests.advance',{id='visit',amount=1})==nil)
+            assert(chronicle.call('quests.register',{id='dynamic',title='New quest',description='Find treasure',goal=3})==nil)
             assert(chronicle.add_money(1)==nil)
             assert(chronicle.call('player.heal',{amount=1})==nil)
             return assert(chronicle.call('economy.get'))
@@ -1053,9 +1055,11 @@ protected:
     }
 };
 
-TEST_F(ModNativeV2, SharedQuestQueriesUseNativeOwnersDeclaredObjectives) {
+TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
     LoadPlugin("quests");runtime.Tick({1,2,0,true});
     EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["quest_read"],true);
+    const auto state=Json::parse(runtime.SaveState())["mods"]["test.native.v2"];
+    EXPECT_EQ(state["quests"]["dynamic"],1);EXPECT_EQ(state["quest_definitions"]["dynamic"]["goal"],3);
 }
 
 TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {

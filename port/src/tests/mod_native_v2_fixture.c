@@ -84,6 +84,8 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
         return host->call(host->context, "quests.list", "{}", &result) && strstr(result, "\"visit\"") &&
                host->call(host->context, "quests.get", "{\"id\":\"visit\"}", &result) && strstr(result, "\"goal\":2") &&
                !host->call(host->context, "quests.get", "{\"id\":\"foreign\"}", &result) &&
+               host->call(host->context, "quests.register", "{\"id\":\"dynamic\",\"title\":\"Native objective\",\"description\":\"Collect treasures\",\"goal\":3}", &result) &&
+               host->call(host->context, "quests.advance", "{\"id\":\"dynamic\",\"amount\":1}", &result) && strstr(result,"\"progress\":1") &&
                host->state_set(host->context, "quest_read", "true", &result);
     }
     if (!increment(host, "ticks"))

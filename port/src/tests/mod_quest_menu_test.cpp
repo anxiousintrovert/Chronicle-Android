@@ -25,7 +25,8 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     Json quests=Json::array();
     for(int i=0;i<10;++i)quests.push_back({{"id","quest."+std::to_string(i)}, {"title",i==0?"Welcome home":"Objective "+std::to_string(i)},
         {"description",i==0?"Return to Norune and speak to the townspeople. This quest is complete.":"Explore the village and recover the missing treasures. Braces such as {color} must stay literal."},{"goal",3}});
-    std::ofstream(root/"mods/test.quests/mod.json")<<Json{{"schema_version",1},{"id","test.quests"},{"name","Quest journal test"},{"version","1"},{"game","chronicle"},{"files",Json::object()},{"quests",quests}}.dump();
+    std::ofstream(root/"mods/test.quests/mod.json")<<Json{{"schema_version",1},{"id","test.quests"},{"name","Quest journal test"},{"version","1"},{"game","chronicle"},{"files",Json::object()},{"api_version",1},{"script","main.lua"}}.dump();
+    std::ofstream(root/"mods/test.quests/main.lua")<<"return {}";
     std::ofstream(root/"mods-profile.json")<<Json{{"schema_version",1},{"enabled",{{"test.quests",true}}}}.dump();
     dc::test::GfxFixture graphics(640,480,1.0f,dc::test::GfxOptions{.offscreen=true});InputInit();
     if(const char *data=std::getenv("DC_DATA")) {
@@ -35,6 +36,7 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     }
     mods::Shared().Start({root/"mods"},{},root);mods::Scripts().Start(mods::Shared().Active());
     auto state=Json::parse(mods::Scripts().SaveState());state["mods"]["test.quests"]["quests"]={{"quest.0",3},{"quest.1",1}};
+    for(auto definition:quests){const auto id=definition["id"].get<std::string>();definition.erase("id");state["mods"]["test.quests"]["quest_definitions"][id]=definition;}
     std::string error;ASSERT_TRUE(mods::Scripts().LoadState(state.dump(),error))<<error;
     const auto before=mods::Scripts().SaveState();
     InputSetMenuMouse(true);

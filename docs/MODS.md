@@ -31,7 +31,7 @@ returns to the package list. The action pane shows readiness and the last result
 script failures also appear in package diagnostics. Actions belong to the current
 run, even if you have changed the package's next-launch enable selection.
 
-Packages with active quest declarations show **L1 Quests**. Open the quest page,
+Packages with active manifest or dynamically registered quests show **L1 Quests**. Open the quest page,
 use Up/Down or the mouse wheel to select an objective, and Left/Right to page its
 description. Square or the Filter button cycles All, In progress, and Completed.
 Circle returns to the package list. This view reads existing progress without

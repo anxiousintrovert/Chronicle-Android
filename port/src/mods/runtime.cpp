@@ -7,6 +7,7 @@
 #include "audio_streams.hpp"
 #include "mesh_packages.hpp"
 #include "save_migrations.hpp"
+#include "quests.hpp"
 #include "audio/mixer.hpp"
 #include "native.hpp"
 extern "C" {
@@ -230,24 +231,16 @@ int QuestAdd(lua_State *L) {
     if (!Self(L).playing || amount < 0 || amount > 1000000) {
         return Failure(L, "quest updates require gameplay and a bounded nonnegative amount");
     }
-    for (const auto &q : Self(L).package.quests) {
-        if (q.id == id) {
-            auto &quests = (*Self(L).state)["quests"];
-            if (quests.is_null()) {
-                quests = Json::object();
-            }
-            const int progress = quests.value(q.id, 0);
-            quests[q.id] = std::min<long long>(q.goal, progress + amount);
-            lua_pushinteger(L, quests[q.id].get<int>());
-            return 1;
-        }
-    }
-    return Failure(L, "quest must be declared by this mod");
+    auto &m=Self(L);
+    try {
+        m.snapshot=CallOwnedQuest(m.package,*m.state,"quests.advance",{{"id",id},{"amount",amount}});
+    } catch(const std::exception &error) {m.call_error=error.what();return Failure(L,m.call_error.c_str());}
+    lua_pushinteger(L,m.snapshot["progress"].get<int>());return 1;
 }
 
 int QuestGet(lua_State *L) {
     const char *id = luaL_checkstring(L, 1);
-    for (const auto &q : Self(L).package.quests) {
+    for (const auto &q : QuestDefinitions(Self(L).package,*Self(L).state)) {
         if (q.id == id) {
             const auto &state = *Self(L).state;
             lua_pushinteger(L, state.contains("quests") ? state["quests"].value(q.id, 0) : 0);
@@ -440,18 +433,6 @@ bool InvokeQueryService(Module &m, const Json &a, Json &result, std::string &err
     }
 }
 
-Json ReadOwnedQuests(const Module &m, std::string_view operation, const Json &arguments) {
-    Json entries=Json::array();
-    for (const auto &quest:m.package.quests) {
-        const int progress=m.state->contains("quests")?(*m.state)["quests"].value(quest.id,0):0;
-        Json entry={{"id",quest.id},{"title",quest.title},{"description",quest.description},
-                    {"progress",std::min(progress,quest.goal)},{"goal",quest.goal},{"complete",progress>=quest.goal}};
-        if(operation=="quests.get"&&arguments.at("id")==quest.id)return entry;
-        entries.push_back(std::move(entry));
-    }
-    if(operation=="quests.get")throw std::runtime_error("quest is not declared by this package");
-    return Json{{"quests",std::move(entries)}};
-}
 
 int ApiCall(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
@@ -476,8 +457,9 @@ int ApiCall(lua_State *L) {
     if (!m.call_error.empty()) {
         return Failure(L, m.call_error.c_str());
     }
-    if (op->name == "quests.list" || op->name == "quests.get") {
-        try { m.snapshot=ReadOwnedQuests(m,op->name,m.arguments); }
+    if (op->name.starts_with("quests.")) {
+        if (m.read_only && op->writes) return Failure(L,"query exports cannot write owned state");
+        try { m.snapshot=CallOwnedQuest(m.package,*m.state,op->name,m.arguments); }
         catch(const std::exception &error) { m.call_error=error.what(); return Failure(L,m.call_error.c_str()); }
         PushJson(L,m.snapshot);return 1;
     }
@@ -589,8 +571,8 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         if (m.read_only && op->writes) {
             throw std::runtime_error("query exports cannot write managed or game state");
         }
-        if (op->name == "quests.list" || op->name == "quests.get") {
-            m.native_result=ReadOwnedQuests(m,op->name,args).dump();
+        if (op->name.starts_with("quests.")) {
+            m.native_result=CallOwnedQuest(m.package,*m.state,op->name,args).dump();
             *result=m.native_result.c_str();return 1;
         }
         if (op->name == "services.query") {
@@ -1312,6 +1294,8 @@ void Runtime::Start(const Manager &manager) {
             impl_->state[id] = Json::object();
         }
         m.state = &impl_->state[id];
+        try { QuestDefinitions(m.package,*m.state); }
+        catch(const std::exception &error) { m.failed=true;impl_->diagnostics.push_back(id+": quest state invalid: "+error.what()); }
         for (const auto &dependency : m.package.dependencies) {
             for (const auto &loaded : impl_->modules) {
                 if (loaded->package.id == dependency && loaded->failed) {
@@ -1712,6 +1696,7 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
                         }
                     }
                 }
+                QuestDefinitions(Package{},state); // Validate even retained state without an active owner.
                 if (state.contains("quests")) {
                     if (!state["quests"].is_object() || state["quests"].size() > 64) {
                         throw std::runtime_error("invalid quest state");
@@ -1750,6 +1735,8 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
         validate_states();
         if (json["mods"].size() > 1024 || json.dump().size() > 4 * 1024 * 1024)
             throw std::runtime_error("migrated state exceeds save limits");
+        for (const auto &module:impl_->modules)
+            if(json["mods"].contains(module->package.id))QuestDefinitions(module->package,json["mods"][module->package.id]);
         Runtime staged;
         staged.Start(impl_->plan);
         if (!staged.impl_->diagnostics.empty()) {
@@ -1775,7 +1762,8 @@ bool Runtime::LoadState(const std::string &text, std::string &error) {
 std::vector<QuestStatus> Runtime::Quests() const {
     std::vector<QuestStatus> result;
     for (const auto &m : impl_->modules) {
-        for (const auto &q : m->package.quests) {
+        if(m->failed)continue;
+        for (const auto &q : QuestDefinitions(m->package,*m->state)) {
             const int value = m->state->contains("quests") ? (*m->state)["quests"].value(q.id, 0) : 0;
             result.push_back({m->package.id, q.id, q.title, q.description, std::min(value, q.goal), q.goal});
         }

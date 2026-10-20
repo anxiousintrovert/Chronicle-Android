@@ -164,7 +164,8 @@ std::string SelectedQuestOwner() {
     if(selected<0||selected>=static_cast<int>(packages.size()))return {};
     const auto &p=packages[selected];
     for(const auto &active:Shared().Active().Packages())
-        if(active.root==p.root&&active.id==p.id&&active.Active()&&!active.quests.empty())return p.id;
+        if(active.root==p.root&&active.id==p.id&&active.Active())
+            for(const auto &quest:Scripts().Quests())if(quest.owner==p.id)return p.id;
     return {};
 }
 

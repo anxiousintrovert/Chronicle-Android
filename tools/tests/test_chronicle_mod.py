@@ -29,6 +29,15 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_dynamic_quest_operations_are_explicit_writes(self):
+        names=['quests.register','quests.advance'];operations={entry['name']:entry for entry in tool.apis()}
+        for name in names:
+            self.assertTrue(operations[name]['writes']);self.assertEqual(operations[name]['permission'],'game.write')
+        folder=self.package('test.dynamic',requires_capabilities=['quests.dynamic.v1'],requires_operations=names,permissions=['game.write'])
+        self.assertEqual(tool.validate(folder)['requires_operations'],names)
+        manifest=folder/'mod.json';value=json.loads(manifest.read_text());value['permissions']=['game.read'];manifest.write_text(json.dumps(value))
+        with self.assertRaises(ValueError):tool.validate(folder)
+
     def test_shared_quest_queries_are_discoverable_and_require_read_permission(self):
         names=['quests.list','quests.get'];operations={entry['name']:entry for entry in tool.apis()}
         for name in names:
