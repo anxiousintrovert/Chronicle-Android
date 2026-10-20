@@ -1895,8 +1895,13 @@ std::vector<QuestStatus> Runtime::Quests() const {
             const int value = m->state->contains("quests") ? (*m->state)["quests"].value(q.id, 0) : 0;
             auto description=q.description;
             const auto status=QuestStatusJson(q,*m->state);
-            if(status.contains("objectives"))for(const auto &objective:status["objectives"])
+            if(status.contains("objectives"))for(const auto &objective:status["objectives"]) {
                 description+="\n\n"+objective["title"].get<std::string>()+": "+std::to_string(objective["progress"].get<int>())+" / "+std::to_string(objective["goal"].get<int>());
+                for(const auto &required:objective["blocked_by"]) {
+                    const auto prerequisite=std::ranges::find_if(status["objectives"],[&](const Json &entry){return entry["id"]==required;});
+                    description+="\nRequires: "+(*prerequisite)["title"].get<std::string>();
+                }
+            }
             if(status.contains("rewards")) {
                 description+=status["rewards_granted"].get<bool>()?"\n\nRewards granted":"\n\nRewards on completion";
                 for(const auto &reward:status["rewards"]) {

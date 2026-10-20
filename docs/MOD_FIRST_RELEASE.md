@@ -119,3 +119,12 @@ The basic template remains the default. Tests cover CLI generation, exact Lua
 content reuse, manifest validation, pack/install preservation, no enable-profile
 creation, existing-directory rejection and PS2-path rejection before creation.
 All 73 Python tests passed. No native sources or compiler selection changed.
+
+## Opt-in objective ordering (2026-10-20)
+
+quests.ordering.v1 allows named objectives to depend on completion of earlier
+objectives via after. Existing quests without prerequisites retain their behavior.
+The shared quest page names unmet prerequisites; events and scripted advances
+honor the same gates, and save loading rejects impossible progress. This is
+objective sequencing, not a cutscene or branching-dialogue framework. See the
+host API and parity ledger for contracts and regression evidence.

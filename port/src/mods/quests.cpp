@@ -28,6 +28,17 @@ bool ExplicitStart(const std::string &id,const Json &state) {
 bool Started(const std::string &id,const Json &state) {
     return !ExplicitStart(id,state)||(state.contains("quest_started")&&state["quest_started"].value(id,false));
 }
+int ObjectiveCount(const Json &state,const std::string &quest,const std::string &objective) {
+    return state.contains("quest_objectives")&&state["quest_objectives"].contains(quest)?state["quest_objectives"][quest].value(objective,0):0;
+}
+Json BlockedBy(const Json &definition,const Json &objective,const Json &state,const std::string &quest) {
+    Json pending=Json::array();
+    if(objective.contains("after"))for(const auto &required:objective["after"]) {
+        const auto found=std::ranges::find_if(definition["objectives"],[&](const Json &item){return item["id"]==required;});
+        if(found==definition["objectives"].end()||ObjectiveCount(state,quest,required.get<std::string>())<(*found)["goal"].get<int>())pending.push_back(required);
+    }
+    return pending;
+}
 Json Status(const Quest &quest,const Json &state) {
     const int progress=state.contains("quests")?state["quests"].value(quest.id,0):0;
     Json status={{"id",quest.id},{"title",quest.title},{"description",quest.description},
@@ -38,7 +49,10 @@ Json Status(const Quest &quest,const Json &state) {
         for(const auto &objective:state["quest_definitions"][quest.id]["objectives"]) {
             const auto id=objective["id"].get<std::string>();
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(quest.id)?state["quest_objectives"][quest.id].value(id,0):0;
-            auto value=objective;value["progress"]=count;value["complete"]=count>=objective["goal"].get<int>();status["objectives"].push_back(std::move(value));
+            auto value=objective;value["progress"]=count;value["complete"]=count>=objective["goal"].get<int>();
+            value["blocked_by"]=BlockedBy(state["quest_definitions"][quest.id],objective,state,quest.id);
+            value["available"]=Started(quest.id,state)&&!value["complete"].get<bool>()&&value["blocked_by"].empty();
+            status["objectives"].push_back(std::move(value));
         }
     }
     if(state.contains("quest_definitions")&&state["quest_definitions"].contains(quest.id)&&state["quest_definitions"][quest.id].contains("rewards")) {
@@ -74,9 +88,17 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
         if(!a.contains("objectives")||!a["objectives"].is_array()||a["objectives"].empty()||a["objectives"].size()>16)return "quest requires 1..16 objectives";
         std::set<std::string> ids;int total=0;
         for(const auto &objective:a["objectives"]) {
-            if(!objective.is_object()||objective.size()!=3u+unsigned(objective.contains("event"))+unsigned(objective.contains("match"))||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
+            if(!objective.is_object()||objective.size()!=3u+unsigned(objective.contains("event"))+unsigned(objective.contains("match"))+unsigned(objective.contains("after"))||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
                !objective.contains("title")||!Text(objective["title"])||!objective.contains("goal")||!objective["goal"].is_number_integer()||objective["goal"]<1||objective["goal"]>1000000)
                 return "objectives require unique id, bounded title and integer goal 1..1000000";
+            if(objective.contains("after")) {
+                const auto &after=objective["after"];std::set<std::string> prerequisites;
+                if(!after.is_array()||after.empty()||after.size()>15)return "after requires 1..15 earlier objective ids";
+                for(const auto &required:after) {
+                    if(!Id(required)||required==objective["id"]||!ids.contains(required.get<std::string>())||!prerequisites.insert(required.get<std::string>()).second)
+                        return "objective prerequisites must be unique earlier objective ids";
+                }
+            }
             if(objective.contains("event")) {
                 if(!objective["event"].is_string()||(objective["event"]!="enemy_killed"&&objective["event"]!="map_enter"&&objective["event"]!="floor_enter"))return "unsupported quest objective event";
             }
@@ -133,6 +155,8 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
         if(state.contains("quest_objectives")&&state["quest_objectives"].contains(id))for(const auto &count:state["quest_objectives"][id])total+=count.get<int>();
         const auto aggregate=state.contains("quests")?state["quests"].value(id,Json(0)):Json(0);
         Require(aggregate.is_number_integer()&&aggregate==total,"quest aggregate differs from objective progress");
+        for(const auto &objective:definition["objectives"])
+            Require(ObjectiveCount(state,id,objective["id"].get<std::string>())==0||BlockedBy(definition,objective,state,id).empty(),"locked objective has saved progress");
     }
     if(state.contains("quest_started")) {
         Require(state["quest_started"].is_object()&&state["quest_started"].size()<=64,"invalid quest start records");
@@ -159,7 +183,7 @@ bool WantsQuestEvent(const Json &state,std::string_view event) {
         if(!definition.contains("objectives")||!Started(id,state))continue;
         for(const auto &objective:definition["objectives"])if(objective.value("event",std::string{})==event) {
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
-            if(count<objective["goal"].get<int>())return true;
+            if(count<objective["goal"].get<int>()&&BlockedBy(definition,objective,state,id).empty())return true;
         }
     }
     return false;
@@ -172,7 +196,7 @@ std::vector<Json> QuestEventAdvances(const Package &package,const Json &state,st
         for(const auto &objective:definition["objectives"]) {
             if(objective.value("event",std::string{})!=event)continue;
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
-            if(count>=objective["goal"].get<int>())continue;
+            if(count>=objective["goal"].get<int>()||!BlockedBy(definition,objective,state,id).empty())continue;
             bool matches=true;if(objective.contains("match"))for(const auto &[key,value]:objective["match"].items())if(!payload.contains(key)||payload[key]!=value){matches=false;break;}
             if(matches){Require(advances.size()<64,"quest event objective budget (64) exceeded");advances.push_back({{"id",id},{"objective",objective["id"]},{"amount",1}});}
         }
@@ -220,6 +244,7 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
             const auto key=arguments["objective"].get<std::string>();const auto &definitions=staged["quest_definitions"][id]["objectives"];
             const auto objective=std::ranges::find_if(definitions,[&](const Json &value){return value["id"]==key;});
             Require(objective!=definitions.end(),"unknown objective for this quest");
+            Require(BlockedBy(staged["quest_definitions"][id],*objective,staged,id).empty(),"objective prerequisites are not complete");
             if(!staged.contains("quest_objectives"))staged["quest_objectives"]=Json::object();
             if(!staged["quest_objectives"].contains(id))staged["quest_objectives"][id]=Json::object();
             auto &counts=staged["quest_objectives"][id];

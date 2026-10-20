@@ -335,3 +335,62 @@ TEST_F(ModDynamicQuestRuntime, ShippedContractStartsFromMenuAndRestoresWithoutRe
     runtime.Tick(floor2,{},{},{},commit,death);EXPECT_EQ(grants,1);EXPECT_EQ(save->GetDngStatus()->money,50);
     EXPECT_EQ(runtime.SaveState(),completed);EXPECT_TRUE(runtime.Diagnostics().empty());
 }
+
+TEST(ModDynamicQuests, OrderedObjectivesRejectPrematureWritesAndInvalidSavedProgress) {
+    mods::Package package;Json state=Json::object();auto definition=MultiDefinition();
+    definition["objectives"][1]["after"]={"supplies"};
+    auto result=mods::CallOwnedQuest(package,state,"quests.register",definition);
+    EXPECT_EQ(result["objectives"][1]["blocked_by"],Json::array({"supplies"}));EXPECT_EQ(result["objectives"][1]["available"],false);
+    const auto before=state;
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","villagers"},{"amount",1}}),std::runtime_error);EXPECT_EQ(state,before);
+    auto bad=state;bad["quest_objectives"]["multi"]["villagers"]=1;bad["quests"]["multi"]=1;
+    EXPECT_THROW(mods::QuestDefinitions(package,bad),std::runtime_error);
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",2}});
+    result=mods::CallOwnedQuest(package,state,"quests.get",{{"id","multi"}});EXPECT_EQ(result["objectives"][1]["available"],true);
+    result=mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","villagers"},{"amount",3}});EXPECT_EQ(result["complete"],true);
+    EXPECT_NO_THROW(mods::QuestDefinitions(package,state));
+    for(const auto &after:std::vector<Json>{Json::array(),Json::array({"unknown"}),Json::array({"villagers"}),Json::array({"supplies","supplies"}),Json::array({true}),Json("supplies")}) {
+        auto invalid=definition;invalid["objectives"][1]["after"]=after;EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",invalid).empty());
+    }
+    auto forward=definition;forward["objectives"][0]["after"]={"villagers"};EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",forward).empty());
+}
+TEST(ModDynamicQuests, SingleEventDoesNotCascadeIntoNewlyUnlockedObjective) {
+    mods::Package package;Json state=Json::object();auto definition=MultiDefinition();
+    for(auto &objective:definition["objectives"]){objective["event"]="enemy_killed";objective["goal"]=1;}
+    definition["objectives"][1]["after"]={"supplies"};
+    mods::CallOwnedQuest(package,state,"quests.register",definition);
+    auto advances=mods::QuestEventAdvances(package,state,"enemy_killed",Json::object());ASSERT_EQ(advances.size(),1u);EXPECT_EQ(advances[0]["objective"],"supplies");
+    mods::CallOwnedQuest(package,state,"quests.advance",advances[0]);
+    advances=mods::QuestEventAdvances(package,state,"enemy_killed",Json::object());ASSERT_EQ(advances.size(),1u);EXPECT_EQ(advances[0]["objective"],"villagers");
+    mods::CallOwnedQuest(package,state,"quests.advance",advances[0]);EXPECT_FALSE(mods::WantsQuestEvent(state,"enemy_killed"));
+}
+TEST_F(ModDynamicQuestRuntime, OrderedObjectivesPersistAndGateDeathCaptureAndMenuReasons) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='ordered',title='Ordered',description='Travel then fight',objectives={
+          {id='travel',title='Enter the floor',goal=1,event='floor_enter',match={floor=2}},
+          {id='hunt',title='Defeat enemy',goal=1,event='enemy_killed',after={'travel'}}},
+          rewards={{operation='economy.add',arguments={amount=5}}}}))
+    end})");Start();runtime.Tick({2,0,0,true,0,1});ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());ASSERT_EQ(runtime.Quests().size(),1u);
+    EXPECT_NE(runtime.Quests()[0].description.find("Requires: Enter the floor"),std::string::npos);
+    const auto locked=runtime.SaveState();std::string error;runtime.ResetState();ASSERT_TRUE(runtime.LoadState(locked,error))<<error;
+    runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    runtime.Tick({2,0,0,true,0,2});EXPECT_TRUE(runtime.WantsEnemyDeaths());
+    EXPECT_EQ(runtime.Quests()[0].description.find("Requires:"),std::string::npos);
+    const auto unlocked=runtime.SaveState();const std::array<mods::EnemyDeath,1> deaths{{{16,0,2}}};
+    runtime.Tick({2,0,0,true,0,2},{},{},{},[](const auto &,int,std::string &error){error="reject reward";return false;},deaths);
+    EXPECT_EQ(runtime.SaveState(),unlocked);EXPECT_FALSE(runtime.Diagnostics().empty());
+}
+
+TEST(ModDynamicQuests, ObjectiveRequiresEveryListedPredecessor) {
+    mods::Package package;Json state=Json::object();auto definition=MultiDefinition();
+    definition["objectives"].push_back({{"id","finish"},{"title","Return home"},{"goal",1},{"after",{"supplies","villagers"}}});
+    mods::CallOwnedQuest(package,state,"quests.register",definition);
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",2}});
+    auto status=mods::CallOwnedQuest(package,state,"quests.get",{{"id","multi"}});
+    EXPECT_EQ(status["objectives"][2]["blocked_by"],Json::array({"villagers"}));
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","finish"},{"amount",1}}),std::runtime_error);
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","villagers"},{"amount",3}});
+    status=mods::CallOwnedQuest(package,state,"quests.get",{{"id","multi"}});EXPECT_EQ(status["objectives"][2]["available"],true);
+    EXPECT_EQ(mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","finish"},{"amount",1}})["complete"],true);
+}

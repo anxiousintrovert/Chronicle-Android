@@ -43,6 +43,8 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     first_definition.erase("goal");first_definition["objectives"]={{{"id","home"},{"title","Return to Norune"},{"goal",1}},{{"id","people"},{"title","Speak to villagers"},{"goal",2}}};
     state["mods"]["test.quests"]["quest_objectives"]["quest.0"]={{"home",1},{"people",2}};
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["explicit_start"]=true;
+    auto &ordered=state["mods"]["test.quests"]["quest_definitions"]["quest.2"];
+    ordered.erase("goal");ordered["objectives"]={{{"id","travel"},{"title","Enter the floor"},{"goal",1}},{{"id","hunt"},{"title","Defeat an enemy"},{"goal",1},{"after",{"travel"}}}};
     state["mods"]["test.quests"]["quest_definitions"]["quest.2"]["rewards"]={{{"operation","economy.add"},{"arguments",{{"amount",50}}}}};
     auto &skillTree=state["mods"]["test.quests"]["skill_trees"]["combat"];
     skillTree={{"title","Combat"},{"description","Training"},{"nodes",Json::array()}};

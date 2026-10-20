@@ -2662,3 +2662,43 @@ end)
 `world.event` contains `{tree, id}` using package-local IDs. ABI 2 plugins opt into `CHRONICLE_EVENT_SKILL_TRAIN_REQUESTED` and receive the same object under `event` in their world JSON. Native plugins remain trusted unsandboxed code. Lua and native handlers, if both registered, run as separate existing callback transactions.
 
 Only the owning active package receives a request. No handler means rejection with a menu explanation. Requests require an observed gameplay context, are deferred until a subsequent gameplay tick, deduplicated per owner/tree/node, and bounded to 16 pending requests. Changes of gameplay mode/map/dungeon/floor, load, reset or unload cancel pending requests; they are never saved. The menu reports queue acceptance, not a promise that training succeeded. A failed callback rolls back its managed rank/state and queued engine writes. No request or training policy runs merely because the framework is installed.
+
+## Ordered quest objectives
+
+Require `quests.ordering.v1` in addition to the capabilities used by the quest.
+A dynamic named objective may include `after`, an array of 1..15 unique IDs of
+objectives appearing earlier in that same immutable definition. All referenced
+objectives must reach their goals before this objective accepts progress.
+References to later objectives, self, unknown IDs or duplicates are rejected,
+so authored order supplies an acyclic dependency graph. Omit `after` to keep the
+existing independent-objective behavior.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "ordered_hunt", title = "Prepare then hunt", description = "Travel first.",
+    objectives = {
+        {id = "travel", title = "Enter a floor", goal = 1, event = "floor_enter"},
+        {id = "hunt", title = "Defeat two enemies", goal = 2,
+         event = "enemy_killed", match = {source = "native"}, after = {"travel"}}
+    }
+}))
+```
+
+`quests.get/list/register/advance` objective results include `blocked_by` (the IDs
+of unmet prerequisites) and `available` (started quest, incomplete objective,
+no unmet prerequisites). The shared quest page displays the prerequisite titles.
+Reading or browsing never starts or advances anything. Explicit-start quests
+still require `quests.start`; prerequisites do not bypass that requirement.
+
+Scripted advance against a locked objective fails without changing state, even
+for amount zero. Event-bound locked objectives ignore events without replaying
+history. A single delivered event takes its eligible-objective snapshot before
+progress is applied: it cannot cascade through a chain it just unlocked. A later
+event may advance the next objective. Native death capture is requested only if
+an unlocked incomplete death objective or another subscriber needs it.
+
+Prerequisites persist within the existing saved definition; they are not new
+native game state. Save loading rejects progress on an objective whose required
+objectives are incomplete. Existing reward transactions, receipts, rollback and
+quest-ID migrations remain applicable. This provides objective sequencing, not
+branching dialogue, cutscenes, failure/restart stages or native story replacement.

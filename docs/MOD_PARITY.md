@@ -4123,3 +4123,20 @@ Validation: llvm-mingw Clang 23.1.2 game/test builds passed; the full native sui
 `skills.training.v1` adds deferred owner-only Lua/native training requests from the shared skill menu. Mods decide costs and rank changes; the framework supplies no training policy. Requests are bounded/deduplicated and canceled across gameplay-context changes, load/reset/unload. Existing callback transactions handle rollback. Native ABI 2 gains an event bit without structure layout changes.
 
 Validation: llvm-mingw Clang 23.1.2 game/test builds passed. Full suite: 1,027 passed, 103 skipped, one disabled. All 69 Python checks passed. Focused tests cover deferred owner-only delivery, unchanged ranks without a policy, queue bounds, successful training, cancellation and rollback, including a native DLL listener. PAL shared-menu navigation and unavailable-request feedback passed; the Train button screenshot was inspected. PS2 baseline and Kazarov pin unchanged.
+
+## Ordered quest objectives (2026-10-20)
+
+quests.ordering.v1 adds opt-in after dependencies on earlier named objectives.
+Script/event advancement, saved-state validation and lazy death subscriptions
+honor the same prerequisites; the shared quest page shows unmet prerequisite
+titles. One event cannot cascade through newly unlocked objectives. Definitions
+without after retain independent progression. This advances objective sequencing;
+branching stage lifecycle, dialogue and native story integration remain gaps.
+
+Validation: Clang 23.1.2 game/test builds passed. Full regression: 1042 passed,
+107 skipped, one disabled. An additional all-prerequisites test was then added;
+all 28 focused dynamic-quest tests passed. All 73 Python tests passed. The
+PAL-backed shared-menu test passed and the prerequisite/reward page screenshot
+was inspected. Tests cover malformed graphs, premature writes, corrupt saved
+progress, same-event non-cascading, multiple prerequisites, persistence, lazy
+death capture, menu reasons and reward-commit rollback. PS2 and Kazarov unchanged.
