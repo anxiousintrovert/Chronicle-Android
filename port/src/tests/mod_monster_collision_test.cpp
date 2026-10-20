@@ -53,6 +53,17 @@ struct TerrainFixture {
 };
 }
 
+TEST(ModMonsterCollision, PlacementDensityChangesOnlyForExplicitLargePopulations) {
+    using chronicle::monsters::PlacementNeighborLimit;
+    EXPECT_EQ(PlacementNeighborLimit(256, 16), 3);
+    EXPECT_EQ(PlacementNeighborLimit(15, 256), 3);
+    EXPECT_EQ(PlacementNeighborLimit(129, 129), 3);
+    EXPECT_EQ(PlacementNeighborLimit(192, 192), 3);
+    EXPECT_EQ(PlacementNeighborLimit(193, 193), 4);
+    EXPECT_EQ(PlacementNeighborLimit(256, 256), 4);
+    EXPECT_EQ(PlacementNeighborLimit(257, 256), 3);
+}
+
 TEST(ModMonsterCollision, TerrainMatchesNativeGeometryOrderAtRetailAndExpandedCoordinates) {
     TerrainFixture fixture;
     auto &map = *fixture.map;

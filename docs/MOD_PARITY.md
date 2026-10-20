@@ -2350,3 +2350,29 @@ Clang 23.1.2 Windows game/test builds pass: 819 tests passed, 60 skipped,
 and the populated Cave transition pass. Both 3,840-case seed exports retain
 prior hashes and differ from pinned upstream only by map storage size.
 PS2 unchanged; other platforms unverified.
+
+
+### Maximum native population replays (2026-10-20)
+
+The 129-actor Cave replay passes, including activation of slot 128. The first
+256-actor replay exposed native placement saturation: only 252 were placed.
+Explicit expanded requests above 192 now permit fewer than four neighbors
+within the native 480-unit radius instead of fewer than three. Requests at
+retail active limits keep the original rule regardless of count; minimum
+25-unit spacing and terrain/chest/Atla checks remain native.
+
+Fresh 256-actor replays now pass for all seven procedural dungeons. Each
+confirms all 256 actors were placed, moves slot 255 near the player, observes
+its active state, runs 180 frames and uses the shared-action native back-floor
+transition to restore retail monster/hit/sequence/audio limits. These are
+internal test requests on 64-room floors, not arbitrary-layout or sustained
+combat evidence. Smaller layouts can still fail placement and need explicit
+reporting. Public requests remain capped at fifteen until that reporting
+and quit/reset paths are ready. The broader coverage ledger is unfinished.
+
+Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 68 skipped,
+1 disabled; 29 Python checks pass. The seven maximum-population replays,
+129-actor Cave replay, retail Cave and managed Forest checks pass. Both
+3,840-case no-mod/disabled-mod seed exports retain prior hashes and differ
+from pinned upstream only in map storage size. PS2 unchanged; other
+platforms remain unverified.

@@ -395,4 +395,12 @@ TEST(ModBackFloorRetail, RejectedManagedLayoutUsesRetail) { RunBackAudit(0, fals
 TEST(ModBackFloorRetail, MinimumCavePopulation) { RunBackAudit(0, true, 64, true, 2); }
 TEST(ModBackFloorRetail, MinimumForestPopulation) { RunBackAudit(1, true, 64, true, 3); }
 TEST(ModBackFloorRetail, ExpandedPopulationReturnsToRetailLimits) { RunBackAudit(0, true, 64, true, 5, 32); }
+TEST(ModBackFloorRetail, HighPopulationReturnsToRetailLimits) { RunBackAudit(0, true, 64, true, 5, 129); }
+TEST(ModBackFloorRetail, MaximumPopulationReturnsToRetailLimits) { RunBackAudit(0, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumForestPopulation) { RunBackAudit(1, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumShipwreckPopulation) { RunBackAudit(2, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumTemplePopulation) { RunBackAudit(3, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumMoonSeaPopulation) { RunBackAudit(4, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumGalleryPopulation) { RunBackAudit(5, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, MaximumDemonShaftPopulation) { RunBackAudit(6, true, 64, true, 5, 256); }
 } // namespace

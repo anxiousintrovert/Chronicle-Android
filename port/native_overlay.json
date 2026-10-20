@@ -1578,6 +1578,11 @@
           "old": "                WorkBuffer__2->Reset();\n                monster[current_monster].collision_poly = (CCPoly *) WorkBuffer__2->Alloc(2000);\n                chara[current_monster][0].GetPosition(position);\n                monster[current_monster].collision_poly_count = setCollisionData(NowDngMap, monster[current_monster].collision_poly, position, 30.0f, 5.0f);\n",
           "new": "                if (SlotLimit() > chronicle::monsters::RetailSlots) {\n                    chara[current_monster][0].GetPosition(position);\n                    auto terrain = chronicle::monsters::ExpandedTerrainCollision(*NowDngMap, position, CharaMain.frame->position);\n                    monster[current_monster].collision_poly = terrain.data();\n                    monster[current_monster].collision_poly_count = static_cast<int>(terrain.size());\n                } else {\n                    WorkBuffer__2->Reset();\n                    monster[current_monster].collision_poly = (CCPoly *) WorkBuffer__2->Alloc(2000);\n                    chara[current_monster][0].GetPosition(position);\n                    monster[current_monster].collision_poly_count = setCollisionData(NowDngMap, monster[current_monster].collision_poly, position, 30.0f, 5.0f);\n                }\n",
           "count": 1
+        },
+        {
+          "old": "if (nearby < 3) {",
+          "new": "if (nearby < chronicle::monsters::PlacementNeighborLimit(count, SlotLimit())) {",
+          "count": 1
         }
       ]
     },
