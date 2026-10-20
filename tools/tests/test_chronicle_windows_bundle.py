@@ -11,6 +11,25 @@ spec.loader.exec_module(tool)
 
 
 class WindowsBundle(unittest.TestCase):
+    def test_stale_runtime_dll_cannot_use_another_versions_notices(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            build, dependencies = root / 'build', root / 'deps'
+            build.mkdir()
+            llvm = dependencies / 'llvm/llvm-mingw-20260922-ucrt-x86_64/x86_64-w64-mingw32/bin'
+            sdl = dependencies / 'sdl/SDL3-3.4.18/x86_64-w64-mingw32/bin'
+            llvm.mkdir(parents=True)
+            sdl.mkdir(parents=True)
+            for name in tool.RUNTIME[2:]:
+                (build / name).write_bytes(name.encode())
+                ((sdl if name == 'SDL3.dll' else llvm) / name).write_bytes(name.encode())
+            tool.verify_runtime_dlls(build, dependencies)
+            for name in tool.RUNTIME[2:]:
+                (build / name).write_bytes(b'stale runtime')
+                with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'does not match'):
+                    tool.verify_runtime_dlls(build, dependencies)
+                (build / name).write_bytes(name.encode())
+
     def test_stages_only_selected_inputs_and_hashes_copied_bytes(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

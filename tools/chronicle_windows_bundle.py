@@ -11,6 +11,15 @@ RUNTIME = ('darkcloud.exe', 'dcdata.exe', 'libc++.dll', 'libunwind.dll',
            'libwinpthread-1.dll', 'SDL3.dll')
 
 
+def verify_runtime_dlls(build, dependencies):
+    llvm = dependencies / 'llvm/llvm-mingw-20260922-ucrt-x86_64/x86_64-w64-mingw32/bin'
+    originals = {name: llvm / name for name in RUNTIME[2:] if name != 'SDL3.dll'}
+    originals['SDL3.dll'] = dependencies / 'sdl/SDL3-3.4.18/x86_64-w64-mingw32/bin/SDL3.dll'
+    for name, original in originals.items():
+        if hashlib.sha256((build / name).read_bytes()).digest() != hashlib.sha256(original.read_bytes()).digest():
+            raise ValueError(f'Runtime DLL does not match the documented dependency: {name}')
+
+
 def outside_ps2(path):
     path = Path(path).absolute()
     if any(part.lower() == 'ps2' for part in (*path.parts, *path.resolve().parts)):
@@ -28,6 +37,7 @@ def add_file(files, destination, source):
 
 
 def plan(source, build, dependencies):
+    verify_runtime_dlls(build, dependencies)
     files = {}
     for name in RUNTIME:
         add_file(files, name, build / name)

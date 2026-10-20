@@ -172,6 +172,25 @@ staged installation/quest-menu evidence. This candidate is local and has not bee
 published as an approved release. Quest floor/combat/completed-reward acceptance
 and notice review remain open. PS2 baseline and renderer pin checks passed.
 
+## Dependency notice and runtime identity audit (2026-10-20)
+
+The [notice inventory](MOD_DISTRIBUTION_NOTICES.md) now maps collected notices to
+the pinned host/glTF/Lua build inputs, DLLs and source assets. llvm-readobj inspected
+both executables and all four distributed DLLs; their ordinary imports matched
+the documented runtimes, Windows system/UCRT libraries and system Vulkan loader.
+Every distributed DLL matched its pinned dependency file byte-for-byte.
+
+Staging now enforces that DLL identity check before copying any files, preventing
+stale runtime binaries from being packaged with a different version's notices.
+All 89 Python tests passed, including rejection of each replaced runtime DLL.
+Native sources, PS2 files and Kazarov remain unchanged.
+
+The glyph source/license remains unresolved after checking repository history,
+the upstream colored-glyph PR and atlas metadata. A source pack link or original
+attribution/license file has been requested. Notice collection and code-dependency
+inventory are complete for this candidate; this outstanding asset provenance and
+the quest floor/combat/reward acceptance still prevent release approval.
+
 ## Full-resolution texture upload foundation (2026-10-20)
 
 The port decoded-texture object can now carry optional logical dimensions independently of physical image dimensions. The registry retains logical texel dimensions and forwards both dimensions to the existing upstream Kazarov TextureDesc. Defaults are zero, preserving original behavior. This is internal groundwork, not an exposed package capability.

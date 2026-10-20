@@ -155,6 +155,8 @@ fixed ZIP metadata make the same bundle reproducible with the same Python/zlib
 toolchain. This checks integrity against the local manifest, not a signature or
 independent proof of source provenance. It does not publish or certify a release;
 complete the acceptance gates and notice review before distributing the archive.
+The [dependency notice inventory](MOD_DISTRIBUTION_NOTICES.md) maps collected
+notices to the pinned libraries and records the unresolved artwork provenance.
 
 ### Repeat the staged installation rehearsal
 
