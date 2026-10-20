@@ -1543,6 +1543,13 @@ means the map was built but only three actors were added by that placement call.
 This result is separate from layout generation success. Missing population
 fields mean placement has not been reported; they do not mean zero monsters.
 Reports are scoped to the matching applied claim, runtime epoch and floor.
+An expanded population rejected by collision-resource preflight reports
+`state="rejected"`, `fallback="native"`, its reason and `placed=null`. The
+population override is cleared for that map and retail resource limits are
+restored before native placement. Null does not claim a fallback placement
+count. This handles resource-validation rejection only; allocation or native
+setup exceptions propagate. Public population requests remain capped at 15
+while the larger-request public path is being validated.
 
 `dungeon.layout_reset {dungeon=0}` (`game.write`) removes the caller's claim.
 Owner retirement or runtime reset also removes claims. Existing loaded floors

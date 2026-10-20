@@ -10,6 +10,7 @@
 #include "dun/gameloop.hpp"
 #include "chronicle/monster_audio.hpp"
 #include "sound.hpp"
+#include "chronicle/mod_dungeon_layout.hpp"
 
 namespace {
 CMonstorUnit *expanded_unit = nullptr;
@@ -46,10 +47,32 @@ void PreparePopulationForFloor(CMonstorUnit &unit, CDungeonMap &map, CCollisionD
     expanded_hits = slots > RetailSlots ? &hits : nullptr;
 }
 
+std::string PrepareRequestedPopulation(CMonstorUnit &unit, CDungeonMap &map, CCollisionData &hits, unsigned slots, int back_floor) {
+    if (slots < RetailSlots || slots > StorageCapacity) throw std::invalid_argument("invalid monster slot limit");
+    if (slots > RetailSlots) {
+        // Catch only read-only resource validation. Allocation and native setup
+        // failures must propagate, rather than masquerading as safe fallback.
+        std::string rejection;
+        try {
+            ValidateExpandedCollisionResources(map, unit.collision, slots);
+        } catch (const std::runtime_error &error) {
+            rejection = error.what();
+        }
+        if (!rejection.empty()) {
+            mods::RecordOwnedPopulationFailure(&map, map.port_monster_count, rejection.c_str());
+            map.port_monster_count = 0;
+            PreparePopulationForFloor(unit, map, hits, RetailSlots, back_floor);
+            return rejection;
+        }
+    }
+    PreparePopulationForFloor(unit, map, hits, slots, back_floor);
+    return {};
+}
+
 void PrepareLoadedPopulation() {
     if (!NowMonstorUnit || !NowDngMap || !NowColData) return;
     const auto count = NowDngMap->PopulationCount(15, -1);
-    PreparePopulationForFloor(*NowMonstorUnit, *NowDngMap, *NowColData,
+    PrepareRequestedPopulation(*NowMonstorUnit, *NowDngMap, *NowColData,
                               std::max(RetailSlots, unsigned(count)), BtUraDongeon);
 }
 

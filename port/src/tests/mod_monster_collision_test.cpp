@@ -201,6 +201,35 @@ TEST(ModMonsterCollision, CoordinatedPopulationResetRetiresHitsScriptsAndAudioTo
     EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
 }
 
+TEST(ModMonsterCollision, RejectedExpansionRestoresNativeResourcesAndCounts) {
+    TerrainFixture fixture;
+    auto unit = std::make_unique<CMonstorUnit>();
+    auto hits = std::make_unique<CCollisionData>();
+    unit->collision = &fixture.frame;
+    struct Reset {
+        ~Reset() { chronicle::monsters::ResetExpandedPopulation(); }
+    } reset;
+    chronicle::monsters::PreparePopulationForFloor(*unit, *fixture.map, *hits, 32, 0);
+    fixture.map->port_grid_extent = 48;
+    fixture.map->port_monster_count = 256;
+    // Valid individual geometry, but too much for the expanded actor budget.
+    fixture.collision.mesh_count = 257;
+    const auto reason = chronicle::monsters::PrepareRequestedPopulation(*unit, *fixture.map, *hits, 256, 1);
+    EXPECT_FALSE(reason.empty());
+    EXPECT_EQ(fixture.map->port_monster_count, 0);
+    EXPECT_EQ(fixture.map->PopulationCount(15, -1), 15);
+    EXPECT_EQ(fixture.map->PopulationCount(8, -1), 8);
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    EXPECT_EQ(unit->script[31], nullptr);
+    EXPECT_EQ(hits->HitLimit(), 96u);
+    EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 32u);
+    EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
+    unit->monster[0].hp = 37;
+    EXPECT_TRUE(chronicle::monsters::PrepareRequestedPopulation(*unit, *fixture.map, *hits, 16, 0).empty());
+    EXPECT_EQ(unit->monster[0].hp, 37);
+    EXPECT_THROW(chronicle::monsters::PrepareRequestedPopulation(*unit, *fixture.map, *hits, 257, 0), std::invalid_argument);
+}
+
 TEST(ModMonsterCollision, DensePopulationPreservesTerrainAndExceedsOldBufferSafely) {
     auto unit = std::make_unique<CMonstorUnit>();
     unit->port_slot_limit = 256;

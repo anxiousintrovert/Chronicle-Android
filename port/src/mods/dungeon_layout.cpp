@@ -43,21 +43,37 @@ void ResetEvents(CDungeonEventMan &manager) {
 
 bool HasOwnedLayouts() { return !claims.empty(); }
 
-void RecordOwnedPopulation(CDungeonMap *map, int requested, int placed) {
+namespace {
+Claim *PopulationClaim(CDungeonMap *map, int requested) {
     if (claims.empty() || !map || !UserStatus || requested <= 0 ||
-        requested != map->port_monster_count || (map != &MainDungeonMap && map != &UraDungeonMap)) return;
+        requested != map->port_monster_count || (map != &MainDungeonMap && map != &UraDungeonMap)) return nullptr;
     auto found = claims.find(selectMapNo);
-    if (found == claims.end()) return;
+    if (found == claims.end()) return nullptr;
     auto &claim = found->second;
     if (claim.epoch != Scripts().Epoch() || claim.layout.monsters != requested ||
         claim.result.value("state", "") != "applied" ||
-        claim.result.value("floor", -1) != UserStatus->cur_floor) return;
+        claim.result.value("floor", -1) != UserStatus->cur_floor) return nullptr;
+    return &claim;
+}
+}
+
+void RecordOwnedPopulation(CDungeonMap *map, int requested, int placed) {
+    auto *claim = PopulationClaim(map, requested);
+    if (!claim) return;
     placed = std::clamp(placed, 0, requested);
-    claim.result[map == &MainDungeonMap ? "population_front" : "population_back"] = {
-        {"requested", requested},
-        {"placed", placed},
+    claim->result[map == &MainDungeonMap ? "population_front" : "population_back"] = {
+        {"requested", requested}, {"placed", placed},
         {"state", placed == requested ? "applied" : "partial"},
         {"reason", placed == requested ? "" : "native placement did not place every requested monster"}
+    };
+}
+
+void RecordOwnedPopulationFailure(CDungeonMap *map, int requested, const char *reason) {
+    auto *claim = PopulationClaim(map, requested);
+    if (!claim) return;
+    claim->result[map == &MainDungeonMap ? "population_front" : "population_back"] = {
+        {"requested", requested}, {"placed", nullptr}, {"state", "rejected"},
+        {"reason", reason}, {"fallback", "native"}
     };
 }
 

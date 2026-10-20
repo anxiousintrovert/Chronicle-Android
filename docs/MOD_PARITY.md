@@ -2424,3 +2424,23 @@ Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 71 skipped,
 Forest and maximum-population transition PAL replays pass. Both 3,840-case
 seed exports retain prior hashes and differ from pinned upstream only by
 map storage size. PS2 unchanged; other platforms unverified.
+
+
+### Expanded population preflight fallback (2026-10-20)
+
+The loaded-floor population boundary now catches read-only collision-resource
+preflight rejection, records the reason for a matching applied claim, clears
+that map's population override and restores retail monster/hit/sequence/audio
+limits. Allocation and native setup exceptions still propagate. Rejected
+reports use placed=null and fallback=native; they do not claim the fallback
+placement count. Public population limits remain fifteen pending public-path
+validation.
+
+A focused test starts with expanded resources, rejects a 256-slot request on
+the polygon budget and confirms native front/back counts and resource limits
+are restored. Retail-to-retail setup preserves existing actor state. Clang
+23.1.2 game/test builds pass: 821 passed, 71 skipped, one disabled. All 29
+Python tests and the PAL partial-placement/back-floor replay pass. Both
+3,840-case seed exports retain their previous hashes and differ from pinned
+upstream only by map storage size. No PS2 changes; other platforms remain
+unverified.
