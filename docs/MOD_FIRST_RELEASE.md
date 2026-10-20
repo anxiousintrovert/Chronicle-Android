@@ -43,3 +43,9 @@ Clang 23.1.2 game/test builds passed. The full suite recorded 1,031 passes, 105 
 ## Replacement upload fallback (2026-10-20)
 
 The port now keeps original decoded pixels/palette intact until a replacement upload succeeds. A failed replacement upload releases returned temporary registry resources and retries the original. The no-target path calls the original uploader once without copying original pixels. Clang 23.1.2 game/test builds and all 22 focused texture/package/PNG/localization tests pass, including an injected upload failure with palette cleanup and GPU verification of the original red image. PS2 and Kazarov are unchanged. Real device-loss/out-of-memory recovery is not certified; target discovery and retail replacement validation remain next.
+
+## Texture discovery/export tooling (2026-10-20)
+
+`--discover-textures DIR` now captures original pre-localization/pre-mod RGBA into atomic, content-identified snapshots in a new directory. Capture is dormant by default, rejects PS2 paths, deduplicates targets and caps output at 2048 textures/256 MiB. `tools/chronicle_texture.py inspect/export` validates captures and writes lossless RGBA PNGs plus ready-to-copy target declarations without third-party Python dependencies.
+
+Clang 23.1.2 game/test builds passed. Full suite: 1,036 passed, 105 skipped, one disabled. All 71 Python checks passed. The local PAL dungeon-entry run produced 45 snapshots with zero discovery errors; the dungeon-entry snapshot exported successfully with its matching identity. Native and Python tests cover dormant capture, rejected output paths, indexed alpha expansion, deduplication, malformed snapshots, hash mismatch and overwrite refusal. PS2 and upstream Kazarov are unchanged. Retail replacement rendering, not just capture/export, remains outstanding.

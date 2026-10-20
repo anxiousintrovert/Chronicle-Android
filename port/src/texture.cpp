@@ -13,6 +13,7 @@
 #include "mglib.hpp"
 #include "texture_port.hpp"
 #include "mods/texture_packages.hpp"
+#include "mods/texture_discovery.hpp"
 #include "mods/session.hpp"
 #include "tim2.hpp"
 
@@ -352,6 +353,7 @@ void Enter(CTextureManager &manager, EnterMode mode, int block, char *name, u_ch
                                indexed && swizzled != 0, decoded)) {
             return;
         }
+        mods::TextureDiscoveryRecorder().Observe(name,decoded);
         const auto mod_identity=mods::PackageTextureIdentity(name,decoded);
         LocalizeTexture(name, decoded);
         caption::PreparePainted(name, decoded);
@@ -458,6 +460,7 @@ PORT_OVERRIDE void CTextureManager::EnterFixTextureZ(u_char *buffer) {
     unsigned           tbp = 0;
     unsigned           cbp = 0;
     if (PortDecodeTexture(1, width, height, levels, 1, clut, 256, false, decoded)) {
+        mods::TextureDiscoveryRecorder().Observe(name,decoded);
         const auto mod_identity=mods::PackageTextureIdentity(name,decoded);
         LocalizeTexture(name, decoded);
         caption::PreparePainted(name, decoded);

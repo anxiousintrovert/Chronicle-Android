@@ -9,17 +9,20 @@ namespace mods {
 namespace {
 std::string Fold(std::string_view value) {std::string out(value);for(char &c:out)if(c>='A'&&c<='Z')c+=32;return out;}
 }
-std::string TexturePixelIdentity(const PortDecodedTexture &texture) {
+std::vector<std::uint8_t> TextureRgbaPixels(const PortDecodedTexture &texture) {
     if(texture.levels.empty()||!texture.width||!texture.height)throw std::runtime_error("Empty texture identity");
     const auto pixels=static_cast<std::size_t>(texture.width)*texture.height;
     const bool indexed=texture.format==gfx::TextureFormat::Index8;
     if(pixels>16u*1024u*1024u||texture.levels[0].size()!=pixels*(indexed?1u:4u))throw std::runtime_error("Invalid texture identity dimensions");
+    if(!indexed)return texture.levels[0];
+    std::vector<std::uint8_t> data;data.reserve(pixels*4);
+    for(auto index:texture.levels[0]) {const auto color=texture.palette[index];for(int shift=0;shift<32;shift+=8)data.push_back(static_cast<std::uint8_t>(color>>shift));}
+    return data;
+}
+std::string TexturePixelIdentity(const PortDecodedTexture &texture) {
+    const auto rgba=TextureRgbaPixels(texture);
     std::string data="chronicle-rgba-v1:"+std::to_string(texture.width)+":"+std::to_string(texture.height)+":";
-    data.reserve(data.size()+pixels*4);
-    if(indexed)for(auto index:texture.levels[0]) {
-        const auto color=texture.palette[index];for(int shift=0;shift<32;shift+=8)data.push_back(static_cast<char>(color>>shift));
-    } else data.append(reinterpret_cast<const char *>(texture.levels[0].data()),texture.levels[0].size());
-    return Sha256(data);
+    data.append(reinterpret_cast<const char *>(rgba.data()),rgba.size());return Sha256(data);
 }
 std::string PackageTextureIdentity(std::string_view name,const PortDecodedTexture &texture) {
     const auto &targets=Shared().Active().Textures();if(targets.empty())return {};

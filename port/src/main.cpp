@@ -1,5 +1,6 @@
 #include "chronicle/mod_camera.hpp"
 #include "mods/mesh_discovery.hpp"
+#include "mods/texture_discovery.hpp"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -56,6 +57,7 @@ struct Options {
     std::int64_t frames = -1;
     const char  *screenshot = nullptr;
     const char  *discover_meshes = nullptr;
+    const char  *discover_textures = nullptr;
     const char  *input = nullptr;
     int          width = 0;
     int          height = 0;
@@ -87,6 +89,7 @@ Options g_options;
                  "                     --headless does when there is no VK_EXT_headless_surface)\n"
                  "  --frames N         stop after N frames of the game's main loop\n"
                  "  --screenshot PATH  write the last tick's image (no FPS counter) to PATH on exit\n"
+                 "  --discover-textures DIR export original texture snapshots to a new directory (authoring only)\n"
                  "  --discover-meshes DIR  export encountered model snapshots to a new directory (authoring only)\n"
                  "  --input FILE       drive pad 1 from a script (default: DC_INPUT); see docs/PC.md\n"
                  "  --width, --height  window size in pixels (default: config.json, then the monitor's)\n"
@@ -133,6 +136,8 @@ Options ParseOptions(int argc, const char **argv) {
             options.frames = number();
         } else if (arg == "--screenshot") {
             options.screenshot = value();
+        } else if (arg == "--discover-textures") {
+            options.discover_textures = value();
         } else if (arg == "--discover-meshes") {
             options.discover_meshes = value();
         } else if (arg == "--input") {
@@ -422,6 +427,12 @@ int Run(int argc, const char **argv) {
             std::fprintf(stderr,"cannot start mesh discovery: %s\n",error.c_str());return kExitUsage;
         }
     }
+    if(options.discover_textures!=nullptr) {
+        std::string error;const std::string utf8=options.discover_textures;
+        if(!mods::TextureDiscoveryRecorder().Start(std::filesystem::path(std::u8string(utf8.begin(),utf8.end())),error)) {
+            std::fprintf(stderr,"cannot start texture discovery: %s\n",error.c_str());return kExitUsage;
+        }
+    }
     LoadInputScript(options.input);
 
     ConfigLoad();
@@ -469,6 +480,10 @@ int Run(int argc, const char **argv) {
         status = Screenshot(options.screenshot);
     }
     ReportPresentStats();
+    if(options.discover_textures!=nullptr) {
+        auto &discovery=mods::TextureDiscoveryRecorder();discovery.Stop();
+        std::fprintf(stderr,"texture discovery: %zu snapshots, %zu distinct errors\n",discovery.Count(),discovery.Errors().size());
+    }
     if (options.discover_meshes != nullptr) {
         auto &discovery=mods::MeshDiscoveryRecorder();
         discovery.Stop();
