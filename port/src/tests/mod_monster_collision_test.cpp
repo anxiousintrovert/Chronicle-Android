@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <vector>
 #include "chronicle/monster_collision.hpp"
+#include "chronicle/monster_population.hpp"
+#include "chronicle/monster_scripts.hpp"
+#include "dataalloc.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeonmap.hpp"
 #include "frame.hpp"
@@ -100,6 +103,65 @@ TEST(ModMonsterCollision, TerrainExceedsRetailBufferAndRejectsInvalidPartsBefore
     EXPECT_FLOAT_EQ(fixture.frame.position[0], 123);
     map.atra_num = 9;
     EXPECT_THROW(chronicle::monsters::ExpandedTerrainCollision(map, position, position), std::invalid_argument);
+}
+
+TEST(ModMonsterCollision, FloorPreflightIncludesDistantTerrainAndPreservesUnitOnFailure) {
+    TerrainFixture fixture;
+    auto unit = std::make_unique<CMonstorUnit>();
+    unit->collision = &fixture.frame;
+    unit->monster[0].state = 2;
+    unit->monster[0].hp = 37;
+    const auto allocated = chronicle::monsters::AllocatedExtraScriptSlots();
+    fixture.map->cells[47 + 47 * chronicle::dungeon::GridStride].parts_no = 72;
+    fixture.map->port_grid_extent = 48;
+    EXPECT_THROW(chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 256, 0), std::runtime_error);
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    EXPECT_EQ(unit->monster[0].state, 2);
+    EXPECT_EQ(unit->monster[0].hp, 37);
+    EXPECT_EQ(chronicle::monsters::AllocatedExtraScriptSlots(), allocated);
+    // No-mod loading must not inspect invalid or absent expansion resources.
+    EXPECT_NO_THROW(chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 16, 0));
+    EXPECT_EQ(unit->monster[0].state, 2);
+    fixture.map->cells[47 + 47 * chronicle::dungeon::GridStride].parts_no = -1;
+    fixture.collision.mesh_count = 257;
+    EXPECT_THROW(chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 256, 0), std::runtime_error);
+    EXPECT_EQ(unit->monster[0].hp, 37);
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    fixture.collision.mesh_count = 1;
+    std::array<CFrame, 128> children;
+    for (unsigned i = 0; i + 1 < children.size(); ++i) children[i].brother = &children[i + 1];
+    fixture.frame.child = children.data();
+    EXPECT_THROW(chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 256, 0), std::runtime_error);
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    fixture.frame.child = nullptr;
+}
+
+TEST(ModMonsterCollision, FloorBoundaryInitializesExpandedSlotsAndClearsThemBeforeShrink) {
+    TerrainFixture fixture;
+    auto unit = std::make_unique<CMonstorUnit>();
+    unit->collision = &fixture.frame;
+    chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 256, 0);
+    EXPECT_EQ(unit->SlotLimit(), 256u);
+    for (unsigned i = 16; i < 256; ++i) {
+        EXPECT_EQ(unit->monster[i].state, -1);
+        ASSERT_NE(unit->script[i], nullptr);
+        unit->monster[i].state = 2;
+        unit->script_state[i] = 1;
+        unit->script[i]->Alloc(1);
+    }
+    auto *last_script = unit->script[255];
+    // Retiring an expanded floor must succeed even if the next floor's
+    // resources are not suitable for expanded populations.
+    fixture.map->map_type = 0;
+    chronicle::monsters::PrepareSlotsForFloor(*unit, *fixture.map, 16, 1);
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    EXPECT_EQ(unit->current_monster, 0);
+    EXPECT_EQ(last_script->used, 0);
+    for (unsigned i = 16; i < 256; ++i) {
+        EXPECT_EQ(unit->monster[i].state, -1);
+        EXPECT_EQ(unit->script_state[i], 0);
+        EXPECT_EQ(unit->script[i], nullptr);
+    }
 }
 
 TEST(ModMonsterCollision, DensePopulationPreservesTerrainAndExceedsOldBufferSafely) {

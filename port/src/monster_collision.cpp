@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 #include <typeinfo>
@@ -41,6 +42,62 @@ unsigned Bound(CFrame *frame, unsigned &visits, unsigned depth = 0) {
     }
     return count;
 }
+}
+
+void ValidateExpandedCollisionResources(CDungeonMap &map, CFrame *actor_collision, unsigned slots) {
+    if (slots < RetailSlots || slots > StorageCapacity) throw std::invalid_argument("invalid monster slot limit");
+    if (slots == RetailSlots) return;
+    if (map.map_type != 1 || !actor_collision || !map.box_collision_model) {
+        throw std::runtime_error("expanded populations require procedural floor collision resources");
+    }
+    auto bound = [](CFrame *frame) {
+        unsigned visits = 0;
+        const auto polygons = Bound(frame, visits);
+        return std::pair{polygons, visits};
+    };
+    const auto actors = bound(actor_collision);
+    const auto chests = bound(map.box_collision_model);
+    const auto atra = bound(map.collision_model);
+    const std::uint64_t fixed = std::uint64_t(slots - 1) * actors.first + 24ull * chests.first + 8ull * atra.first;
+    const unsigned fixed_visits = 24 * chests.second + 8 * atra.second;
+    if (fixed > MaxPolys) throw std::runtime_error("expanded population collision resources exceed polygon budget");
+    if (fixed_visits > 4096) throw std::runtime_error("expanded population terrain exceeds frame visit budget");
+    std::array<unsigned, 72> part_bounds{};
+    std::array<unsigned, 72> part_visits{};
+    std::array<bool, 72> checked{};
+    const auto extent = map.GridExtent();
+    for (int z = 0; z < extent; ++z) {
+        for (int x = 0; x < extent; ++x) {
+            const auto part = map.cells[x + z * chronicle::dungeon::GridStride].parts_no;
+            if (part == -1) continue;
+            if (part < 0 || part >= 72) throw std::runtime_error("invalid expanded floor collision part");
+            if (!checked[part]) {
+                const auto result = bound(map.parts[part].collision);
+                part_bounds[part] = result.first;
+                part_visits[part] = result.second;
+                checked[part] = true;
+            }
+        }
+    }
+    // Any actor can reach any cell; prove every nine-cell neighborhood fits.
+    for (int z = 0; z < extent; ++z) {
+        for (int x = 0; x < extent; ++x) {
+            auto total = fixed;
+            auto visits = fixed_visits;
+            for (int dz = -1; dz <= 1; ++dz) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (x + dx < 0 || z + dz < 0 || x + dx >= extent || z + dz >= extent) continue;
+                    const auto part = map.cells[x + dx + (z + dz) * chronicle::dungeon::GridStride].parts_no;
+                    if (part != -1) {
+                        total += part_bounds[part];
+                        visits += part_visits[part];
+                    }
+                }
+            }
+            if (total > MaxPolys) throw std::runtime_error("expanded floor terrain and actors exceed polygon budget");
+            if (visits > 4096) throw std::runtime_error("expanded floor terrain exceeds frame visit budget");
+        }
+    }
 }
 
 std::span<CCPoly> ExpandedTerrainCollision(CDungeonMap &map, const float *position, const float *player_position) {

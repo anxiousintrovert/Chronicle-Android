@@ -2214,3 +2214,30 @@ Next: load-time collision/resource preflight and failure reporting, activation
 and reset at floor boundaries, then high-population combat/playthrough tests.
 No public population limit was raised in this change; cross-platform validation
 and the other coverage-ledger gaps remain outstanding.
+
+
+### Floor population preparation and collision preflight (2026-10-20)
+
+Internal PrepareSlotsForFloor now validates requested expanded slots and
+collision resources before binding scripts or publishing the active limit.
+It checks every floor cell's worst-case nine-cell neighborhood, all 24 chest
+and eight Atla contributions, and every other actor, against polygon/frame
+budgets. Invalid parts, unsupported geometry and oversized resources fail
+before changing the unit. Sixteen-to-sixteen preparation returns immediately.
+Shrinking cleans retiring actors/scripts while their slots remain active, then
+restores the requested limit and clears retired script pointers.
+
+Tests cover invalid distant cells, aggregate frame budgets, allocation-free
+retail behavior, rejection preserving live state, full 256-slot initialization
+and cleanup back to sixteen. This is an internal loading helper, not yet
+wired to a public expanded-population request. Load failure reporting, native
+load/reset integration, remaining resource audits (including audio/collision
+identifiers) and high-population gameplay remain necessary.
+
+Clang 23.1.2 Windows game/test builds pass: 812 tests passed, 59 skipped,
+1 disabled, plus 29 Python checks. Eight fresh PAL replays (retail Cave and
+all seven managed dungeons) pass the 256-slot collision-resource preflight
+on front/back floors and native terrain comparisons. This validates capacity
+calculations, not 256 populated actors in play. Both 3,840-case seed exports
+retain prior hashes, differing from pinned upstream only in map storage size.
+PS2 unchanged; other platforms unverified.

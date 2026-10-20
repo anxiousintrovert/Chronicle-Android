@@ -47,6 +47,7 @@ ITEM_PACK          inventory_before{};
 std::array<s8, 50> flags_before{};
 
 void AuditMonsterTerrain() {
+    ASSERT_NO_THROW(chronicle::monsters::ValidateExpandedCollisionResources(*NowDngMap, NowMonstorUnit->collision, 256));
     std::vector<CCPoly> native(65536);
     for (unsigned slot = 0; slot <= NowMonstorUnit->SlotLimit(); ++slot) {
         if (slot < NowMonstorUnit->SlotLimit() && NowMonstorUnit->monster[slot].state != 2) continue;
