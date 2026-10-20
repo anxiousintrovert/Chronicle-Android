@@ -2,9 +2,23 @@
 #include "mesh_skin_runtime.hpp"
 #include <map>
 #include <algorithm>
+#include <cmath>
+#include "visualvu1.hpp"
 namespace mods {
 namespace {
-struct Entry {const void *block=nullptr;PreparedMeshVisual prepared;std::vector<MeshSkinBinding::Vertex> pose;std::string_view error;};
+struct Bounds {
+    MeshSkinBinding::Point low{},high{};
+};
+Bounds Measure(const Draw3DVisual &visual) noexcept {
+    Bounds result;
+    std::copy_n(visual.vertices.front().position,3,result.low.begin());result.high=result.low;
+    for(const auto &vertex:visual.vertices)for(unsigned axis=0;axis<3;++axis) {
+        result.low[axis]=std::min(result.low[axis],vertex.position[axis]);
+        result.high[axis]=std::max(result.high[axis],vertex.position[axis]);
+    }
+    return result;
+}
+struct Entry {const void *block=nullptr;const void *model=nullptr;Bounds current,previous;PreparedMeshVisual prepared;std::vector<MeshSkinBinding::Vertex> pose;std::string_view error;};
 std::map<const Draw3DVisual *,Entry> visuals;
 }
 bool AttachReplacementVisual(const void *block,const void *model,std::span<const MeshSkinBinding::Point> native_rest,
@@ -19,7 +33,7 @@ bool AttachReplacementVisual(const void *block,const void *model,std::span<const
     if(points>1000000||source_points>1000000||indices>3000000){error="replacement visual point/index budget exceeded";return false;}
     gfx::MeshHandle created=gfx::kNullMesh;
     try {
-        Entry next;next.block=block;next.prepared=PrepareMeshVisual(*source,asset);next.pose.resize(asset.vertices.size());
+        Entry next;next.block=block;next.model=model;next.prepared=PrepareMeshVisual(*source,asset);next.current=next.previous=Measure(next.prepared.visual);next.pose.resize(asset.vertices.size());
         std::vector<std::uint32_t> mapping;mapping.reserve(asset.vertices.size());
         for(auto flat:next.prepared.source_vertices)mapping.push_back(flat_native_indices[flat]);
         created=gfx::CreateMesh(next.prepared.visual.vertices,next.prepared.visual.indices);
@@ -31,6 +45,32 @@ bool AttachReplacementVisual(const void *block,const void *model,std::span<const
         if(!old.empty())gfx::DestroyMesh(old.mapped().prepared.visual.mesh);
         return true;
     }catch(const std::exception &failure){if(created!=gfx::kNullMesh)gfx::DestroyMesh(created);error=failure.what();return false;}
+}
+bool ReplacementVisualCorners(CVisualVu1 &visual,const float native[8][4],float output[8][4]) noexcept {
+    // Avoid even querying native model identity on the dormant path. Union all
+    // buffers for a model: MDT draw selects its double buffer after frame culling.
+    if(visuals.empty())return false;
+    const void *model=visual.GetMDTDataAddress();if(!model)return false;
+    Bounds bounds;bool found=false;
+    for(const auto &[source,entry]:visuals) {
+        if(entry.model!=model||!entry.error.empty())continue;
+        if(!found){bounds=entry.current;found=true;}
+        for(unsigned axis=0;axis<3;++axis) {
+            bounds.low[axis]=std::min({bounds.low[axis],entry.current.low[axis],entry.previous.low[axis]});
+            bounds.high[axis]=std::max({bounds.high[axis],entry.current.high[axis],entry.previous.high[axis]});
+        }
+    }
+    if(!found)return false;
+    for(unsigned i=0;i<8;++i)for(unsigned axis=0;axis<3;++axis) {
+        if(!std::isfinite(native[i][axis]))return false;
+        bounds.low[axis]=std::min(bounds.low[axis],native[i][axis]);
+        bounds.high[axis]=std::max(bounds.high[axis],native[i][axis]);
+    }
+    for(unsigned i=0;i<8;++i) {
+        for(unsigned axis=0;axis<3;++axis)output[i][axis]=(i&(1u<<axis))?bounds.low[axis]:bounds.high[axis];
+        output[i][3]=1;
+    }
+    return true;
 }
 void DetachReplacementVisual(const Draw3DVisual *source) {
     if(visuals.empty())return;const auto it=visuals.find(source);if(it==visuals.end())return;
@@ -59,5 +99,6 @@ void RefreshReplacementVisual(const Draw3DVisual &source) {
     }
     if(!RefreshMeshVisual(entry.prepared,source,skin.empty()?std::span<const MeshSkinBinding::Vertex>{}:std::span<const MeshSkinBinding::Vertex>{entry.pose})||
        !gfx::UpdateMeshVertices(entry.prepared.visual.mesh,0,entry.prepared.visual.vertices))entry.error="replacement visual refresh failed";
+    else {entry.previous=entry.current;entry.current=Measure(entry.prepared.visual);}
 }
 }

@@ -5,6 +5,7 @@
 
 #include "boxvu0.hpp"
 #include "draw3d.hpp"
+#include "mods/mesh_visual_runtime.hpp"
 #include "frame.hpp"
 #include "framevu1.hpp"
 #include "mathutil.hpp"
@@ -198,10 +199,15 @@ PORT_OVERRIDE int CFrameVu1::DrawVu1(unsigned int *packet, RenderInfo *info) {
         MulFrameMatrix(screen_matrix, info->view_scaled, matrix);
         float inv_scale = 1.0f / info->scale[0];
 
+        sceVu0FVECTOR replacement_corner[8];
+        sceVu0FVECTOR *cull_corner = this->corner;
+        if (mods::ReplacementVisualCorners(*visual, this->corner, replacement_corner)) {
+            cull_corner = replacement_corner;
+        }
         if (info->shadow_pass) {
-            ShadowClipBox(screen_corner, this->corner, matrix, info);
+            ShadowClipBox(screen_corner, cull_corner, matrix, info);
         } else {
-            ApplyMatrixN(screen_corner, screen_matrix, this->corner, 8);
+            ApplyMatrixN(screen_corner, screen_matrix, cull_corner, 8);
         }
         ScreenBound(screen_corner, screen_max, screen_min);
 

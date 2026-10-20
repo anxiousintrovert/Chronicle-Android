@@ -3708,3 +3708,28 @@ Package declarations, target discovery/matching, conflict diagnostics, activatio
 culling bounds and actual retail replacement-model screenshots remain required.
 No mesh capability is advertised; public operation count remains 143 and the
 full coverage goal remains unfinished.
+
+
+## Replacement-aware frame culling (2026-10-20)
+
+Frame drawing now uses temporary expanded corners for healthy replacement models
+in both normal and shadow culling. Bounds include native corners, current and
+previous published replacement poses, and all registered buffers of the native
+model. This accounts for interpolation and MDT buffer selection after culling.
+Bounds are cached on successful registration/refresh. Native frame corners are
+never rewritten; failed replacements stop expanding bounds. An empty replacement
+registry returns before querying model identity, retaining the native cull path.
+Existing remake-pending visibility behavior remains intact.
+
+Clang 23.1.2 game/test builds passed. All 26 focused mesh tests and the full
+regression passed: 953 passed, 104 skipped, one disabled benchmark. All 52 Python
+checks passed. Tests exercise actual CFrameVu1 drawing of an extended replacement
+whose original is offscreen, unchanged native corners, buffer union, previous-pose
+bounds, failed-refresh fallback, unrelated models and the dormant identity-query
+path. The isolated PAL combat/shared-manager/back-floor replay also passed with
+no replacement binding active. PS2 and Kazarov diffs remain empty.
+
+Mesh package declarations, target discovery/matching, conflict diagnostics,
+native construction attachment, activation and retail replacement-model visual
+validation remain open. Public operations remain 143; no mesh capability is
+advertised and overall MoonMod coverage is still incomplete.

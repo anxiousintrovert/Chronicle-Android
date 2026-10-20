@@ -140,8 +140,8 @@ These helpers remain internal preparation. The game does not yet select a mesh p
 native visual construction. Internal registration can now upload a separate GPU
 mesh, and native draw/remake paths resolve and refresh it while retaining the
 original as fallback. Native animation and synthetic GPU tests are not retail
-replacement-model validation. Package conflict handling, activation, culling
-bounds and retail visual evidence are still required.
+replacement-model validation. Package conflict handling, activation and retail visual evidence are still
+required. Replacement-aware frame bounds are now integrated as described below.
 
 
 ## Internal GPU publication
@@ -166,3 +166,24 @@ flattened source points, and three million triangle indices across committed
 replacements, in addition to the per-asset and skin-registry limits. These bound
 framework resources; they do not change native array capacities. This internal
 registration API is not yet callable by packages or a new public host operation.
+
+
+## Replacement-aware culling
+
+Frame culling uses the original native corners unless a healthy internal mesh
+replacement exists for that visual's native model. Active replacements expand a
+temporary bounding box to include the original corners and replacement geometry;
+no native frame corner or model data is written. The same temporary corners feed
+normal and shadow culling.
+
+Bounds are cached after successful publication and refresh. Culling includes both
+the previous and current published poses, and all registered buffers sharing the
+model identity, because MDT drawing selects its double buffer after frame culling.
+This is conservative: it can draw extra geometry, but avoids rejecting an extended
+replacement using the smaller original bound. Existing remake-pending visibility
+behavior is unchanged. Failed replacements cease contributing bounds; native
+fallback remains available. With no registered replacement, the helper returns
+before querying the visual's model identity or calculating bounds.
+
+This does not enable mesh packages. Package declarations, native construction
+attachment, target discovery and conflict diagnostics remain pending.
