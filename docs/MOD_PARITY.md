@@ -3295,3 +3295,28 @@ instead of allocating ownership after a native actor already exists.
 Validation: Clang 23.1.2 game/test builds and all 14 focused actor tests passed.
 Public operations remain 135; native spawn commit, runtime lifecycle integration
 and shared-menu PAL spawn/despawn replay remain outstanding. PS2 diff is empty.
+
+
+### Native owned actor creation composition (2026-10-20)
+
+CreateLoadedActor now composes the resource planner, floor geometry, dynamic
+obstructions and preallocated ownership with native SetupViewMonstor. It requires
+an already tracked unit, available identity generation, matching native global
+unit/map/user context, positive model health and valid live accounting. The
+boss-specific slot initialization path rejects. Ownership is attached to the
+new native generation without allocating after setup; callers must execute this
+as a sole commit on the game thread. Loaded retail initialization scripts run
+normally: arbitrary script side effects and allocation failure inside native
+setup are not claimed to be transactionally reversible.
+
+A native fixture now loads a valid empty script header, creates an actor, checks
+its stats/ownership/alive count, retires it without kill dispatch, and creates it
+again in the same slot with a new handle. Rejected context, geometry, owner and
+health requests preserve the free slot and registry. The fixture does not exercise
+retail initialization programs or a rendered dungeon.
+
+Clang 23.1.2 game/test builds passed. Full regression before the final native
+context guard: 899 passed, 98 skipped and one disabled. All 31 focused
+actor/ownership/identity tests passed after that guard. PS2 diff is empty.
+Public operations remain 135: public dispatch, automatic owner/floor lifecycle
+integration and shared-menu PAL spawning/despawning remain outstanding.

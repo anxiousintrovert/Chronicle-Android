@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <span>
+#include "owned_actors.hpp"
 class CDungeonMap;
 struct ITEM_FREE_AREA;
 class CMonstorUnit;
@@ -18,4 +19,13 @@ struct LoadedActorSpawnPlan { int slot; int model; std::array<float, 3> position
 // custom compiled script, floor geometry, or gameplay transition readiness.
 std::optional<LoadedActorSpawnPlan> PlanLoadedActorSpawn(const CMonstorUnit *unit, int model,
                                                        std::array<float, 3> position, std::string &error);
+// Commit-only native creation, for a stable dungeon on the game thread. The
+// caller must already track this unit and must not batch other writes with it.
+// Loaded retail initialization scripts run normally; this is not a sandbox for
+// arbitrary bytecode or a rollback boundary for native script side effects.
+std::optional<EntityHandles::Handle> CreateLoadedActor(
+    CMonstorUnit &unit, const CDungeonMap &map, std::span<const ITEM_FREE_AREA> areas,
+    ActorOwners &owners, std::string_view owner, std::string_view definition,
+    int model, std::array<float, 3> position, std::array<float, 3> player_position,
+    float player_radius, std::string &error);
 }

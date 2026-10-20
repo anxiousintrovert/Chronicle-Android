@@ -28,6 +28,10 @@ public:
 
     // A generation is never reused, including after clear/deactivation. Exhaustion
     // fails closed instead of allowing a stale handle to identify another actor.
+    bool CanConstruct(unsigned slot) const {
+        return active_ && slot < Capacity && next_ <= std::numeric_limits<Handle>::max() / Capacity;
+    }
+
     Handle Construct(unsigned slot) {
         if (!active_ || slot >= Capacity) {
             return 0;
