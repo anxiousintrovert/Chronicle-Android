@@ -323,8 +323,8 @@ unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner o
     }
     unsigned key = AllocateKey(EntryKind::Image, owner);
     Entry   &entry = Reg().entries[key];
-    entry.width = decoded.width;
-    entry.height = decoded.height;
+    entry.width = decoded.logical_width ? decoded.logical_width : decoded.width;
+    entry.height = decoded.logical_height ? decoded.logical_height : decoded.height;
     entry.format = decoded.format;
     entry.has_alpha = decoded.has_alpha;
     if (RendererUp()) {
@@ -334,6 +334,8 @@ unsigned PortCreateTexture(const PortDecodedTexture &decoded, PortTextureOwner o
         desc.format = decoded.format;
         desc.mip_levels = static_cast<uint32_t>(decoded.levels.size());
         desc.has_alpha = decoded.has_alpha;
+        desc.logical_width = decoded.logical_width;
+        desc.logical_height = decoded.logical_height;
         entry.texture = gfx::CreateTexture(desc);
         entry.owns_texture = true;
         for (size_t level = 0; entry.texture != gfx::kNullTexture && level < decoded.levels.size(); level++) {

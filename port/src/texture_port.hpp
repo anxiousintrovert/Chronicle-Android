@@ -53,6 +53,9 @@ struct PortDecodedTexture {
     std::vector<std::vector<uint8_t>> levels;
     std::array<uint32_t, 256>         palette = {};
     bool                              four_bit = false;
+    // Optional original dimensions for replacement images. Zero preserves the decoded image size.
+    unsigned                          logical_width = 0;
+    unsigned                          logical_height = 0;
 };
 
 // bpp as CTexture keeps it: 0 IDTEX4, 1 IDTEX8, 2 RGB16, 3 RGB24, 4 RGB32. levels[0] is the base,

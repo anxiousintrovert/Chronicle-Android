@@ -378,3 +378,25 @@ TEST(TexDecode, MipmapsAsSupplied) {
     auto plain_info = gfx::GetTextureInfo(PortTextureFromCTexture(plain).binding.texture);
     ASSERT_TRUE(plain_info && plain_info->mip_levels == 1);
 }
+
+TEST(TexDecode, ReplacementPixelsPreserveLogicalAtlasCoordinates) {
+    TexEnv env;
+    PortDecodedTexture decoded;
+    decoded.width=16;decoded.height=8;decoded.logical_width=4;decoded.logical_height=2;
+    decoded.levels.emplace_back(16*8*4);
+    for(unsigned y=0;y<8;++y)for(unsigned x=0;x<16;++x) {
+        auto *pixel=decoded.levels[0].data()+(y*16+x)*4;
+        pixel[0]=x<8?255:0;pixel[1]=x<8?0:255;pixel[2]=0;pixel[3]=255;
+    }
+    unsigned palette=0;const unsigned key=PortCreateTexture(decoded,PortTextureOwner::Manager,&palette);
+    const auto ref=PortTextureFromTex0(SCE_GS_SET_TEX0(key,1,SCE_GS_PSMCT32,2,1,1,0,0,0,0,0,0),0);
+    ASSERT_TRUE(ref.valid);EXPECT_EQ(palette,0u);EXPECT_EQ(ref.width,4u);EXPECT_EQ(ref.height,2u);
+    const auto info=gfx::GetTextureInfo(ref.binding.texture);ASSERT_TRUE(info);
+    EXPECT_EQ(info->width,4u);EXPECT_EQ(info->height,2u);EXPECT_EQ(info->pixel_width,16u);EXPECT_EQ(info->pixel_height,8u);
+    std::vector<uint8_t> pixels;uint32_t w=0,h=0;
+    ASSERT_TRUE(gfx::ReadbackTexture(ref.binding.texture,pixels,w,h));EXPECT_EQ(w,16u);EXPECT_EQ(h,8u);EXPECT_EQ(pixels,decoded.levels[0]);
+    env.gfx.Frame({0,0,0,0x80},[&]{env.Draw(ref,0,0,320,160,0,0,4,2);env.Draw(ref,320,0,320,160,2,0,4,2);});
+    EXPECT_TRUE(env.gfx.PixelNear(80,80,255,0,0));EXPECT_TRUE(env.gfx.PixelNear(240,80,0,255,0));
+    EXPECT_TRUE(env.gfx.PixelNear(400,80,0,255,0));EXPECT_TRUE(env.gfx.PixelNear(560,80,0,255,0));
+    PortReleaseKey(key);EXPECT_FALSE(PortKeyLive(key));
+}

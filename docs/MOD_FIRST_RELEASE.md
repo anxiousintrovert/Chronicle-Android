@@ -21,3 +21,9 @@ The first release must state the platforms actually validated. A Windows build d
 ## Next implementation priority
 
 Inspect port texture decode/upload and upstream renderer logical-size handling. Add package-owned full-resolution texture declarations and target discovery that can distinguish textures reliably, then exercise conflicting packs, original fallback, atlas/UV behavior and disable/restart on real assets. Do not silently downscale a purported high-resolution replacement to satisfy old buffer sizes.
+
+## Full-resolution texture upload foundation (2026-10-20)
+
+The port decoded-texture object can now carry optional logical dimensions independently of physical image dimensions. The registry retains logical texel dimensions and forwards both dimensions to the existing upstream Kazarov TextureDesc. Defaults are zero, preserving original behavior. This is internal groundwork, not an exposed package capability.
+
+Clang 23.1.2 game/test builds pass. A GPU test uploads a 16x8 image addressed as 4x2, verifies full-resolution readback, native full-image and atlas-subrectangle rendering, and registry release. All 15 focused texture/localization checks pass. Full suite: 1,028 passed, 103 skipped and one disabled. PS2 baseline and Kazarov remain unchanged. Package manifest/loading, bounded PNG validation, original-content identity/discovery, conflict handling and retail replacement/disable scenarios remain outstanding.
