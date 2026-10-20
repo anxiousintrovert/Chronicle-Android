@@ -9,6 +9,7 @@
 #include "mdt.hpp"
 #include "visualvu1.hpp"
 #include "vu0_ops.hpp"
+#include "mods/mesh_skin_runtime.hpp"
 
 namespace {
 
@@ -65,6 +66,7 @@ Mot_List *MotionProc2(CFrame *frame, tagMOTION_TYPE *motion, tagFRAME_INF *frame
         CFrameVu1  *owner = &((CFrameVu1 *) frame)[list->frame];
         MDT_HEADER *model = (MDT_HEADER *) owner->GetVisual()->GetMDTDataAddress();
 
+        mods::BeginNativeMeshSkin(model, frame_info[list->frame].base_vertices, frame_info[list->frame].vertex_count);
         vert = (sceVu0FVECTOR *) ((u_char *) model + model->vertex_ofs);
 
         if (frame_info[list->frame].vertex_count > 3000) {
@@ -94,10 +96,12 @@ Mot_List *MotionProc2(CFrame *frame, tagMOTION_TYPE *motion, tagFRAME_INF *frame
         sceVu0CopyVector(Bone_Matrix_Base[3], translation);
     }
 
+    const bool mod_skin = mods::NativeMeshSkinActive();
     for (u_int i = 0; i < list->key_count; i++) {
         u32 vertex = list->keys[i].frame;
         SkinVertex(vert[vertex], g_deformed[vertex], frame_info[list->frame].base_vertices[vertex], Bone_Matrix_Base,
                    Bone_Matrix, Bone_Matrix_inv, 0.01f * list->keys[i].value[0]);
+        if (mod_skin) mods::ApplyNativeMeshBone(vertex, Bone_Matrix_Base, Bone_Matrix, Bone_Matrix_inv, 0.01f * list->keys[i].value[0]);
     }
 
     return list->next;

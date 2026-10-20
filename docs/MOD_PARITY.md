@@ -3627,3 +3627,32 @@ rejection. PS2 and the native motion helper remain unchanged.
 No runtime caller or package capability is added in this step. Native lifetime
 binding, skin notifications, morph/color/material updates, visual publication,
 package targets/conflicts and retail animation evidence remain outstanding.
+
+
+## Native skin notifications and visual lifetime cleanup (2026-10-20)
+
+MotionProc2 now notifies the framework at native skin-pose begin and after each
+native bone influence. A per-driver active check avoids per-vertex framework
+calls for unbound models. Original native calculations remain intact, covered by
+a source-body fingerprint after stripping only the three added notifications/
+guards. The unchanged native SkinVertex arithmetic remains separately guarded.
+
+Added an internal bounded registry keyed by visual identity, with native model
+and first-observed rest-buffer identity/count. Begin and bone updates allocate
+nothing. Changed rest identity/count or invalid/overflowing influences hide the
+pose until explicit rebinding; failed attachment preserves the prior binding.
+Visual re-registration, arena retirement and transient sweeping detach bindings.
+Limits are 256 bindings and one million source and replacement points each.
+
+Clang 23.1.2 game/test builds passed. Sixteen focused mesh/visual-lifetime tests
+passed, including real MotionProc2 execution with identical native output before
+and after binding, replacement output using its own rest position, repeated poses,
+stale-rest rejection, rollback and visual retirement. Full regression: 942 passed,
+104 skipped, one disabled benchmark. All 52 Python tests passed. The isolated PAL
+combat/shared-manager/back-floor scenario passed with no mesh bindings active,
+providing dormant-path gameplay evidence. PS2 remains unchanged.
+
+The package loader still creates no bindings, and the renderer does not yet draw
+replacement geometry. Public operations remain 143; no mesh capability is
+advertised. Package declarations/conflicts, morph/color/material adaptation,
+visual publication and actual replacement animation screenshots remain open.

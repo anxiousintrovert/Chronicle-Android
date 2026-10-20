@@ -108,8 +108,12 @@ Pose reset and bone application allocate no memory. Invalid/nonfinite weights,
 matrices or overflowing results reject an influence without partially changing
 its affected vertices. Preparation does not write source points or consume RNG.
 
-This is a detached internal adapter, not an exposed package feature yet. It must
-still be bound to the native model lifetime and animation notifications. Native
-morph/color/material updates, visual rebuilding, conflict resolution and retail
-rendering tests remain required before package mesh replacement is advertised.
+This is an internal adapter, not an exposed package feature yet. Native
+`MotionProc2` notifications now drive attached bindings, and visual rebuild,
+arena retirement and transient sweeping detach them. Bindings reject changed rest
+pointers/counts and invalid influences until explicitly rebuilt. Registration is
+bounded to 256 visuals and one million source/replacement points each. Native
+morph/color/material updates, replacement visual publication, package conflict
+resolution and retail replacement-rendering tests remain required before package
+mesh replacement is advertised.
 No custom skeleton, motion, item, weapon or cutscene registry is introduced.

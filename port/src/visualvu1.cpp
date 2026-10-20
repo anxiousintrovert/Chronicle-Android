@@ -1,3 +1,4 @@
+#include "mods/mesh_skin_runtime.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -23,7 +24,8 @@ constexpr uint32_t kBlockTag = 0x44334443; // "CD3D"
 std::unordered_map<const void *, std::unique_ptr<Draw3DVisual>> g_visuals;
 std::unordered_map<const void *, std::unique_ptr<Draw3DVisual>> g_transient;
 
-void Release(Draw3DVisual &visual) {
+void Release(Draw3DVisual &visual, const void *block) {
+    mods::DetachMeshSkin(block);
     if (visual.mesh != gfx::kNullMesh) {
         gfx::DestroyMesh(visual.mesh);
         visual.mesh = gfx::kNullMesh;
@@ -411,7 +413,7 @@ Draw3DVisual &Draw3DRegisterVisual(unsigned int *block, bool transient) {
     auto &table = transient ? g_transient : g_visuals;
     auto &slot = table[block];
     if (slot) {
-        Release(*slot);
+        Release(*slot, block);
     }
     slot = std::make_unique<Draw3DVisual>();
     slot->immediate = transient;
@@ -429,7 +431,7 @@ void Draw3DRetireVisuals(const void *base, std::size_t bytes) {
         if (address < begin || address - begin >= bytes) {
             return false;
         }
-        Release(*entry.second);
+        Release(*entry.second, entry.first);
         return true;
     };
     std::erase_if(g_visuals, retire);
@@ -439,13 +441,14 @@ void Draw3DRetireVisuals(const void *base, std::size_t bytes) {
 // Native arenas remain mapped when cleared or reused; missing tags retire their records.
 // Separately owned storage must explicitly retire records before unmapping.
 void Draw3DSweepVisuals() {
+    for (const auto &[block, visual] : g_transient) mods::DetachMeshSkin(block);
     g_transient.clear();
     std::erase_if(g_visuals, [](auto &entry) {
         const unsigned int *block = static_cast<const unsigned int *>(entry.first);
         if (block[8] == kBlockTag) {
             return false;
         }
-        Release(*entry.second);
+        Release(*entry.second, entry.first);
         return true;
     });
 }
