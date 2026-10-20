@@ -3439,3 +3439,35 @@ actor-tuning-807923fb5a4345fb8cc2b35167f4ec3b/report.json in the local framework
 expansion evidence directory. The author runner now contains 43 scenarios.
 PS2 diff is empty. Deterministic damage modifiers, registered content and the
 other matrix gaps remain outstanding; broader platform coverage is unverified.
+
+
+### Deterministic damage modifier core (2026-10-20)
+
+Audited the pinned reference combat_formula.hpp and its outgoing/incoming native
+adapters. Added a detached DamageModifiers registry with all six modifier forms:
+add, multiply, set, chance_multiply, random_multiply and ramp_multiply. Filters
+cover numeric weapon/model/character IDs and a strict target-HP threshold. Limits
+are 32 rules per owner and 128 per registry. Evaluation orders by priority, owner
+and local ID; a priority update replaces the actual map key. Idempotent definition
+updates preserve random/ramp state. Copies support staging without changing live
+rules; owner retention/removal does not remove another owner's same local ID.
+
+Chance/random draws use an explicit FNV-1a identity/uint32 seed and fixed 64-bit
+mixing sequence, not native rand(), random_device or implementation-defined hash.
+Nonmatching rules consume no draws. Ramp timing uses supplied 60 Hz simulation
+frames and resets on backward time or a configured inactivity gap. Matching
+results clamp to 0..1000000; zero is absorbing so later rules cannot revive an
+immune/blocked hit. Empty and nonmatching paths preserve original float bits,
+including large values and signed zero. Evaluation allocates nothing.
+
+Clang 23.1.2 game/test builds and six focused tests passed: golden random output,
+registration-order independence, priority changes, owner isolation/capacity,
+filter/threshold boundaries, idempotence, staged-copy isolation, ramp reset,
+native RNG preservation and exact dormant pass-through. Both existing Python
+native lifecycle/source-preservation guards passed. PS2 diff is empty.
+
+This is internal core only: public operation count stays 140. Native outgoing
+and incoming hit hooks, trustworthy native-model identity/context mapping,
+transactional public registration/inspection, owner/epoch cleanup and shared-menu
+combat replay remain required before exposing this capability to packages.
+No game loop calls this registry yet; no default gameplay behavior changes.
