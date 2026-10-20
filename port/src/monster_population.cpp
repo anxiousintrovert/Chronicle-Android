@@ -9,6 +9,7 @@
 #include "dungeonmap.hpp"
 #include "dun/gameloop.hpp"
 #include "chronicle/monster_audio.hpp"
+#include "sound.hpp"
 
 namespace {
 CMonstorUnit *expanded_unit = nullptr;
@@ -55,5 +56,13 @@ void PrepareLoadedPopulation() {
 void ResetExpandedPopulation() {
     if (!expanded_unit) return;
     PreparePopulationForFloor(*expanded_unit, *expanded_map, *expanded_hits, RetailSlots, 0);
+}
+
+void FinishExpandedPopulationRun() {
+    if (!expanded_unit) return;
+    ResetExpandedPopulation();
+    // RunGame can exit before the next native sound tick. Submit the queued
+    // sequence/lease stops while audio resources are still alive.
+    CSnd.Step();
 }
 }

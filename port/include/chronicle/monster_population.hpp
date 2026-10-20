@@ -12,4 +12,5 @@ void PrepareSlotsForFloor(CMonstorUnit &unit, CDungeonMap &map, unsigned slots, 
 void PreparePopulationForFloor(CMonstorUnit &unit, CDungeonMap &map, CCollisionData &hits, unsigned slots, int back_floor);
 void PrepareLoadedPopulation();
 void ResetExpandedPopulation();
+void FinishExpandedPopulationRun();
 }

@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <stdexcept>
 
 #include "character.hpp"
 #include "chronicle/dungeon_build.hpp"
@@ -46,6 +47,8 @@ bool               managed_layout = false;
 int                audit_population = 0;
 bool               population_injected = false;
 bool               high_slot_seen = false;
+bool               quit_with_population = false;
+bool               fail_with_population = false;
 std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
@@ -108,6 +111,14 @@ void BackPump() {
         for (const auto &action : mods::Scripts().Actions("audit.back")) {
             if (action.id == "enter" && action.available) {
                 if (population_injected && GameFrameCount() < population_frame + 180) return;
+                if (population_injected && quit_with_population) {
+                    EXPECT_TRUE(high_slot_seen);
+                    EXPECT_EQ(NowMonstorUnit->SlotLimit(), unsigned(audit_population));
+                    arrived = true;
+                    if (fail_with_population) throw std::runtime_error("population exit audit");
+                    GameRequestStop();
+                    return;
+                }
                 ASSERT_NO_THROW(AuditMonsterTerrain());
                 if (managed_layout && !population_injected) {
                     const auto state = mods::ReadLayout({
@@ -261,7 +272,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -273,6 +284,8 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool manage
     expected_expanded = expanded;
     managed_layout = managed;
     audit_population = population;
+    quit_with_population = quit;
+    fail_with_population = fail;
     population_injected = false;
     high_slot_seen = false;
     population_frame = 0;
@@ -330,13 +343,32 @@ end}
     if (expanded && !managed) {
         layout = std::make_unique<chronicle::dungeon::BuildScope>(chronicle::dungeon::BuildLayout{rooms, 46, 3, rooms > 6 ? 6 : 4});
     }
-    const int result = RunGame(0, nullptr);
+    int result = 0;
+    bool caught = false;
+    try {
+        result = RunGame(0, nullptr);
+    } catch (const std::runtime_error &error) {
+        if (!fail_with_population) throw;
+        EXPECT_STREQ(error.what(), "population exit audit");
+        caught = true;
+    }
+    EXPECT_EQ(caught, fail_with_population);
     layout.reset();
     ClockRemovePumpHook(BackPump);
     InputShutdown();
     EXPECT_EQ(result, 0);
-    EXPECT_TRUE(queued) << last_state;
+    EXPECT_EQ(queued, !quit_with_population) << last_state;
     EXPECT_TRUE(arrived) << last_state << " task=" << gameTask << " longest_play=" << maximum_stable;
+    if (quit_with_population) {
+        EXPECT_EQ(NowMonstorUnit->SlotLimit(), 16u);
+        EXPECT_EQ(NowColData->HitLimit(), 96u);
+        EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 32u);
+        EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
+        for (int i = 16; i < audit_population; ++i) {
+            EXPECT_EQ(NowMonstorUnit->monster[i].state, -1);
+            EXPECT_EQ(NowMonstorUnit->script[i], nullptr);
+        }
+    }
     for (const auto &diagnostic : mods::Scripts().Diagnostics()) {
         ADD_FAILURE() << diagnostic;
     }
@@ -403,4 +435,6 @@ TEST(ModBackFloorRetail, MaximumTemplePopulation) { RunBackAudit(3, true, 64, tr
 TEST(ModBackFloorRetail, MaximumMoonSeaPopulation) { RunBackAudit(4, true, 64, true, 5, 256); }
 TEST(ModBackFloorRetail, MaximumGalleryPopulation) { RunBackAudit(5, true, 64, true, 5, 256); }
 TEST(ModBackFloorRetail, MaximumDemonShaftPopulation) { RunBackAudit(6, true, 64, true, 5, 256); }
+TEST(ModBackFloorRetail, QuitWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true); }
+TEST(ModBackFloorRetail, ExceptionWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true, true); }
 } // namespace

@@ -2376,3 +2376,27 @@ Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 68 skipped,
 3,840-case no-mod/disabled-mod seed exports retain prior hashes and differ
 from pinned upstream only in map storage size. PS2 unchanged; other
 platforms remain unverified.
+
+
+### Expanded-population quit and exception cleanup (2026-10-20)
+
+RunGame now finishes any explicitly expanded population on normal return
+or a propagating C++ exception, before game/audio resources can be reused.
+It restores retail monster/hit/sequence limits, clears retired script
+pointers and submits queued sound stops. The helper returns immediately
+when no expanded population exists, preserving the default run path.
+
+Fresh PAL tests place all 256 monsters, activate slot 255, run 180 frames
+and either request a direct quit or throw a deliberate game-pump exception.
+Both confirm retail resource limits and cleared high slots after RunGame
+returns/throws. The exception test also verifies the original error survives.
+These tests do not represent process termination or allocation failure.
+
+Placement-failure reporting and public higher-population requests remain
+next; the broader API/tooling coverage ledger is still incomplete.
+
+Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 70 skipped,
+1 disabled; 29 Python checks pass. Direct quit, exception exit, retail Cave
+and maximum-population transition PAL replays pass. Both 3,840-case seed
+exports retain prior hashes and differ from pinned upstream only by map
+storage size. PS2 unchanged; other platforms unverified.

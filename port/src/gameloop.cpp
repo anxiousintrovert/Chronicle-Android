@@ -49,6 +49,7 @@
 #include "save_slots.hpp"
 #include "savedata.hpp"
 #include "snd.hpp"
+#include "chronicle/monster_population.hpp"
 #include "texture.hpp"
 #include "textwipe.hpp"
 #include "title/opening.hpp"
@@ -804,7 +805,7 @@ bool GameScreenshotWithFps(std::vector<std::uint8_t> &rgba, std::uint32_t &width
            gfx::ReadbackFrame(rgba, width, height);
 }
 
-int RunGame(int argc, char **argv) {
+static int RunGameImpl(int argc, char **argv) {
     // mwInit is not called: the host has run every static constructor. init_all's IOP boot, CD
     // and file-system resets, DevInit's DMA reset and the DMA channel handles have no host
     // counterpart and are not called.
@@ -1008,5 +1009,17 @@ int RunGame(int argc, char **argv) {
         while (ReadBGSync() != 0) {
             ClockSyncV();
         }
+    }
+}
+
+int RunGame(int argc, char **argv) {
+    chronicle::monsters::FinishExpandedPopulationRun();
+    try {
+        const int result = RunGameImpl(argc, argv);
+        chronicle::monsters::FinishExpandedPopulationRun();
+        return result;
+    } catch (...) {
+        chronicle::monsters::FinishExpandedPopulationRun();
+        throw;
     }
 }
