@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 116 implemented operations, native plugins and author
+a real host-call boundary, 119 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -19,7 +19,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
-| Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, and native Atla inspection/atomic collection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement integration and native condition/reward evaluation; broader Atla retail scenarios |
+| Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Native enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
@@ -2580,3 +2580,28 @@ native back-floor transition. The full Clang 23.1.2 suite passes: 830 passed,
 87 skipped and one disabled; all 35 Python checks pass. No automatic engine
 path was changed and PS2 remains untouched. Other platforms, broader Atla
 scenarios and the remaining capability ledger remain open.
+
+
+### Loaded retail Georama placement (2026-10-20)
+
+georama.placement_state, georama.place and georama.remove expose the native
+loaded-town placement pipeline through the shared Lua/native host boundary.
+Edits require stable walking, available built stock, matching town, and sole
+engine-write ownership for the callback. Native fit/dependency rules, bounds,
+visibility, request evaluation and town save caches are used. Capacity preflight
+prevents native stock increments on a full placement table and overflow of
+request evaluation scratch storage. Native fit checking rotates the source
+template even on rejection; a scoped restore preserves template transforms.
+No new automatic engine hook or PS2 edit is required. Slots are current scene
+indices, not durable identifiers; edits persist rather than reverting on disable.
+
+Three focused tests check rejection/save/stock/geometry/template/RNG preservation,
+read detachment and exclusive writes. A fresh PAL Norune replay provisions one
+built part in a disposable fixture, invokes both operations through Lua shared
+menu actions, observes placement/removal and verifies native save serialization
+after each. Other towns, road/river/bridge combinations, custom definitions and
+completion reward services remain outside this gameplay proof.
+
+Clang 23.1.2 builds both executables. Full regression: 833 passed, 88 skipped,
+one disabled; all 35 Python checks pass. The explicit PAL placement replay passes.
+PS2 remains unchanged against the framework baseline.

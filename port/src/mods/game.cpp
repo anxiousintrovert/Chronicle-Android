@@ -16,6 +16,7 @@
 #include "entity_tracking.hpp"
 #include "gamemode.hpp"
 #include "georama.hpp"
+#include "georama_placement.hpp"
 #include "main.hpp"
 #include "menu_dungeon.hpp"
 #include "menu_misc.hpp"
@@ -239,6 +240,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "georama.placement_state") return ReadGeoramaPlacement();
         if (operation == "georama.atla_list") return ReadAtla();
         if (operation == "dungeon.layout_get") return ReadLayout(arguments);
         if (operation == "dungeon.chest_loot_get") return ReadChestLoot(arguments);
@@ -292,6 +294,7 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "georama.place" || command.operation == "georama.remove"; })) return ApplyGeoramaPlacement(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "georama.atla_collect"; })) return ApplyAtla(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "dungeon.back_floor_enter"; })) return QueueBackFloor(commands, money, error);
         if (std::ranges::any_of(commands, [](const auto& command) { return command.operation == "world.transition" || command.operation == "dungeon.enter"; })) {

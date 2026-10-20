@@ -1756,3 +1756,33 @@ callback to observe completion. The operation does not run reward/cutscene
 scripts or add custom Atla definitions. Collection is a persistent save change;
 disabling the mod does not reverse it. No engine behavior is added when these
 operations are unused.
+
+## Loaded Georama placement
+
+`georama.placement_state {}` (`game.read`) returns the loaded settlement's
+`town`, available retail `parts` (each has `part`, `stock`, `placed`, `available`)
+and occupied `placements` (each has `slot`, `part`, `rotation`, `position`).
+Slots are current native array indices, not persistent IDs. Requery after any
+edit or scene change. Rotation is 0..3 quarter turns; positions use native world
+coordinates.
+
+`georama.place {town=0,part=0,position={x,y,z},rotation=0}` and
+`georama.remove {town=0,slot=0}` require `game.write`. Declare these operations
+in `requires_operations`. Town is 0..4, retail part is 0..23, slot is 0..127;
+coordinates must be finite and within +/-100000. The selected town must be
+loaded in stable walking mode with no build effect in progress.
+
+Each placement/removal must be its callback's only engine write, including
+currency. Native built-stock, grid-fit and removal dependency rules apply.
+Placement snaps to the native grid and altitude. Roads, rivers and crossings
+retain native replacement/connection semantics; removing a crossing can leave
+a river piece. Full placement tables and request-evaluation capacity reject
+before mutation. Failed fit checks preserve template transforms.
+
+Successful edits refresh native bounds, object visibility and request evaluation,
+then write the town's placement and part cache into the current save in memory.
+Normal game saving persists that state to disk. This is a persistent edit, not
+an owned override: disabling the mod does not undo it. Inspect the result on
+the next callback. These operations do not add custom definitions, grant stock,
+play a construction animation, or execute completion reward scripts. They add
+no automatic engine hooks when unused.

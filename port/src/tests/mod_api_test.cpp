@@ -143,7 +143,7 @@ TEST(ModApi, SaveReadsAndEmptyCallbacksPreserveBytesAndRandomStream) {
     const auto expected = rand();
     srand(811);
     for (const auto &op : mods::Operations()) {
-        if (op.writes || op.name == "georama.atla_list" || op.name == "dungeon.layout_get" || (op.name == "dungeon.loot_get" || op.name == "dungeon.chest_loot_get") || op.name == "dungeon.floor_rules_get" || op.name == "dungeon.back_floor_state" || op.name == "world.transition_state" || op.name == "items.quick_slots" || op.name == "player.combat_state" || op.name == "player.tuning_state" || op.name == "party.town_state" || op.name == "party.switch_state" || op.name == "weapons.equip_state" || op.name == "weapons.refresh_state" || op.name == "combat.get" || (op.name.starts_with("entities.") || op.name.starts_with("physics.") || op.name.starts_with("services.") || op.name.starts_with("shops."))) {
+        if (op.writes || op.name == "georama.placement_state" || op.name == "georama.atla_list" || op.name == "dungeon.layout_get" || (op.name == "dungeon.loot_get" || op.name == "dungeon.chest_loot_get") || op.name == "dungeon.floor_rules_get" || op.name == "dungeon.back_floor_state" || op.name == "world.transition_state" || op.name == "items.quick_slots" || op.name == "player.combat_state" || op.name == "player.tuning_state" || op.name == "party.town_state" || op.name == "party.switch_state" || op.name == "weapons.equip_state" || op.name == "weapons.refresh_state" || op.name == "combat.get" || (op.name.starts_with("entities.") || op.name.starts_with("physics.") || op.name.starts_with("services.") || op.name.starts_with("shops."))) {
             continue;
         }
         Json a = Json::object();

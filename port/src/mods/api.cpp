@@ -9,6 +9,7 @@
 
 #include "entities.hpp"
 #include "georama.hpp"
+#include "georama_placement.hpp"
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
@@ -112,6 +113,9 @@ constexpr Operation operations[] = {
     {"fishing.get",               "game.read",     "Fishing point balance.",                                                       false},
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
+    {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
+    {"georama.place", "game.write", "Place a built retail piece through native fit checks.", true},
+    {"georama.remove", "game.write", "Remove a current native placement through dependency checks.", true},
     {"georama.atla_list", "game.read", "Inspect native Atla spheres and contents on the current floor.", false},
     {"georama.atla_collect", "game.write", "Collect one current-floor Atla as Toan with atomic save/map publication.", true},
     {"georama.request_set", "game.write", "Set saved request completion and synchronize a matching loaded town.", true},
@@ -364,6 +368,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "georama.elements_get" || name == "georama.element_set") {
         return ValidateGeoramaElements(name, a);
     }
+    if (name == "georama.placement_state" || name == "georama.place" || name == "georama.remove") return ValidateGeoramaPlacement(name, a);
     if (name == "georama.atla_list" || name == "georama.atla_collect") return ValidateAtla(name, a);
     if (name == "georama.request_set") return ValidateGeoramaRequest(a);
     if (name == "georama.satisfaction_get") {
