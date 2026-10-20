@@ -2884,3 +2884,23 @@ Validation: Clang 23.1.2 builds; 861 native tests passed, 92 skipped, one
 disabled; 37 Python checks passed. Fresh 3840-case empty/disabled seed comparison
 against 50eaff63 again differs only in map_bytes (142512 versus 76576), with no
 non-size difference. This does not prove all-gameplay equivalence. PS2 unchanged.
+
+
+### Native audio replay and remaining reference scope (2026-10-20)
+
+An ABI 2 plugin fixture now invokes audio.state/play/stop from its registered
+shared-menu action. Actual default-mixer samples prove deferred playback, stop
+and removal on runtime unload. A failing native action proves both queued sound
+and owned action-count state roll back. The fixture's Lua bootstrap sets only
+the test mode; all audio calls come through the native C ABI. All 42 relevant
+native-plugin/audio/runtime tests pass with Clang 23.1.2, including existing
+menu lifecycle and host-call budget cases. No engine behavior changed in this
+validation update, and PS2 remains unchanged. Device listening and other
+platforms still need verification.
+
+Reinspection of the pinned MoonMod Chronicle patch identifies the remaining
+audio comparison targets as retail SE playback, retail BGM play/stop, and owned
+sequence music set/clear. Its custom sound registration/play/stop is covered
+by our declarative assets plus playback APIs. Seek/pause/gain updates are not
+required by that pinned audio implementation and are not a parity blocker.
+Public operation count remains 128.

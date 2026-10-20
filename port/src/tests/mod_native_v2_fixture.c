@@ -181,6 +181,24 @@ static int run_action(const ChronicleModHostV2 *host, void *state, const char *w
     const char *result = 0;
     if (!state || !strstr(world, "\"playing\":true") || !strstr(world, "\"map\":"))
         return 0;
+    if (mode(host, "\"audio\"") || mode(host, "\"audio_fail\"")) {
+        char arguments[128];
+        const char *handle, *end;
+        if (!host->call(host->context, "audio.state", "{}", &result) || !strstr(result, "\"id\":\"tone\""))
+            return 0;
+        handle = strstr(result, "\"handle\":\"");
+        if (handle) {
+            handle += strlen("\"handle\":\"");
+            end = strchr(handle, '"');
+            if (!end || end - handle > 64) return 0;
+            snprintf(arguments, sizeof(arguments), "{\"handle\":\"%.*s\"}", (int)(end - handle), handle);
+            if (!host->call(host->context, "audio.stop", arguments, &result)) return 0;
+        } else if (!host->call(host->context, "audio.play", "{\"id\":\"tone\",\"loop\":true,\"volume\":0.5}", &result)) {
+            return 0;
+        }
+        if (!increment(host, "audio_actions")) return 0;
+        return !mode(host, "\"audio_fail\"");
+    }
     if (!increment(host, "actions"))
         return 0;
     if (!host->call(host->context, "economy.add", "{\"amount\":5}", &result))

@@ -986,6 +986,11 @@ protected:
         manifest.erase("quests");
         manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
         manifest["requires_capabilities"] = {"plugins.native.v2"};
+        if (mode == "audio" || mode == "audio_fail") {
+            manifest["permissions"].push_back("resources.read");
+            manifest["audio"] = {{"tone", "tone.flac"}};
+            Write(root / "mods/test.native.v2/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+        }
         manifest["requires"] = dependencies;
         manifest["native_library"] = "plugin" + source.extension().string();
         const auto package = root / "mods/test.native.v2";
@@ -2268,4 +2273,42 @@ TEST_F(ModRuntime, FailedAudioCallbackNeverPublishesPlaybackOrOwnedState) {
     std::array<float, 64> samples{};
     audio::DefaultMixer().Render(samples.data(), 32);
     for (float sample : samples) EXPECT_EQ(sample, 0);
+}
+
+TEST_F(ModNativeV2, NativeAudioActionsRenderStopAndRollbackWithoutLuaPlayback) {
+    auto render = [] {
+        std::array<float, 64> samples{};
+        audio::DefaultMixer().Render(samples.data(), 32);
+        return samples[0];
+    };
+    const auto commit = [](const auto &, int, std::string &) { return true; };
+    for (const std::string mode : {"audio", "audio_fail"}) {
+        LoadPlugin(mode, CHRONICLE_NATIVE_V2_MENU_FIXTURE);
+        ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+        audio::DefaultMixer().Reset();
+        runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+        std::string error;
+        ASSERT_TRUE(runtime.QueueAction("test.native.v2", "run", error));
+        EXPECT_EQ(render(), 0);
+        runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+        if (mode == "audio_fail") {
+            EXPECT_EQ(render(), 0);
+            EXPECT_FALSE(Values().contains("audio_actions"));
+            EXPECT_FALSE(runtime.HasGameplay());
+            EXPECT_FALSE(runtime.Diagnostics().empty());
+        } else {
+            ASSERT_TRUE(runtime.Diagnostics().empty()) << Json(runtime.Diagnostics()).dump();
+            EXPECT_NEAR(render(), 0.125f, 0.001f);
+            EXPECT_EQ(Values()["audio_actions"], 1);
+            ASSERT_TRUE(runtime.QueueAction("test.native.v2", "run", error));
+            runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+            EXPECT_EQ(render(), 0);
+            EXPECT_EQ(Values()["audio_actions"], 2);
+            ASSERT_TRUE(runtime.QueueAction("test.native.v2", "run", error));
+            runtime.Tick({1, 0, 0, true}, {}, {}, {}, commit);
+            EXPECT_NEAR(render(), 0.125f, 0.001f);
+            runtime.Start(mods::Manager{});
+            EXPECT_EQ(render(), 0);
+        }
+    }
 }

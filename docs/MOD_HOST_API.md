@@ -1937,6 +1937,6 @@ are owner-local; multiple mods may use the same local ID without conflict.
 There are 16 simultaneous voices per owner and 64 globally.
 
 This supports custom sound playback. Retail SE/BGM control, owned sequence music
-replacement, seek/pause/gain updates, device listening tests and broader platform
+replacement, device listening tests and broader platform
 validation remain separate work. Existing retail playback is unchanged when no
 mod requests audio.
