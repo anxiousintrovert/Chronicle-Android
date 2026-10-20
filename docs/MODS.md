@@ -88,7 +88,8 @@ package are rejected. Do not modify packages while the game is running.
 
 IDs begin with a lowercase letter and contain only lowercase ASCII letters,
 digits, periods, underscores, and hyphens (maximum 96 characters). `version` is
-currently a display string; dependency version ranges are not supported.
+checked exactly for gameplay saves. Optional `dependency_versions` supports
+exact pins and SemVer constraints; see MOD_FORMAT.md.
 `requires` and `conflicts` contain exact package IDs. Unknown manifest fields,
 self references, repeated references, and duplicate JSON keys are rejected. At most
 1024 packages are scanned. All fields shown above

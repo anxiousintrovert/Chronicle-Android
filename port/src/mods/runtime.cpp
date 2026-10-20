@@ -1023,6 +1023,31 @@ struct Runtime::Impl {
         return next;
     }
 
+    void QuestEvent(Module &m,std::string_view event,const World &world,const CommitGame &commit) {
+        if(m.failed||!world.playing||!WantsQuestEvent(*m.state,event))return;
+        try {
+            Json payload={{"map",world.map},{"dungeon",world.dungeon},{"floor",world.floor}};
+            if(world.event.is_object())payload.update(world.event);
+            const auto advances=QuestEventAdvances(m.package,*m.state,event,payload);
+            if(advances.empty())return;
+            if(!Permitted(m,"game.write"))throw std::runtime_error("quest event progression requires game.write");
+            auto staged=*m.state;std::vector<GameCommand> commands;
+            for(const auto &arguments:advances)CallOwnedQuest(m.package,staged,"quests.advance",arguments,[&](const Json &rewards){
+                if(!commit)throw std::runtime_error("quest reward write provider unavailable");
+                if(commands.size()+rewards.size()>64)throw std::runtime_error("quest event reward budget exceeded");
+                for(const auto &reward:rewards) {
+                    const auto name=reward["operation"].get<std::string>();const auto *op=FindOperation(name);
+                    if(!op||!Permitted(m,op->permission))throw std::runtime_error("quest reward permission denied");
+                    commands.push_back({name,reward["arguments"],m.package.id});
+                }
+            });
+            if(!commands.empty()) {std::string error;if(!commit(commands,0,error))throw std::runtime_error("quest event reward rejected: "+error);}
+            m.state->swap(staged);
+        } catch(const std::exception &error) {
+            m.failed=true;m.native.reset();diagnostics.push_back(m.package.id+": quest event "+std::string(event)+": "+error.what());
+        }
+    }
+
     ~Impl() { modules.clear(); } // Lua states close before the storage their API references.
 
     bool Check(Module &m, int status) {
@@ -1516,10 +1541,12 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                 }
             }
             (*m.state)["last_map"] = world.map;
+            if(!impl_->loaded_pending)impl_->QuestEvent(m,"map_enter",world,commit_game);
             impl_->Call(m, "on_map_enter", world, money, read_game, query_game, commit_game);
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_MAP_ENTER, nullptr, read_game);
         }
         if (floor_enter) {
+            if(!impl_->loaded_pending)impl_->QuestEvent(m,"floor_enter",world,commit_game);
             impl_->Call(m, "on_floor_enter", world, money, read_game, query_game, commit_game);
             impl_->NativeCallback(m, world, query_game, commit_game, CHRONICLE_EVENT_FLOOR_ENTER, nullptr, read_game);
         }
@@ -1562,6 +1589,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                         {"damage",       death.damage                          },
                         {"source",       death.scripted ? "scripted" : "native"}
                     };
+                    impl_->QuestEvent(m,"enemy_killed",event_world,commit_game);
                     if (m.listeners.contains("on_enemy_killed")) {
                         impl_->Call(m, "on_enemy_killed", event_world, money, read_game, query_game, commit_game);
                     }
@@ -1599,7 +1627,7 @@ bool Runtime::HasGameplay() const {
 
 bool Runtime::WantsEnemyDeaths() const {
     return std::ranges::any_of(impl_->modules, [](const auto &m) {
-        return !m->failed && (m->listeners.contains("on_enemy_killed") ||
+        return !m->failed && (WantsQuestEvent(*m->state,"enemy_killed") || m->listeners.contains("on_enemy_killed") ||
                               (m->native && m->native->WantsEvent(CHRONICLE_EVENT_ENEMY_KILLED)));
     });
 }

@@ -74,9 +74,23 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
         if(!a.contains("objectives")||!a["objectives"].is_array()||a["objectives"].empty()||a["objectives"].size()>16)return "quest requires 1..16 objectives";
         std::set<std::string> ids;int total=0;
         for(const auto &objective:a["objectives"]) {
-            if(!objective.is_object()||objective.size()!=3||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
+            if(!objective.is_object()||objective.size()!=3u+unsigned(objective.contains("event"))+unsigned(objective.contains("match"))||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
                !objective.contains("title")||!Text(objective["title"])||!objective.contains("goal")||!objective["goal"].is_number_integer()||objective["goal"]<1||objective["goal"]>1000000)
                 return "objectives require unique id, bounded title and integer goal 1..1000000";
+            if(objective.contains("event")) {
+                if(!objective["event"].is_string()||(objective["event"]!="enemy_killed"&&objective["event"]!="map_enter"&&objective["event"]!="floor_enter"))return "unsupported quest objective event";
+            }
+            if(objective.contains("match")) {
+                const auto &match=objective["match"];
+                if(!objective.contains("event")||!match.is_object()||match.size()>8)return "event match requires event and at most eight fields";
+                for(const auto &[key,value]:match.items()) {
+                    const bool common=key=="map"||key=="dungeon"||key=="floor";
+                    const bool death=objective["event"]=="enemy_killed"&&(key=="attacker"||key=="reward_exp"||key=="reward_money"||key=="damage"||key=="source");
+                    if(!common&&!death)return "unknown objective event match field";
+                    if(key=="source") {if(value!="native"&&value!="scripted")return "event source must be native or scripted";}
+                    else if(!value.is_number_integer()||value < -1||value > 2147483647)return "event match must be a bounded integer";
+                }
+            }
             total+=objective["goal"].get<int>();if(total>1000000)return "combined objective goals exceed 1000000";
         }
         return {};
@@ -138,6 +152,32 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
         Require(complete==claimed,"reward record differs from quest completion");
     }
     return result;
+}
+bool WantsQuestEvent(const Json &state,std::string_view event) {
+    if(!state.contains("quest_definitions"))return false;
+    for(const auto &[id,definition]:state["quest_definitions"].items()) {
+        if(!definition.contains("objectives")||!Started(id,state))continue;
+        for(const auto &objective:definition["objectives"])if(objective.value("event",std::string{})==event) {
+            const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
+            if(count<objective["goal"].get<int>())return true;
+        }
+    }
+    return false;
+}
+std::vector<Json> QuestEventAdvances(const Package &package,const Json &state,std::string_view event,const Json &payload) {
+    QuestDefinitions(package,state);std::vector<Json> advances;
+    if(!state.contains("quest_definitions"))return advances;
+    for(const auto &[id,definition]:state["quest_definitions"].items()) {
+        if(!definition.contains("objectives")||!Started(id,state))continue;
+        for(const auto &objective:definition["objectives"]) {
+            if(objective.value("event",std::string{})!=event)continue;
+            const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
+            if(count>=objective["goal"].get<int>())continue;
+            bool matches=true;if(objective.contains("match"))for(const auto &[key,value]:objective["match"].items())if(!payload.contains(key)||payload[key]!=value){matches=false;break;}
+            if(matches){Require(advances.size()<64,"quest event objective budget (64) exceeded");advances.push_back({{"id",id},{"objective",objective["id"]},{"amount",1}});}
+        }
+    }
+    return advances;
 }
 Json CallOwnedQuest(const Package &package,Json &state,std::string_view operation,const Json &arguments,const std::function<void(const Json &)> &enqueue_rewards) {
     const auto error=ValidateQuestOperation(operation,arguments);if(!error.empty())throw std::runtime_error(error);

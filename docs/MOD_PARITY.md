@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 147 implemented operations, native plugins and author
+a real host-call boundary, 148 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -21,7 +21,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible assets, package resources and explicitly enabled existing-model mesh replacement with inherited native animation/materials and runtime fallback | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
-| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page | Quest stage lifecycle, dialogue trees, native quest events, skill trees, native script interception |
+| Quests / dialogue / skills | Manifest and dynamic quests with named objectives and opt-in explicit start/rewards plus map/floor/death event bindings, transactional Lua/native progress, persisted definitions/counters and dedicated manager quest page | Quest stage lifecycle, dialogue trees, pickup/Georama quest events, skill trees, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
@@ -4052,3 +4052,27 @@ PS2 baseline and official Kazarov diffs remain empty. Other platforms unverified
 Local visual evidence: issue-evidence/framework-expansion-20261019/rewards-menu-8cb0501f44fe419dbc7fccf0f772a23d.
 Quest stage sequencing/native events, dialogue, skills and the broader remaining
 coverage ledger are still outstanding.
+
+
+### Existing native-event quest bindings (2026-10-20)
+
+Added quests.events.v1. Named objectives can observe existing map_enter,
+floor_enter and enemy_killed delivery with bounded exact-match filters. Started,
+incomplete objectives request death capture only while needed. No new native
+producer or PS2 edit is involved. Save loading suppresses event replay; stale
+floor deaths remain rejected by the existing runtime. An owner's matching
+objectives and reward receipts commit as one transaction before its independent
+script/native listeners. Failure preserves state and disables the owner with a
+diagnostic. Limits are 64 matched objectives and 64 reward writes per owner/event.
+
+Clang 23.1.2 builds passed. Five new tests cover filter validation, bounded work,
+start/capture/completion, stale and load-time suppression, observed map/floor
+transitions, listener ordering and multi-quest reward rollback. Full regression:
+1008 passed, 105 skipped, one disabled benchmark. All 68 Python checks passed;
+dormant PAL combat replay passed. Objective event delivery is runtime-tested with
+injected native value records; this is not a new full retail kill playthrough.
+PS2 baseline and official Kazarov diffs remain empty; other platforms unverified.
+
+Pickup/Georama event bindings, quest stage sequencing, dialogue, skills and broader
+ledger items remain outstanding. Also corrected stale introductory version-range
+documentation to reflect the existing dependency constraint implementation.

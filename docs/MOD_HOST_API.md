@@ -2501,3 +2501,51 @@ together; this is not a global account-level anti-replay system.
 No rewards or engine writes occur without an explicitly enabled, participating
 mod completing its authored quest. These grants target existing retail items and
 weapons and do not allocate custom item/weapon definitions or cutscene resources.
+
+
+## Event-driven quest objectives
+
+Require `quests.events.v1` and game.write. Each named objective may add an event
+and optional exact-match filter. Available events use the runtime's existing
+delivery path: enemy_killed, map_enter and floor_enter. No extra native hook is
+installed. Single-counter objectives continue to use explicit advances.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "hunt", title = "Clear the floor", description = "Defeat two enemies.",
+    objectives = {{id = "kills", title = "Enemies defeated", goal = 2,
+        event = "enemy_killed", match = {dungeon = 0, floor = 1, source = "native"}}}
+}))
+```
+
+Matching events add one, never a caller-supplied payload amount. Unstarted and
+complete objectives are ignored. Match accepts at most eight fields, all required
+to equal their event value. Every event supports map, dungeon and floor integer
+filters. Enemy deaths additionally support attacker, reward_exp, reward_money,
+damage, and source (native or scripted). Integer filters range from -1 through
+2147483647. Unknown fields/events, booleans as integers, and match without event
+are rejected. No match means any delivered event of that type. Definitions and
+filters are immutable and saved with the quest; no event history is replayed.
+
+Map/floor objectives update only on observed transitions, before the respective
+Lua/native listeners. Enemy objectives use the existing bounded death queue and
+stale-floor checks, before death listeners. Loading a save suppresses automatic
+progress for that load's map/floor/death delivery. A quest registered by a listener
+starts observing subsequent matching deliveries, not earlier events. An already
+registered quest started in on_game_enter can observe the following map/floor
+transition in that same tick. Enemy capture is requested only while a started,
+incomplete enemy objective (or an existing death listener) needs it.
+
+All matching quests for one owner and one event form one transaction: counters,
+completion receipts and rewards commit together. At most 64 objective counters
+may match one event per owner; exceeding this bound fails before changing state.
+Rewards retain their permissions
+and combined 64-command limit. Failure preserves every affected quest and marks
+the owner failed with a diagnostic. Each later Lua/native listener is its own
+existing callback transaction; its failure does not undo an already committed
+event progression transaction. Owners remain isolated. Repeated entry into a map
+or floor counts again; uninterrupted frames on the same floor do not.
+
+Automatic pickup, Georama and dialogue event bindings are not implemented yet.
+These bindings add no default quests, change no native enemy rewards, and keep
+all capture disabled when no mod needs it.

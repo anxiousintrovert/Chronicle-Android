@@ -100,6 +100,28 @@ TEST(ModDynamicQuests, RewardValidationAndClaimRecordsPreventReplay) {
         auto invalid=definition;invalid["rewards"]=rewards;EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",invalid).empty());
     }
 }
+TEST(ModDynamicQuests, EventBindingsValidateNamesAndExactFieldFilters) {
+    auto definition=MultiDefinition();auto &objective=definition["objectives"][0];
+    objective["event"]="enemy_killed";objective["match"]={{"source","native"},{"attacker",0},{"floor",2}};
+    EXPECT_TRUE(mods::ValidateQuestOperation("quests.register",definition).empty());Json state=Json::object();mods::CallOwnedQuest({},state,"quests.register",definition);
+    EXPECT_TRUE(mods::WantsQuestEvent(state,"enemy_killed"));EXPECT_FALSE(mods::WantsQuestEvent(state,"floor_enter"));
+    EXPECT_EQ(mods::QuestEventAdvances({},state,"enemy_killed",{{"source","native"},{"attacker",0},{"floor",2}}).size(),1u);
+    EXPECT_TRUE(mods::QuestEventAdvances({},state,"enemy_killed",{{"source","scripted"},{"attacker",0},{"floor",2}}).empty());
+    for(const Json &change:std::vector<Json>{{{"event","unknown"}},{{"match",{{"unknown",1}}}},{{"match",{{"source","spoof"}}}},{{"match",{{"floor",true}}}},{{"event","map_enter"}}}) {
+        auto bad=definition;bad["objectives"][0].update(change);EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",bad).empty());
+    }
+    objective.erase("event");EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",definition).empty());
+}
+TEST(ModDynamicQuests, EventWorkBudgetRejectsBeforeChangingAnyCounter) {
+    Json state=Json::object();
+    for(int q=0;q<5;++q) {
+        Json definition={{"id","quest"+std::to_string(q)},{"title","Title"},{"description","Description"},{"objectives",Json::array()}};
+        for(int o=0;o<13;++o)definition["objectives"].push_back({{"id","objective"+std::to_string(o)},{"title","Kill"},{"goal",1},{"event","enemy_killed"}});
+        mods::CallOwnedQuest({},state,"quests.register",definition);
+    }
+    const auto before=state;EXPECT_THROW(mods::QuestEventAdvances({},state,"enemy_killed",Json::object()),std::runtime_error);EXPECT_EQ(state,before);
+    state["quest_definitions"].erase("quest4");EXPECT_EQ(mods::QuestEventAdvances({},state,"enemy_killed",Json::object()).size(),52u);
+}
 class ModDynamicQuestRuntime:public testing::Test {
 protected:
     std::filesystem::path root=std::filesystem::temp_directory_path()/("chronicle-dynamic-quest-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -238,6 +260,47 @@ TEST_F(ModDynamicQuestRuntime, RewardsShareCallbackBudgetWithoutLeakingPartialBa
         assert(chronicle.call('quests.get',{id='reward'}).progress==0)
     end})");Start();int commits=0;runtime.Tick({1,2,0,true},{},{},{},[&](const auto &commands,int,std::string &){++commits;EXPECT_EQ(commands.size(),63u);for(const auto &command:commands)EXPECT_EQ(command.arguments["amount"],1);return true;});
     EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(commits,1);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_rewarded"));
+}
+
+TEST_F(ModDynamicQuestRuntime, NativeDeathObjectivesStartFilterCompleteAndStopCapture) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='hunt',title='Hunt',description='Two native kills',explicit_start=true,
+          objectives={{id='kills',title='Kills',goal=2,event='enemy_killed',match={source='native',attacker=0}}},
+          rewards={{operation='economy.add',arguments={amount=7}}}}))
+    end,on_tick=function() if chronicle.get('start') then assert(chronicle.call('quests.start',{id='hunt'})) end end})");
+    Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    auto saved=State();saved["mods"]["test.mod"]["quest_started"]["hunt"]=true;std::string error;ASSERT_TRUE(runtime.LoadState(saved.dump(),error))<<error;EXPECT_TRUE(runtime.WantsEnemyDeaths());
+    const std::array<mods::EnemyDeath,1> deaths{{{16,0,1,0,10,20,5,false}}};int commits=0;
+    mods::CommitGame commit=[&](const auto &commands,int,std::string &){++commits;EXPECT_EQ(commands.size(),1u);EXPECT_EQ(commands[0].arguments["amount"],7);return true;};
+    runtime.Tick(world,{},{},{},commit,deaths);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quests")); // load suppresses replay
+    auto wrong=deaths;wrong[0].scripted=true;runtime.Tick(world,{},{},{},commit,wrong);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quests"));
+    wrong=deaths;wrong[0].floor=2;runtime.Tick(world,{},{},{},commit,wrong);EXPECT_FALSE(State()["mods"]["test.mod"].contains("quests"));
+    runtime.Tick(world,{},{},{},commit,deaths);EXPECT_EQ(State()["mods"]["test.mod"]["quests"]["hunt"],1);EXPECT_TRUE(runtime.WantsEnemyDeaths());
+    runtime.Tick(world,{},{},{},commit,deaths);EXPECT_EQ(State()["mods"]["test.mod"]["quests"]["hunt"],2);EXPECT_EQ(commits,1);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    runtime.Tick(world,{},{},{},commit,deaths);EXPECT_EQ(commits,1);EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+TEST_F(ModDynamicQuestRuntime, MapAndFloorBindingsObserveTransitionsButNotSaveReload) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='travel',title='Travel',description='Explore',objectives={
+          {id='map',title='Map',goal=3,event='map_enter',match={map=4}},
+          {id='floor',title='Floor',goal=3,event='floor_enter',match={dungeon=0,floor=2}}}}))
+    end,on_floor_enter=function()
+        local q=chronicle.call('quests.get',{id='travel'})
+        assert(chronicle.set('seen',q.progress))
+    end})");Start();runtime.Tick({2,4,0,true,0,2});auto state=State()["mods"]["test.mod"];
+    EXPECT_EQ(state["quests"]["travel"],2);EXPECT_EQ(state["values"]["seen"],2);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    runtime.Tick({2,4,0,true,0,2});EXPECT_EQ(State()["mods"]["test.mod"]["quests"]["travel"],2);
+    std::string error;ASSERT_TRUE(runtime.LoadState(runtime.SaveState(),error))<<error;runtime.Tick({2,4,0,true,0,2});EXPECT_EQ(State()["mods"]["test.mod"]["quests"]["travel"],2);
+    runtime.Tick({2,3,0,true,0,1});runtime.Tick({2,4,0,true,0,2});EXPECT_EQ(State()["mods"]["test.mod"]["quests"]["travel"],4);EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+TEST_F(ModDynamicQuestRuntime, EventRewardFailureRollsBackAllMatchingQuestsAndDisablesOwner) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        for _,id in ipairs({'one','two'}) do assert(chronicle.call('quests.register',{id=id,title=id,description='Hunt',
+            objectives={{id='kill',title='Kill',goal=1,event='enemy_killed'}},rewards={{operation='economy.add',arguments={amount=7}}}})) end
+    end})");Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);const auto before=runtime.SaveState();
+    const std::array<mods::EnemyDeath,1> deaths{{{16,0,1}}};int commits=0;
+    runtime.Tick(world,{},{},{},[&](const auto &commands,int,std::string &error){++commits;EXPECT_EQ(commands.size(),2u);error="full";return false;},deaths);
+    EXPECT_EQ(commits,1);EXPECT_EQ(runtime.SaveState(),before);EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_FALSE(runtime.WantsEnemyDeaths());
 }
 
 }
