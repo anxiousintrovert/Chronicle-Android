@@ -1,6 +1,6 @@
 # Chronicle mod framework first release
 
-The first release prioritizes quests, texture replacements and a reliable author/user workflow. Full MoonMod coverage is no longer a release requirement. Existing tested APIs can remain available, but broader APIs must not delay these priorities.
+The first release prioritizes quests, texture replacements and a reliable author/user workflow. The broader roadmap is not a first-release requirement. Existing tested APIs can remain available, but broader APIs must not delay these priorities.
 
 ## Required scope
 
@@ -14,7 +14,7 @@ The first release prioritizes quests, texture replacements and a reliable author
 
 ## Release boundaries
 
-Defer broader MoonMod parity, registered maps/characters/animations, advanced save/NG+ services, remote discovery and bespoke character-sheet UI. Contributor-owned custom item, weapon and cutscene frameworks remain separate; do not allocate their registries or impose their implementation.
+Defer broader API expansion, registered maps/characters/animations, advanced save/NG+ services, remote discovery and bespoke character-sheet UI. Contributor-owned custom item, weapon and cutscene frameworks remain separate; do not allocate their registries or impose their implementation.
 
 The first release must state the platforms actually validated. A Windows build does not certify Linux/macOS/Android. Existing broader experimental APIs are not evidence that all of their retail scenarios are release-certified.
 

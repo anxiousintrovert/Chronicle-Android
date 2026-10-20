@@ -1,15 +1,15 @@
 # Chronicle framework capability coverage
 
-First-release priority: quests, same-size asset replacement and full texture replacement, plus loader/manager/authoring essentials. See MOD_FIRST_RELEASE.md. Full MoonMod coverage is a longer-term reference, not a first-release gate.
+First-release priority: quests, same-size asset replacement and full texture replacement, plus loader/manager/authoring essentials. See MOD_FIRST_RELEASE.md. The broader capability roadmap is not a first-release gate.
 
 Longer-term target: comparable Chronicle modding capabilities, using our own package/API/ABI.
-Unchanged MoonMod package compatibility is not a requirement. Reference inspected:
-MoonMod `6f5ca66e44ff29f866453b1181c9679aa9b6bd5d`, its API catalog, native SDK
+Unchanged reference framework package compatibility is not a requirement. Reference inspected:
+reference framework `6f5ca66e44ff29f866453b1181c9679aa9b6bd5d`, its API catalog, native SDK
 documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 153 implemented operations, native plugins and author
+a real host-call boundary, 155 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -81,7 +81,7 @@ Audit packages and retail assets remain outside the repository.
 
 ## Enemy movement and spatial query validation (2026-10-19)
 
-The native MoonMod binding also exposes `physics.query`, `physics.velocity_get`
+The native reference framework binding also exposes `physics.query`, `physics.velocity_get`
 and `physics.velocity_set`; these now appear in our catalog and author docs.
 Sphere queries select active revealed enemy origins, not collision geometry.
 Movement uses native direction/speed without an engine-loop override. Writes
@@ -711,7 +711,7 @@ cases, not an assertion of complete retail-gameplay equivalence.
 
 ## Town integration audit (2026-10-19; implementation pending)
 
-The reference evidence here is the pinned MoonMod commit named at the top of this
+The reference evidence here is the pinned reference framework commit named at the top of this
 ledger, specifically `ports/chronicle/moonfactory-chronicle.patch`. This is a source
 audit, not a runtime comparison or a newly implemented API. The implemented
 operation count remains 81. All other outstanding coverage above remains open.
@@ -932,7 +932,7 @@ state, and visual retirement tests cover persistent/transient range boundaries.
 Movement, conversations, interiors, every native reload path and other platforms
 remain unverified. Asset availability is not arbitrary pack validation. The
 retail run still logs existing unsupported native event calls. These results do
-not establish full MoonMod parity or current upstream Chronicle compatibility.
+not establish full reference framework parity or current upstream Chronicle compatibility.
 All broader gaps in the coverage table remain open.
 
 Validation receipt: llvm-mingw Clang 23.1.2 builds passed. The full suite registered
@@ -1120,7 +1120,7 @@ match pinned upstream with empty and disabled mods. No PS2 files changed.
 
 ### Quick-slot native-path audit
 
-Implementation remains pending. The pinned MoonMod Chronicle adapter selects
+Implementation remains pending. The pinned reference framework Chronicle adapter selects
 one-based slots 1–3 by writing itemNowSel and activeItem.now. It checks active
 dungeon play and nonempty saved inventory. Its use operation additionally queues
 a four-frame Square-button request in the port's DunMoveChara override; it does
@@ -1318,7 +1318,7 @@ operations. PS2 files remain unchanged. Other platforms remain unverified.
 
 ### Back-floor native-path audit
 
-Implementation remains open. The pinned MoonMod Chronicle adapter exposes
+Implementation remains open. The pinned reference framework Chronicle adapter exposes
 `dungeons.back_floor_get` and `dungeons.back_floor_enter`. Entry sets a pending
 flag and dungeon ID, then waits until GAME_TASK_SCRIPT_RUN to assign
 BT_REQUEST_URA_DUNGEON. It does not immediately travel from ordinary play. Its
@@ -1409,7 +1409,7 @@ in CLI discovery; PS2 files remain unchanged.
 ## Monster loot definition integration audit
 
 Historical pre-implementation audit; the implementation receipt below supersedes
-the open status for monster definition operations. Chest loot remains open. In pinned MoonMod commit
+the open status for monster definition operations. Chest loot remains open. In pinned reference framework commit
 `6f5ca66e44ff29f866453b1181c9679aa9b6bd5d`, `OverrideDungeonLoot` changes
 only `MONSTOR_MODEL::rare_item` and `steal_item`; its query also exposes
 `attachment_kind` and `drops_items`. This is monster definition coverage,
@@ -1485,7 +1485,7 @@ operations. Protected PS2 files remain unchanged; no gameplay package is shipped
 
 ### Expanded dungeon layout dependency audit
 
-Layout implementation remains open. Pinned MoonMod `SetDungeonLayout` requests
+Layout implementation remains open. Pinned reference framework `SetDungeonLayout` requests
 2-64 rooms, area 8-46 and room sides 3-6. Room counts are placement targets, not
 a guarantee that packing succeeds. Its empty request releases that owner's
 configuration; its owner list uses the most recently submitted configuration.
@@ -2521,10 +2521,10 @@ georama.satisfaction_get reports bounded saved request completion, individual
 request flags and the rounded completion percentage for the five settlements.
 The result explicitly states its derivation and does not claim to recompute
 placement conditions or trigger rewards. Invalid request counts are errors.
-This matches the derived readback in pinned MoonMod GetGeoramaSatisfaction;
+This matches the derived readback in pinned reference framework GetGeoramaSatisfaction;
 plot and placement details already exist in georama.get.
 
-Source inspection of pinned MoonMod SetDungeonFloorRules confirms its Chronicle
+Source inspection of pinned reference framework SetDungeonFloorRules confirms its Chronicle
 implementation writes limited-zone table/current fields, which our existing
 transactional floor_rules APIs already cover with explicit live application.
 The broader catalog description alone does not establish additional seal/key
@@ -2778,7 +2778,7 @@ The public host operation count remains 125.
 Audio audit for subsequent work: the pinned official Kazarov exposes byte-based
 LoadPcmTrack (WAV/FLAC/Ogg Vorbis), PcmTrack, StreamChannel and Mixer stream-channel
 registration/removal. Chronicle sound.cpp uses audio::DefaultMixer. The pinned
-MoonMod reference uses those stream facilities for owned custom sounds and a
+reference framework reference uses those stream facilities for owned custom sounds and a
 separate sequence replacement map for music. No private audio backend is implied
 by these capabilities. Registration/decode budgets, asset ownership, callback
 transactions, audio-thread lifetime and disable cleanup still need implementation
@@ -2900,7 +2900,7 @@ menu lifecycle and host-call budget cases. No engine behavior changed in this
 validation update, and PS2 remains unchanged. Device listening and other
 platforms still need verification.
 
-Reinspection of the pinned MoonMod Chronicle patch identifies the remaining
+Reinspection of the pinned reference framework Chronicle patch identifies the remaining
 audio comparison targets as retail SE playback, retail BGM play/stop, and owned
 sequence music set/clear. Its custom sound registration/play/stop is covered
 by our declarative assets plus playback APIs. Seek/pause/gain updates are not
@@ -3734,7 +3734,7 @@ no replacement binding active. PS2 and Kazarov diffs remain empty.
 Mesh package declarations, target discovery/matching, conflict diagnostics,
 native construction attachment, activation and retail replacement-model visual
 validation remain open. Public operations remain 143; no mesh capability is
-advertised and overall MoonMod coverage is still incomplete.
+advertised and overall reference framework coverage is still incomplete.
 
 
 ## Staged mesh packages and author-tool conflicts (2026-10-20)
@@ -3871,7 +3871,7 @@ passed. PS2 baseline and Kazarov diffs are empty.
 
 Evidence: issue-evidence/framework-expansion-20261019/mesh-smoke-10b1353a7f6c43159bf0a7d097d3fc4b
 and mesh-startup-bc8e92a4aefc4a6297b3fc0f421e3b8d (local only).
-This closes existing-model mesh activation, not full MoonMod coverage. GLB/DAE,
+This closes existing-model mesh activation, not full reference framework coverage. GLB/DAE,
 new model/skeleton/animation registration and broader API work remain open;
 other models and platforms still require retail validation.
 
@@ -3919,7 +3919,7 @@ Documentation specifies bounds, ordering, collision handling, default behavior,
 reward-flag author responsibility and source-save preservation. This covers owned
 scalar/quest transformations, not arbitrary native inventory/world migrations,
 NG+ prototype trailer conversion, scripted transforms or independent save branches.
-Those remaining save capabilities and broader MoonMod coverage remain unfinished.
+Those remaining save capabilities and broader reference framework coverage remain unfinished.
 
 
 ## Shared quest reads and manager quest page (2026-10-20)

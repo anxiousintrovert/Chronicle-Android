@@ -221,6 +221,9 @@ are explicitly rejected rather than silently discarded.
 
 ## Current boundaries and intended scope
 
+See the [roadmap](MOD_ROADMAP.md) for planned additions and contributor-owned
+extensions. Planned features are not current API guarantees.
+
 Conflict detection covers declared incompatibilities, dependency constraints,
 exact file ownership, and matching mesh/texture replacement targets.
 It cannot infer semantic conflicts between different game assets or undeclared

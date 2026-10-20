@@ -25,7 +25,7 @@ addresses, or copied PS2 internals.
   host calls, logging and simulation callbacks. Windows loader tested; other
   native platforms require validation. See [the native SDK](MOD_NATIVE_SDK.md).
 
-This is **not full MoonMod capability parity**. [The coverage ledger](MOD_PARITY.md)
+The full planned capability set is **not yet implemented**. [The coverage ledger](MOD_PARITY.md)
 separates implemented services from the remaining native integration work.
 
 ## Native services still required for NG+ and larger mods

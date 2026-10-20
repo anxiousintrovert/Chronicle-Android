@@ -1,6 +1,6 @@
 # Chronicle native plugin SDK
 
-This is our C ABI, not MoonMod binary compatibility. Include
+This is the Chronicle-specific C ABI. Foreign plugin binaries are not supported. Include
 [`native_plugin.h`](../port/src/mods/native_plugin.h). ABI 1 remains supported
 without layout changes. It exports `ChronicleMod_GetPluginV1`, returning a static
 `ChronicleModPluginV1` descriptor with `size`, `abi = 1`, matching package ID,

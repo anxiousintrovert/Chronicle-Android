@@ -138,7 +138,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `combat.rules.v1` | Owned deterministic incoming/outgoing damage formulas through shared host calls |
 | `entities.spawn_tuning.v1` | Optional bounded stats and initial rotation for owned loaded-model spawning |
 | `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |
-| `plugins.native.v1` | Opt-in Chronicle C ABI 1 plugins; not a MoonMod ABI compatibility claim |
+| `plugins.native.v1` | Opt-in Chronicle C ABI 1 plugins; foreign plugin ABIs are not supported |
 | `plugins.native.v2` | Separate C ABI 2 with owned lifecycle subscriptions and scalar save values; ABI 1 remains supported |
 
 List the capabilities your package actually needs. `chronicle.supports(name)`
