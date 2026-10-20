@@ -3347,3 +3347,31 @@ cannot disappear while an actor remains alive. The existing internal creation
 and retirement helpers are not yet exposed to packages. Registered custom
 models/characters and contributor-owned item/weapon/cutscene registries remain
 separate outstanding work.
+
+
+### Owned actor cleanup retries and tracking lifetime guard (2026-10-20)
+
+Added RetainOwnedActors: inactive owners are retired through the native cleanup
+composition; successful removals commit, while failures retain their metadata
+and return entity/owner/reason for retry. Other active owners are untouched.
+Lost tracking or an unresolved old generation is not treated as proof of native
+removal. This is explicitly a best-effort cleanup pass, not an atomic batch.
+
+A dormant game-thread ownership binding now pins the tracked identity registry
+while bound actors exist. Stop/expire cannot discard those handles; switching to
+another unit rejects until cleanup completes. Existing native slot-construction
+notifications forget the replaced generation, and native unit-clear notifications
+release that unit's records. Notifications for another unit do not release them.
+The ownership container is not initialized by unbound native constructor/clear
+notifications. Nothing is bound by default or merely by querying models.
+
+Clang 23.1.2 game/test builds and 35 focused tests passed, covering partial
+retirement/retry, another active owner, repeated cleanup, dying actors, tracking
+loss, rejected unit switches, native slot reuse and floor clearing. Full native
+regression: 903 passed, 99 skipped and one disabled. PS2 diff remains empty.
+
+This establishes the lifetime guard; it does not yet schedule cleanup from the
+runtime or expose spawning/despawning. Public operations remain 136. The next
+integration must bind ownership on creation, retain using active owners and
+runtime epoch before tracking shutdown, expose pending reasons, and validate
+spawn/disable/failure/transition through the shared menu in PAL gameplay.

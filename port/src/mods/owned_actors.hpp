@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+class CMonstorUnit;
 namespace mods {
 // Metadata only: never creates, removes or changes a native actor. A caller must
 // complete native cleanup before Forget; loss of an owner alone is not cleanup.
@@ -30,8 +31,17 @@ public:
     void Expire(const EntityHandles &handles);
     void Clear() { records_.clear(); registry_ = nullptr; }
     std::size_t Size() const { return records_.size(); }
+    // Detached metadata for cleanup. Includes unresolved generations: losing a
+    // handle alone does not prove that the corresponding native actor is gone.
+    Records Snapshot() const { return records_; }
 private:
     const EntityHandles *registry_ = nullptr;
     Records records_;
 };
+// Game-thread ownership binding. Empty/unbound state is dormant. Native lifetime
+// notifications release records before invalidating their public identities.
+ActorOwners &BindActorOwnership(CMonstorUnit &unit);
+bool HasBoundActorOwnership(const CMonstorUnit *unit);
+void ClearBoundActorOwnership(CMonstorUnit *unit);
+void ForgetBoundActorOwnership(CMonstorUnit *unit, EntityHandles::Handle handle);
 }

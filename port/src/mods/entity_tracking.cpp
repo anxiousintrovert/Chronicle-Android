@@ -1,6 +1,8 @@
 #include "entity_tracking.hpp"
 
 #include "entity_events.hpp"
+#include "owned_actors.hpp"
+#include <stdexcept>
 #include "entity_reactions.hpp"
 #include "monstorunit.hpp"
 #include "owned_enemy_scale.hpp"
@@ -31,6 +33,8 @@ CMonstorUnit *tracked = nullptr;
 
 EntityHandles &TrackEntities(CMonstorUnit &unit) {
     if (tracked != &unit) {
+        if (HasBoundActorOwnership(tracked))
+            throw std::runtime_error("owned actors must be cleaned up before switching identity tracking");
         handles.Deactivate();
         tracked = &unit;
         handles.Activate();
@@ -46,7 +50,7 @@ EntityHandles &TrackEntities(CMonstorUnit &unit) {
 EntityHandles *TrackedEntities(CMonstorUnit *unit) { return unit && tracked == unit ? &handles : nullptr; }
 
 void StopTrackingEntities() {
-    if (!tracked) {
+    if (!tracked || HasBoundActorOwnership(tracked)) {
         return;
     }
     tracked = nullptr;
@@ -60,6 +64,7 @@ void ExpireEntitiesOutsideUnit(CMonstorUnit *unit) {
 }
 
 void EntityUnitCleared(CMonstorUnit *unit) {
+    ClearBoundActorOwnership(unit);
     ClearOwnedEnemyScales(unit);
     ClearOwnedEnemyStats(unit);
     EnemyDeaths().CancelUnit(unit);
@@ -75,6 +80,7 @@ void EntitySlotConstructed(CMonstorUnit *unit, unsigned slot) {
     ClearOwnedEnemyStats(unit, static_cast<int>(slot));
     ClearEntityReactions(unit, static_cast<int>(slot));
     if (tracked == unit) {
+        ForgetBoundActorOwnership(unit, handles.Get(slot));
         handles.Construct(slot);
     }
 }

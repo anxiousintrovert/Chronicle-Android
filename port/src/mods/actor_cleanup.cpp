@@ -11,6 +11,7 @@
 #include "collisiondata.hpp"
 #include "shot_effect_pack.hpp"
 #include <iterator>
+#include <algorithm>
 #include <type_traits>
 
 namespace mods {
@@ -87,5 +88,31 @@ bool RetireOwnedActor(CMonstorUnit *unit, ActorOwners &owners, EntityHandles::Ha
     --unit->alive_count;
     handles->Retire(*slot); owners.Forget(handle);
     error.clear(); return true;
+}
+}
+
+namespace mods {
+ActorRetentionResult RetainOwnedActors(CMonstorUnit *unit, ActorOwners &owners,
+    std::span<const std::string> active_owners, CCollisionData *collision,
+    CSHOT_EFFECT_PACK *shots, int basic, int chapter, int voice_table) {
+    ActorRetentionResult result;
+    if (!owners.Size()) return result;
+    // Snapshot before the first retirement: erasing a committed actor cannot
+    // invalidate enumeration or lose the next owner's cleanup request.
+    const auto records = owners.Snapshot();
+    result.pending.reserve(records.size());
+    for (const auto &[handle, record] : records) {
+        if (std::ranges::find(active_owners, record.owner) != active_owners.end()) {
+            ++result.retained; continue;
+        }
+        std::string error;
+        if (RetireOwnedActor(unit, owners, handle, record.owner, collision, shots,
+                             basic, chapter, voice_table, error)) {
+            ++result.retired;
+        } else {
+            result.pending.push_back({handle, record.owner, std::move(error)});
+        }
+    }
+    return result;
 }
 }

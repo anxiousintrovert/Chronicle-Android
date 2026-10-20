@@ -88,3 +88,101 @@ TEST(ModActorCleanup, OwnedRetirementPreservesOtherActorsAndNeverDispatchesKillR
     EXPECT_EQ(unit->alive_count, 1);
     mods::EnemyDeaths().Enable(false); mods::StopTrackingEntities();
 }
+
+TEST(ModActorCleanup, OwnerRetentionRetriesFailuresWithoutLosingOrRetiringOtherOwners) {
+    auto unit = std::make_unique<CMonstorUnit>(); unit->CleanViewMonstor(0);
+    for (int slot : {0, 1, 2}) {
+        auto &actor = unit->monster[slot];
+        actor.state = 2; actor.hp = 10; actor.kind = 0; actor.attachment_kind = 0;
+    }
+    unit->alive_count = 3;
+    mods::StopTrackingEntities(); auto &handles = mods::TrackEntities(*unit);
+    const auto first = handles.Get(0), blocked = handles.Get(1), other = handles.Get(2);
+    mods::ActorOwners owners; std::string error;
+    ASSERT_TRUE(owners.Claim(handles, first, "alpha", "guard", error));
+    ASSERT_TRUE(owners.Claim(handles, blocked, "alpha", "guard", error));
+    ASSERT_TRUE(owners.Claim(handles, other, "beta", "guard", error));
+    unit->sound[1].sequence_id = 2800;
+    const std::vector<std::string> active{"beta"};
+    const auto result = mods::RetainOwnedActors(unit.get(), owners, active, nullptr, nullptr, -1, -1, -1);
+    EXPECT_EQ(result.retired, 1); EXPECT_EQ(result.retained, 1); EXPECT_FALSE(result.Complete());
+    ASSERT_EQ(result.pending.size(), 1); EXPECT_EQ(result.pending[0].entity, blocked);
+    EXPECT_EQ(result.pending[0].owner, "alpha"); EXPECT_FALSE(result.pending[0].reason.empty());
+    EXPECT_EQ(unit->alive_count, 2); EXPECT_EQ(owners.Size(), 2);
+    EXPECT_TRUE(owners.Find(handles, blocked)); EXPECT_TRUE(owners.Find(handles, other));
+    EXPECT_FALSE(handles.Resolve(first)); EXPECT_EQ(unit->monster[2].hp, 10);
+    // Repair native readiness; the same retained metadata drives the retry.
+    unit->sound[1].sequence_id = -1;
+    const auto retry = mods::RetainOwnedActors(unit.get(), owners, active, nullptr, nullptr, -1, -1, -1);
+    EXPECT_TRUE(retry.Complete()); EXPECT_EQ(retry.retired, 1); EXPECT_EQ(retry.retained, 1);
+    EXPECT_EQ(unit->alive_count, 1); EXPECT_EQ(owners.Size(), 1);
+    const auto repeated = mods::RetainOwnedActors(unit.get(), owners, active, nullptr, nullptr, -1, -1, -1);
+    EXPECT_EQ(repeated.retired, 0); EXPECT_EQ(unit->alive_count, 1);
+    const auto all = mods::RetainOwnedActors(unit.get(), owners, {}, nullptr, nullptr, -1, -1, -1);
+    EXPECT_TRUE(all.Complete()); EXPECT_EQ(all.retired, 1); EXPECT_EQ(unit->alive_count, 0);
+    EXPECT_EQ(owners.Size(), 0); mods::StopTrackingEntities();
+}
+
+TEST(ModActorCleanup, LostTrackingAndNativeDeathDoNotSilentlyDiscardOwnership) {
+    auto unit = std::make_unique<CMonstorUnit>(); unit->CleanViewMonstor(0);
+    auto &actor = unit->monster[0]; actor.state = 2; actor.hp = 10;
+    actor.kind = 0; actor.attachment_kind = 0; unit->alive_count = 1;
+    mods::StopTrackingEntities(); auto &handles = mods::TrackEntities(*unit);
+    mods::ActorOwners owners; std::string error; const auto handle = handles.Get(0);
+    ASSERT_TRUE(owners.Claim(handles, handle, "alpha", "guard", error));
+    actor.hp = 0; unit->alive_count = 0;
+    auto pending = mods::RetainOwnedActors(unit.get(), owners, {}, nullptr, nullptr, -1, -1, -1);
+    EXPECT_FALSE(pending.Complete()); EXPECT_EQ(owners.Size(), 1); EXPECT_EQ(unit->alive_count, 0);
+    mods::StopTrackingEntities();
+    pending = mods::RetainOwnedActors(unit.get(), owners, {}, nullptr, nullptr, -1, -1, -1);
+    EXPECT_FALSE(pending.Complete()); EXPECT_EQ(owners.Size(), 1);
+    EXPECT_EQ(pending.pending[0].reason, "actor unit is not currently tracked");
+    // Restarting tracking issues a new identity even if native memory is still
+    // occupied. The unresolved old record must not be mistaken for safe cleanup.
+    mods::TrackEntities(*unit);
+    pending = mods::RetainOwnedActors(unit.get(), owners, {}, nullptr, nullptr, -1, -1, -1);
+    EXPECT_FALSE(pending.Complete()); EXPECT_EQ(owners.Size(), 1); EXPECT_EQ(actor.state, 2);
+    EXPECT_EQ(pending.pending[0].entity, handle);
+    owners.Clear(); mods::StopTrackingEntities();
+    // Empty cleanup remains dormant even without a native unit.
+    EXPECT_TRUE(mods::RetainOwnedActors(nullptr, owners, {}, nullptr, nullptr, -1, -1, -1).Complete());
+}
+
+TEST(ModActorCleanup, BoundOwnershipPinsTrackingUntilRetirementOrNativeLifetimeEnds) {
+    struct Fixture {
+        std::unique_ptr<CMonstorUnit> unit = std::make_unique<CMonstorUnit>();
+        ~Fixture() { unit->CleanViewMonstor(0); mods::StopTrackingEntities(); }
+    } fixture;
+    auto &unit = *fixture.unit; unit.CleanViewMonstor(0);
+    auto other = std::make_unique<CMonstorUnit>(); other->CleanViewMonstor(0);
+    mods::StopTrackingEntities();
+    EXPECT_THROW(mods::BindActorOwnership(unit), std::runtime_error);
+    auto &handles = mods::TrackEntities(unit);
+    auto &owners = mods::BindActorOwnership(unit);
+    EXPECT_FALSE(mods::HasBoundActorOwnership(&unit));
+    unit.monster[0].state = 2; unit.monster[0].hp = 10;
+    unit.monster[0].kind = 0; unit.monster[0].attachment_kind = 0; unit.alive_count = 1;
+    mods::EntitySlotConstructed(&unit, 0); const auto handle = handles.Get(0);
+    std::string error; ASSERT_TRUE(owners.Claim(handles, handle, "alpha", "guard", error));
+    EXPECT_TRUE(mods::HasBoundActorOwnership(&unit));
+    mods::StopTrackingEntities(); EXPECT_EQ(mods::TrackedEntities(&unit), &handles);
+    mods::ExpireEntitiesOutsideUnit(nullptr); EXPECT_TRUE(handles.Resolve(handle));
+    EXPECT_THROW(mods::TrackEntities(*other), std::runtime_error);
+    EXPECT_TRUE(owners.Find(handles, handle));
+    // A different unit's native cleanup cannot release this ownership lease.
+    other->CleanViewMonstor(0); EXPECT_TRUE(mods::HasBoundActorOwnership(&unit));
+    auto result = mods::RetainOwnedActors(&unit, owners, {}, nullptr, nullptr, -1, -1, -1);
+    ASSERT_TRUE(result.Complete()); EXPECT_EQ(result.retired, 1);
+    mods::StopTrackingEntities(); EXPECT_EQ(mods::TrackedEntities(&unit), nullptr);
+    // Native replacement is explicit proof that the previous slot lifetime ended.
+    mods::TrackEntities(unit); mods::BindActorOwnership(unit);
+    unit.monster[0].state = 2; unit.monster[0].hp = 10;
+    mods::EntitySlotConstructed(&unit, 0);
+    ASSERT_TRUE(owners.Claim(handles, handles.Get(0), "alpha", "guard", error));
+    mods::EntitySlotConstructed(&unit, 0);
+    EXPECT_EQ(owners.Size(), 0); EXPECT_FALSE(mods::HasBoundActorOwnership(&unit));
+    ASSERT_TRUE(owners.Claim(handles, handles.Get(0), "alpha", "guard", error));
+    unit.CleanViewMonstor(0);
+    EXPECT_EQ(owners.Size(), 0); EXPECT_FALSE(mods::HasBoundActorOwnership(&unit));
+    EXPECT_NO_THROW(mods::TrackEntities(*other));
+}
