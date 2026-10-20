@@ -297,7 +297,7 @@ void TickGame() {
         const bool town_loadout = std::ranges::any_of(commands, [](const auto &command) { return command.operation == "weapons.equip"; }) && TownLoadoutReady();
         CommitEffects effects;
         if (!ApplyEntityAndSave(*SaveData, mode == GAME_MODE_DUNGEON ? NowMonstorUnit : nullptr,
-                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr, ShopWritesReady(), town_loadout)) { return false; }
+                               commands, money, error, &effects, georama ? &georama->state : nullptr, equipment ? &*equipment : nullptr, ShopWritesReady(), town_loadout, mode == GAME_MODE_DUNGEON && gameTask == GAME_TASK_PLAY && !BtEventMode && BtAllDrawFlag && UserStatus == static_cast<CUserStatus *>(SaveData->GetDngStatus()) && NowDngMap && selectMapNo == SaveData->GetDngStatus()->cur_georama)) { return false; }
         if (georama){ georama->Commit();
 }
         if (effects.refresh_weapon) {

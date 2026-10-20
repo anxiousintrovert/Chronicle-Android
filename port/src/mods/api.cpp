@@ -18,6 +18,7 @@
 #include "quick_items.hpp"
 #include "world_transition.hpp"
 #include "back_floor.hpp"
+#include "floor_rules.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -27,6 +28,8 @@ namespace {
 constexpr Operation operations[] = {
     {"dungeon.back_floor_state", "game.read", "Read native back-floor availability and request state.", false},
     {"dungeon.back_floor_enter", "game.write", "Queue native back-floor transport from ordinary dungeon play.", true},
+    {"dungeon.floor_rules_get", "game.read", "Read saved floor restrictions and active restriction.", false},
+    {"dungeon.floor_rules_set", "game.write", "Set a saved floor rule with optional explicit live application.", true},
     {"dungeon.locations", "game.read", "List retail dungeons and native floor counts.", false},
     {"dungeon.enter", "game.write", "Queue native dungeon entry with an optional zero-based floor.", true},
     {"world.locations", "game.read", "List supported retail settlement destinations.", false},
@@ -244,6 +247,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "items.quick_slots" || name == "items.quick_slot_select" || name == "items.quick_slot_use") return ValidateQuickItems(name, a);
+    if (name == "dungeon.floor_rules_get" || name == "dungeon.floor_rules_set") return ValidateFloorRules(name, a);
     if (name == "dungeon.back_floor_state" || name == "dungeon.back_floor_enter") return a.is_object() && a.empty() ? "" : "back-floor operations take no arguments";
     if (name == "dungeon.locations" || name == "dungeon.enter" || name == "world.locations" || name == "world.transition_state" || name == "world.transition") return ValidateWorldTransition(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
@@ -645,6 +649,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     if (!error.empty()) {
         throw std::runtime_error(error);
     }
+    if (op == "dungeon.floor_rules_get") return ReadFloorRules(*save.GetDngStatus(), a);
     if (op == "georama.elements_get") {
         if (!georama) {
             throw std::runtime_error("native Georama scene is unavailable");
@@ -723,7 +728,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
     return ReadStatus(*save.GetDngStatus(), world, op, a);
 }
 
-bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool town_loadout) {
+bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool town_loadout, bool active_floor) {
     int quick_selection = 0;
     std::string quick_use_owner;
     if (effects) {
@@ -761,7 +766,9 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 error = "query cannot be committed";
                 return false;
             }
-            if (op == "items.quick_slot_select" || op == "items.quick_slot_use") {
+            if (op == "dungeon.floor_rules_set") {
+                ApplyFloorRules(*staged->GetDngStatus(), a, active_floor);
+            } else if (op == "items.quick_slot_select" || op == "items.quick_slot_use") {
                 if (command.owner.empty()) {
                     throw std::runtime_error("quick-slot selection requires a runtime package owner");
                 }

@@ -37,5 +37,5 @@ nlohmann::json ReadStatus(const CUserStatus &status, const World &world,
 bool           ApplyStatus(CUserStatus &status, const std::vector<GameCommand> &commands,
                            int money_delta, std::string &error, CommitEffects *effects = nullptr);
 nlohmann::json ReadSave(CSaveData &save, const World &world, std::string_view operation, const nlohmann::json &arguments, const GeoramaState *georama = nullptr);
-bool           ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects = nullptr, GeoramaState *georama = nullptr, const EquipmentContext *equipment = nullptr, bool town_loadout = false);
+bool           ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects = nullptr, GeoramaState *georama = nullptr, const EquipmentContext *equipment = nullptr, bool town_loadout = false, bool active_floor = false);
 } // namespace mods

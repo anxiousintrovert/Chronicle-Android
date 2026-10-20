@@ -1456,3 +1456,29 @@ This does not register destinations, change floor generation or increase engine
 capacities. Boss/free-layout floors or floors without a recognized transport
 reject. Retail validation covers the first floor of all seven dungeons with
 Toan on PAL Windows, not all floors, characters, regional assets or platforms.
+
+
+### Saved and active dungeon restriction rules
+
+`dungeon.floor_rules_get {dungeon=0, floor=0}` (`game.read`) returns `dungeon`,
+`floor`, the saved `rule`, and `active_rule`. Both indices are required and
+zero-based. The native saved table covers dungeons 0-5 and at most 25 floors;
+queries reject floors beyond that dungeon's retail count. Demon Shaft has no
+entry in this table.
+
+`dungeon.floor_rules_set {dungeon=0, floor=0, rule=11}` (`game.write`) changes
+only the saved rule. Defined values are -1 (none), 0-5 (required character),
+10 (no weapon changes), and 11 (accelerated thirst). IDs 6-9 are undefined and
+rejected. Rules share the existing callback transaction: later failure rolls
+back the rule together with money, inventory and other staged writes.
+
+Add `apply_current=true` to apply the rule to the currently loaded floor too.
+This requires ordinary native dungeon play and matching saved/live dungeon and
+floor identity. Character restrictions require that character to be joined and
+already active; use the party-switch API separately first. The call does not
+load character resources, force a menu, or emit a restriction announcement.
+
+These are explicit persistent save edits. Disabling the authoring mod does not
+undo them; record and restore originals if temporary behavior is desired.
+Existing native floor-entry logic reads the saved table. No generation, capacity,
+per-frame rules override or default gameplay package is added.
