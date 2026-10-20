@@ -15,6 +15,8 @@
 #include "platform/config.hpp"
 #include "platform/clock.hpp"
 #include "gameloop.hpp"
+#include "mods/api.hpp"
+#include "savedata.hpp"
 
 namespace {
 TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWithoutWrites) {
@@ -89,5 +91,44 @@ TEST(ModQuestMenu, SharedFrameworkFiltersScrollsAndAcceptsControllerAndMouseWith
     mods::menu::Run(PAD_CROSS);EXPECT_TRUE(draw("skill-training-unavailable.png")!=skills);
     InputScriptApply(1);mods::menu::Run(0);mods::menu::Run(PAD_CIRCLE);mods::menu::Run(PAD_CIRCLE);EXPECT_FALSE(mods::menu::IsOpen());
     EXPECT_EQ(mods::Scripts().SaveState(),before);
+}
+}
+
+namespace {
+TEST(ModQuestMenu, ShippedContractActionAndQuestPagesFollowCommittedProgress) {
+    using Json=nlohmann::json;namespace fs=std::filesystem;
+    const auto source=fs::path(__FILE__).parent_path().parent_path().parent_path().parent_path();
+    const auto root=fs::temp_directory_path()/("chronicle-contract-menu-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    struct Cleanup{fs::path root;~Cleanup(){mods::menu::Close();mods::Scripts().Start(mods::Manager{});mods::Scripts().ResetState();InputShutdown();std::error_code error;fs::remove_all(root,error);}}cleanup{root};
+    fs::create_directories(root/"mods/contract");
+    for(const auto *file:{"mod.json","main.lua"})fs::copy_file(source/"examples/mods/dungeon-contract"/file,root/"mods/contract"/file);
+    std::ofstream(root/"mods-profile.json")<<R"({"schema_version":1,"enabled":{"example.dungeon-contract":true}})";
+    dc::test::GfxFixture graphics(640,480,1.0f,dc::test::GfxOptions{.offscreen=true});InputInit();
+    if(const char *data=std::getenv("DC_DATA")) {
+        PathsSetDataRoot(data);PathsSetSaveRoot(root);ConfigLoad();ClockSetUnbounded(true);ClockReset();
+        ASSERT_TRUE(GameSetJump("dungeon:0"));GameSetFastLoad(true);GameSetAutosave(false);GameSetFrameBudget(180);
+        ASSERT_EQ(RunGame(0,nullptr),0);
+    }
+    ASSERT_TRUE(capfont::Load(source/"tools/font/DarkCloudCompendium.ttf"));
+    mods::Shared().Start({root/"mods"},{},root);mods::Scripts().Start(mods::Shared().Active());
+    auto &runtime=mods::Scripts();const mods::World floor1{2,0,0,true,0,1},floor2{2,0,0,true,0,2};
+    auto save=std::make_unique<CSaveData>();save->GetDngStatus()->money=0;
+    mods::CommitGame commit=[&](const auto &commands,int money,std::string &error){return mods::ApplySave(*save,commands,money,error);};
+    runtime.Tick(floor1,{},{},{},commit);ASSERT_TRUE(runtime.Diagnostics().empty());
+    const auto draw=[&](const char *name){graphics.Frame({0,0,0,128},[]{mods::menu::Draw();});
+        if(const char *folder=std::getenv("DC_QUEST_MENU_AUDIT")){fs::create_directories(folder);EXPECT_TRUE(gfx::WritePng(fs::path(folder)/name,graphics.pixels.data(),graphics.width,graphics.height));}
+    };
+    const auto before=runtime.SaveState();mods::menu::Open();mods::menu::Run(PAD_L1);draw("contract-registered.png");
+    EXPECT_EQ(runtime.SaveState(),before);mods::menu::Run(PAD_CIRCLE);mods::menu::Run(PAD_R1);draw("contract-action.png");
+    mods::menu::Run(PAD_CROSS);EXPECT_EQ(runtime.SaveState(),before); // Queued only, even through the actual menu.
+    mods::menu::Close();runtime.Tick(floor1,{},{},{},commit);
+    EXPECT_TRUE(Json::parse(runtime.SaveState())["mods"]["example.dungeon-contract"]["quest_started"]["contract"]);
+    mods::menu::Open();mods::menu::Run(PAD_L1);draw("contract-active.png");mods::menu::Close();
+    runtime.Tick(floor2,{},{},{},commit);const std::array<mods::EnemyDeath,1> death{{{16,0,2,0,10,20,5,false}}};
+    runtime.Tick(floor2,{},{},{},commit,death);runtime.Tick(floor2,{},{},{},commit,death);
+    ASSERT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(save->GetDngStatus()->money,50);
+    const auto completed=runtime.SaveState();mods::menu::Open();mods::menu::Run(PAD_L1);draw("contract-completed.png");
+    mods::menu::Run(PAD_RIGHT);draw("contract-reward.png");mods::menu::Run(PAD_SQUARE);mods::menu::Run(PAD_SQUARE);draw("contract-completed-filter.png");
+    EXPECT_EQ(runtime.SaveState(),completed);EXPECT_EQ(save->GetDngStatus()->money,50);
 }
 }

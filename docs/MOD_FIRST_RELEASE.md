@@ -68,3 +68,14 @@ completion is harmless. No custom item/weapon/cutscene registry is introduced.
 Clang 23.1.2 test build, all 25 focused quest/menu tests, all 71 Python tests and
 offline package validation passed. PS2 and upstream Kazarov are unchanged. This
 is runtime integration evidence, not a retail playthrough of the authored quest.
+
+## Quest example shared-menu integration (2026-10-20)
+
+The shipped Dungeon Contract now also has a shared-menu integration test. It
+opens the real action page and presses Cross, verifies that starting is deferred
+until a gameplay tick, renders registered/active/completed quest pages and the
+reward receipt, and checks that browsing/filtering causes no state or money
+writes. The optional PAL-data run loads retail font assets for screenshot review;
+the action and completed reward pages were visually inspected. Floor/death events
+are injected here: actual combat-to-quest delivery remains a separate retail gate.
+Clang 23.1.2 build and the PAL-backed menu test passed.
