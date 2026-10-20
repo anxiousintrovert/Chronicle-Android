@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 129 implemented operations, native plugins and author
+a real host-call boundary, 131 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -3003,3 +3003,27 @@ metadata, process log and road image are in local issue evidence under
 se-retail-f58f5317d6b34b4d89f76ad3b10d1235. PS2 remains unchanged.
 BGM controls and owned sequence music replacement remain the next audio
 coverage gaps; public operation count remains 129.
+
+
+### Native BGM state and stop (2026-10-20)
+
+Public operation count is 131 with audio.bgm_state and audio.bgm_stop. The
+read query inspects native set/play/pause/disable/loading state and actual
+bank/decoded-sequence readiness, including registered description validation.
+It copies values without changing the native driver. The write requires one
+owned command with no other engine writes/currency, stable gameplay and no
+pending BGM load. It invokes native SndBgmStop, preserving native core-zero
+voice-release semantics and retaining the loaded set. No mod means no call.
+
+Focused tests cover detached reads/RNG preservation, mixed-write and pending-
+load rejection, and native idempotent stop. The PAL smoke scenario inspects
+loaded/playing BGM, stops it through the shared action and verifies the stopped
+state before native back-floor travel. The audio author suite now contains two
+scenarios and default smoke coverage totals 35. BGM set loading/play preflight
+and owned sequence replacement remain outstanding.
+
+Validation: Clang 23.1.2 builds; 869 native tests passed, 94 skipped and
+one disabled; 38 Python checks passed. Both audio PAL smoke scenarios passed
+separately in fresh profiles. Evidence: bgm-retail-9eed7f97f2f2492eb7e3828c15ba2fc5.
+PS2 diff remains empty. This does not establish physical-device listening or
+all-scene/platform coverage.

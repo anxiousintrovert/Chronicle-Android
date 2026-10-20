@@ -103,3 +103,32 @@ TEST(ModRetailSound, HostValidationRejectsMixedWritesAndInvalidValuesBeforeDispa
     EXPECT_FALSE(mods::ApplyRetailEffect({command}, 1, -1, -1, -1, error));
     EXPECT_FALSE(mods::ApplyRetailEffect({{"audio.se_play", {{"se", 0}}, ""}}, 0, -1, -1, -1, error));
 }
+
+extern int now_bgm_no, now_bgm_play, bgm_off, load_bgm_no, now_bgm_vol;
+TEST(ModRetailSound, BgmSnapshotsAndStopValidateBeforeTouchingNativeState) {
+    now_bgm_no = 3; now_bgm_play = 1; now_bgm_vol = 90; bgm_off = 0; load_bgm_no = -1;
+    srand(777); const auto expected = rand(); srand(777);
+    auto snapshot = mods::ReadRetailBgm();
+    EXPECT_EQ(snapshot["set"], 3);
+    EXPECT_EQ(snapshot["playing"], true);
+    EXPECT_EQ(snapshot["bank_loaded"], false);
+    EXPECT_TRUE(snapshot["tracks"].empty());
+    snapshot["set"] = 99;
+    EXPECT_EQ(now_bgm_no, 3);
+    EXPECT_EQ(now_bgm_play, 1);
+    EXPECT_EQ(rand(), expected);
+    std::string error;
+    const mods::GameCommand stop{"audio.bgm_stop", nlohmann::json::object(), "test"};
+    EXPECT_FALSE(mods::StopRetailBgm({stop, stop}, 0, error));
+    EXPECT_FALSE(mods::StopRetailBgm({stop}, 1, error));
+    EXPECT_EQ(now_bgm_play, 1);
+    load_bgm_no = 4;
+    EXPECT_FALSE(mods::StopRetailBgm({stop}, 0, error));
+    EXPECT_EQ(now_bgm_play, 1);
+    load_bgm_no = -1;
+    ASSERT_TRUE(mods::StopRetailBgm({stop}, 0, error)) << error;
+    EXPECT_EQ(now_bgm_play, 0);
+    EXPECT_EQ(now_bgm_vol, 0);
+    EXPECT_EQ(now_bgm_no, 3);
+    EXPECT_TRUE(mods::StopRetailBgm({stop}, 0, error)); // native idempotent stop
+}

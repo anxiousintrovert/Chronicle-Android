@@ -23,6 +23,8 @@
 #include "platform/audio.hpp"
 #include "platform/config.hpp"
 
+extern int now_bgm_no, now_bgm_play, bgm_off, load_bgm_no;
+
 // The IOP's MIDI player is the port's audio::Mixer. Banks and sequences are copied into it rather
 // than into IOP and SPU memory, so the SPU address bookkeeping below survives only to keep
 // GetMidiState() reading as it did; nothing addresses sound memory by it.
@@ -330,6 +332,33 @@ void StartSequence(int port, int seq_no, const int *volume) {
 } // namespace
 
 namespace mods {
+nlohmann::json ReadRetailBgm() {
+    auto tracks = nlohmann::json::array();
+    const auto &slot = midi_state.port[0];
+    for (int index = 0; index < std::clamp(slot.sequence_count, 0, kSequencesPerSlot); ++index) {
+        const auto &sequence = g_slot_sequences[0][index];
+        const MIDI_SEQUENCE *description = nullptr;
+        for (int i = 0; i < std::clamp(sq_inf_tbl.count, 0, 400); ++i)
+            if (slot.sequence[index] == &sq_inf_tbl.sequence[i]) { description = slot.sequence[index]; break; }
+        const std::string reason = !g_slot_banks[0] ? "music bank unavailable" :
+            !description ? "sequence description unavailable" :
+            !sequence || sequence->Songs().empty() ? "decoded sequence unavailable" : "";
+        tracks.push_back({{"track", index}, {"name", description ? std::string(description->name, strnlen(description->name, 9)) : ""},
+                          {"ready", reason.empty()}, {"reason", reason}});
+    }
+    return {{"set", now_bgm_no}, {"playing", now_bgm_play == 1}, {"paused", now_bgm_play == 2},
+            {"disabled", bgm_off != 0}, {"loading", load_bgm_no >= 0}, {"bank_loaded", bool(g_slot_banks[0])},
+            {"tracks", std::move(tracks)}};
+}
+bool StopRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error) {
+    if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.bgm_stop" ||
+        !commands[0].arguments.is_object() || !commands[0].arguments.empty()) {
+        error = "BGM stop requires one owned command without arguments or other engine writes"; return false;
+    }
+    if (load_bgm_no >= 0) { error = "a native music load is pending"; return false; }
+    SndBgmStop();
+    error.clear(); return true;
+}
 bool QueueRetailEffect(const SND_SE_INFO &row, int volume, std::string &error) {
     if (!RetailEffectReady(row, volume, error)) return false;
     if (g_effect_queue.size() > 4096 - 8) { error = "retail effect queue capacity reached"; return false; }

@@ -443,10 +443,10 @@ Supply your extracted PAL data and a **new** output directory:
 python tools/chronicle_mod_smoke.py --build build-mods --data ../pal-data --output ../smoke-results
 ```
 
-The default runs thirty-four built-in scenarios: seven retail back-floor transitions,
+The default runs thirty-five built-in scenarios: seven retail back-floor transitions,
 seven public 256-monster layouts, seven owned chest-loot scenarios, five
 population lifecycle/rejection cases, three Georama/Atla scenarios and four
-camera/lighting scenarios, plus one retail audio scenario. Use repeatable `--suite retail`, `--suite population`,
+camera/lighting scenarios, plus two retail audio scenarios. Use repeatable `--suite retail`, `--suite population`,
 `--suite chests`, `--suite lifecycle`, `--suite georama`, `--suite rendering`, or `--suite audio`
 to select a subset. `--timeout 120` controls the per-process deadline in seconds.
 
@@ -1975,3 +1975,23 @@ shared-menu/runtime/game bridge, waits six callbacks, and completes back-floor
 travel with no mod diagnostics. Together with driver PCM tests this covers
 live dispatch readiness and native timing; it does not certify audible output
 on a physical device or every sound ID/scene.
+
+### Native background music inspection and stop
+
+`audio.bgm_state {}` (`game.read`) returns `set`, `playing`, `paused`, `disabled`,
+`loading`, `bank_loaded`, and `tracks`. Each track reports its native index/name,
+`ready` and a rejection `reason`. Readiness checks the actual bank, registered
+sequence description and decoded songs; it does not guarantee a non-silent
+composition or override the user's music setting.
+
+`audio.bgm_stop {}` (`game.write`) is a deferred sole engine write, with no
+currency delta, during stable gameplay. It rejects pending native music loads.
+It calls native `SndBgmStop`, including its native core-zero voice release, and
+retains the loaded set. Stopping already stopped music succeeds. The game can
+start music again on subsequent native events/transitions. This is a one-time
+request, not a persistent override, and does not stop custom stream voices.
+
+The audio smoke suite also verifies a loaded/playing PAL sequence, stops it via
+a shared-menu action, reads the stopped state on the next callback, and completes
+back-floor travel. Loading/playing a different set and owned sequence music
+replacement remain separate work.

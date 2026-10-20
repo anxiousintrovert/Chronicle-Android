@@ -248,6 +248,7 @@ void TickGame() {
         auto *status = SaveData->GetDngStatus();
         status->money = std::clamp(static_cast<int>(status->money) + amount, 0, 65535);
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
+        if (operation == "audio.bgm_state") return ReadRetailBgm();
         if (operation == "georama.placement_state") return ReadGeoramaPlacement();
         if (operation == "render.camera_get") return ReadDungeonCamera();
         if (operation == "dungeon.lighting_get") return ReadDungeonLighting();
@@ -304,6 +305,10 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.bgm_stop"; })) {
+            if (!ShopWritesReady() || NextMapNo >= 0 || existFlag) { error = "BGM stop requires stable gameplay"; return false; }
+            return StopRetailBgm(commands, money, error);
+        }
         if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.se_play"; })) {
             if (!ShopWritesReady() || NextMapNo >= 0 || existFlag || load_snd_set >= 0 || load_voice_set >= 0) {
                 error = "retail sound requires stable gameplay and loaded sound banks"; return false;

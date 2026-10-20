@@ -118,6 +118,8 @@ constexpr Operation operations[] = {
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
     {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
+    {"audio.bgm_state", "game.read", "Inspect native music state and decoded track readiness.", false},
+    {"audio.bgm_stop", "game.write", "Stop native background music after callback commit.", true},
     {"audio.se_play", "game.write", "Queue a loaded retail sound effect after callback commit.", true},
     {"audio.state", "game.read", "Inspect the caller's registered sounds and voice handles.", false},
     {"audio.play", "game.write", "Play a declared owned sound after callback commit.", true},
@@ -383,6 +385,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
         return ValidateGeoramaElements(name, a);
     }
     if (name == "georama.placement_state" || name == "georama.place" || name == "georama.remove") return ValidateGeoramaPlacement(name, a);
+    if (name == "audio.bgm_state" || name == "audio.bgm_stop") return a.is_object() && a.empty() ? "" : "BGM state and stop take no arguments";
     if (name == "audio.se_play") return ValidateRetailEffect(a);
     if (name.starts_with("audio.")) return AudioStreams::Validate(name, a);
     if (name == "render.camera_get") return a.is_object() && a.empty() ? "" : "render.camera_get takes no arguments";
