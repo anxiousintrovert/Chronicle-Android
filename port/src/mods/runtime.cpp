@@ -4,6 +4,8 @@
 
 #include "api.hpp"
 #include "arguments.hpp"
+#include "audio_streams.hpp"
+#include "audio/mixer.hpp"
 #include "native.hpp"
 extern "C" {
 #include "lauxlib.h"
@@ -57,6 +59,7 @@ struct Module {
     const World                                                                                         *world = nullptr;
     const char                                                                                          *callback = nullptr;
     const ReadGame                                                                                      *read_game = nullptr;
+    AudioStreams *audio = nullptr;
     const QueryGame                                                                                     *query_game = nullptr;
     const CommitGame                                                                                    *commit_game = nullptr;
     bool                                                                                                 initializing = true, read_only = false;
@@ -494,6 +497,10 @@ int ApiCall(lua_State *L) {
         lua_pushboolean(L, true); // Queued; the whole callback commits or fails together.
         return 1;
     }
+    if (op->name == "audio.state") {
+        m.snapshot = m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}};
+        PushJson(L, m.snapshot); return 1;
+    }
     if (!m.query_game || !*m.query_game) {
         return Failure(L, "game query provider unavailable");
     }
@@ -597,6 +604,8 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
             }
             Transaction(m).commands.push_back({name, args, m.package.id});
             m.native_result = "{\"queued\":true}";
+        } else if (op->name == "audio.state") {
+            m.native_result = (m.audio ? m.audio->State(m.package.id) : Json{{"sounds", Json::array()}, {"voices", Json::array()}}).dump();
         } else {
             if (!m.query_game || !*m.query_game) {
                 throw std::runtime_error("query provider unavailable");
@@ -968,6 +977,7 @@ struct Runtime::Impl {
     bool                                             observed = false;
     bool                                             was_playing = false, loaded_pending = false;
     Manager                                          plan;
+    std::unique_ptr<AudioStreams> audio;
     std::vector<std::pair<std::string, std::string>> pending_actions;
     std::vector<CustomEvent>                         pending_events;
 
@@ -1250,6 +1260,7 @@ void Runtime::Start(const Manager &manager) {
     ++epoch_;
     impl_->plan = manager;
     impl_->modules.clear();
+    if (impl_->audio) impl_->audio->Clear();
     impl_->diagnostics.clear();
     impl_->logs.clear();
     impl_->observed = false;
@@ -1258,6 +1269,7 @@ void Runtime::Start(const Manager &manager) {
     impl_->pending_actions.clear();
     impl_->pending_events.clear();
     for (const auto &id : manager.LoadOrder()) {
+        if (impl_->audio) impl_->audio->Retain(ActiveOwners());
         const auto found = std::ranges::find(manager.Packages(), id, &Package::id);
         if (found == manager.Packages().end()) {
             continue;
@@ -1282,6 +1294,17 @@ void Runtime::Start(const Manager &manager) {
                 }
             }
         }
+        if (!m.failed && !m.package.audio.empty()) {
+            std::string error;
+            if (!Permitted(m, "resources.read")) {
+                m.failed = true; error = "audio assets require resources.read permission";
+            } else {
+                if (!impl_->audio) impl_->audio = std::make_unique<AudioStreams>(audio::DefaultMixer());
+                m.failed = !impl_->audio->LoadPackage(m.package, error);
+            }
+            if (m.failed) impl_->diagnostics.push_back(id + ": " + error);
+        }
+        m.audio = impl_->audio.get();
         if (!m.failed && Permitted(m, "resources.read") && !m.package.script.empty()) {
             try {
                 for (const auto &[id, declared] : m.package.resources) {
@@ -1379,11 +1402,25 @@ void Runtime::Start(const Manager &manager) {
         }
         impl_->modules.push_back(std::move(module));
     }
+    if (impl_->audio) impl_->audio->Retain(ActiveOwners());
 }
 
 void Runtime::Tick(const World &world, const std::function<bool(int)> &money, const ReadGame &read_game,
-                   const QueryGame &query_game, const CommitGame &commit_game,
+                   const QueryGame &query_game, const CommitGame &external_commit,
                    std::span<const EnemyDeath> deaths, unsigned dropped_deaths) {
+    CommitGame commit_game = external_commit;
+    if (impl_->audio) {
+        if (!world.playing || (impl_->observed && (world.mode != impl_->previous.mode || world.map != impl_->previous.map || world.dungeon != impl_->previous.dungeon || world.floor != impl_->previous.floor))) impl_->audio->StopVoices();
+        impl_->audio->Retain(ActiveOwners());
+        commit_game = [&](const auto &commands, int money, std::string &error) {
+            if (std::ranges::any_of(commands, [](const auto &command) { return command.operation.starts_with("audio."); })) {
+                if (!world.playing) { error = "audio playback requires gameplay"; return false; }
+                return impl_->audio->Apply(commands, money, error);
+            }
+            if (!external_commit) { error = "game write provider unavailable"; return false; }
+            return external_commit(commands, money, error);
+        };
+    }
     if (dropped_deaths) {
         impl_->diagnostics.push_back("Enemy event queue overflow: " + std::to_string(dropped_deaths) + " deaths dropped.");
     }
@@ -1510,6 +1547,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
             impl_->NativeCallback(m, world, query_game, commit_game, 0, nullptr, read_game);
         }
     }
+    if (impl_->audio) impl_->audio->Retain(ActiveOwners());
     impl_->was_playing = world.playing;
     if (world.playing) {
         impl_->loaded_pending = false;
@@ -1579,6 +1617,8 @@ bool Runtime::QueueAction(std::string_view owner, std::string_view id, std::stri
 }
 
 std::vector<std::string> Runtime::Logs() const { return impl_->logs; }
+
+void Runtime::StopAudio() { if (impl_->audio) impl_->audio->StopVoices(); }
 
 void Runtime::ResetState() {
     impl_->modules.clear();

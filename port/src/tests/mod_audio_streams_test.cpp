@@ -185,3 +185,25 @@ TEST(ModAudioStreams, PackageSnapshotIsAtomicAndDoesNotReadInactiveAssets) {
     ASSERT_FALSE(streams.Play(package.id, "a", true, 1, 0, error).empty());
     EXPECT_NEAR(Render(mixer)[0], 0.25f, 0.001f); // independent decoded snapshot
 }
+
+TEST(ModAudioStreams, TransactionsRejectMixedWritesAndReplacementInstancesNeverReuseHandles) {
+    audio::Mixer mixer(48000);
+    std::string error, old;
+    {
+        mods::AudioStreams streams(mixer);
+        ASSERT_TRUE(streams.Register("a", "tone", Tone(), error));
+        EXPECT_FALSE(streams.Apply({{"audio.play", {{"id", "tone"}}, "a"}, {"player.heal", {{"amount", 1}}, "a"}}, 0, error));
+        EXPECT_FALSE(streams.Apply({{"audio.play", {{"id", "tone"}}, "a"}}, 1, error));
+        EXPECT_TRUE(streams.State("a")["voices"].empty());
+        EXPECT_FALSE(mods::AudioStreams::Validate("audio.play", {{"id", "tone"}, {"loop", 1}}).empty());
+        EXPECT_FALSE(mods::AudioStreams::Validate("audio.play", {{"id", "tone"}, {"volume", 2}}).empty());
+        EXPECT_FALSE(mods::AudioStreams::Validate("audio.play", {{"id", "tone"}, {"owner", "b"}}).empty());
+        old = streams.Play("a", "tone", true, 1, 0, error);
+        ASSERT_FALSE(old.empty());
+    }
+    mods::AudioStreams replacement(mixer);
+    ASSERT_TRUE(replacement.Register("a", "tone", Tone(), error));
+    const auto next = replacement.Play("a", "tone", true, 1, 0, error);
+    EXPECT_NE(old, next);
+    EXPECT_FALSE(replacement.Stop("a", old, error));
+}

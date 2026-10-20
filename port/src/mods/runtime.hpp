@@ -61,6 +61,7 @@ public:
                                   const QueryGame &query_game = {}, const CommitGame &commit_game = {},
                                   std::span<const EnemyDeath> deaths = {}, unsigned dropped_deaths = 0);
     void                     ResetState();
+    void                     StopAudio();
     bool                     HasGameplay() const;
     bool                     WantsEnemyDeaths() const;
     std::vector<std::string> ActiveOwners() const;

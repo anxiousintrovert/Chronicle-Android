@@ -235,6 +235,7 @@ s32 *ConfigWords() {
 }
 
 void ModeInit(int &title_ran, int &exist_data, bool &skip_title) {
+    mods::Scripts().StopAudio();
     mods::ReleaseDungeonLighting();
     mods::ReleaseDungeonCamera();
     if (mode == GAME_MODE_MENU && !g_developer_return_pending) {
@@ -1019,16 +1020,19 @@ static int RunGameImpl(int argc, char **argv) {
 }
 
 int RunGame(int argc, char **argv) {
+    mods::Scripts().StopAudio();
     mods::ReleaseDungeonLighting();
     mods::ReleaseDungeonCamera();
     chronicle::monsters::FinishExpandedPopulationRun();
     try {
         const int result = RunGameImpl(argc, argv);
+        mods::Scripts().StopAudio();
         mods::ReleaseDungeonLighting();
         mods::ReleaseDungeonCamera();
         chronicle::monsters::FinishExpandedPopulationRun();
         return result;
     } catch (...) {
+        mods::Scripts().StopAudio();
         mods::ReleaseDungeonLighting();
         mods::ReleaseDungeonCamera();
         chronicle::monsters::FinishExpandedPopulationRun();

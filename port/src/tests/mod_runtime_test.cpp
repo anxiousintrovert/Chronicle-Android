@@ -6,6 +6,8 @@
 #include <fstream>
 
 #include "mods/api.hpp"
+#include "audio/mixer.hpp"
+#include "mod_audio_decode_fixture.hpp"
 #include "mods/native.hpp"
 #include "mods/runtime.hpp"
 #include "mods/save.hpp"
@@ -2206,4 +2208,64 @@ TEST_F(ModNativeServices, NativeServicesExpireOnUnloadAndRebindAfterSaveLoadOrRe
     EXPECT_FALSE(runtime.HasGameplay());
     Run();
     EXPECT_TRUE(runtime.SaveState().empty());
+}
+
+TEST_F(ModRuntime, AudioMenuActionsRenderStopAndRetireAtSceneChange) {
+    auto manifest = Manifest();
+    manifest["audio"] = {{"tone", "tone.flac"}};
+    manifest["permissions"] = {"resources.read", "game.read", "game.write"};
+    Add(R"(
+        assert(chronicle.action('play','Play tone','Play owned tone',function()
+            assert(chronicle.call('audio.play',{id='tone',loop=true,volume=0.5}))
+        end))
+        assert(chronicle.action('stop','Stop tone','Stop owned tone',function()
+            local state=assert(chronicle.call('audio.state'))
+            assert(#state.sounds==1 and #state.voices==1)
+            assert(chronicle.call('audio.stop',{handle=state.voices[1].handle}))
+        end))
+        return {}
+    )", manifest);
+    Write(root / "mods/test.mod/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+    Start();
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    auto render = [] {
+        std::array<float, 64> samples{};
+        audio::DefaultMixer().Render(samples.data(), 32);
+        return samples[0];
+    };
+    audio::DefaultMixer().Reset();
+    runtime.Tick({1, 0, 0, true});
+    std::string error;
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "play", error));
+    EXPECT_EQ(render(), 0); // no eager side effect while queued
+    runtime.Tick({1, 0, 0, true});
+    ASSERT_TRUE(runtime.Diagnostics().empty());
+    EXPECT_NEAR(render(), 0.125f, 0.001f);
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "stop", error));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_EQ(render(), 0);
+    ASSERT_TRUE(runtime.QueueAction("test.mod", "play", error));
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_NEAR(render(), 0.125f, 0.001f);
+    runtime.Tick({1, 1, 0, true});
+    EXPECT_EQ(render(), 0);
+}
+TEST_F(ModRuntime, FailedAudioCallbackNeverPublishesPlaybackOrOwnedState) {
+    auto manifest = Manifest();
+    manifest["audio"] = {{"tone", "tone.flac"}};
+    manifest["permissions"] = {"resources.read", "game.read", "game.write"};
+    Add(R"(return {on_tick=function()
+        chronicle.set('changed',true)
+        assert(chronicle.call('audio.play',{id='tone',loop=true}))
+        error('cancel callback')
+    end})", manifest);
+    Write(root / "mods/test.mod/tone.flac", std::string(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)));
+    Start();
+    audio::DefaultMixer().Reset();
+    runtime.Tick({1, 0, 0, true});
+    EXPECT_FALSE(runtime.Diagnostics().empty());
+    EXPECT_FALSE(State().value("values", Json::object()).contains("changed"));
+    std::array<float, 64> samples{};
+    audio::DefaultMixer().Render(samples.data(), 32);
+    for (float sample : samples) EXPECT_EQ(sample, 0);
 }

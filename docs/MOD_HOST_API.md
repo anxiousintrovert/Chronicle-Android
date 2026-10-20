@@ -1901,3 +1901,42 @@ The native renderer consumes these values normally; no rendering replacement is
 introduced. Cleanup is dormant without claims and never invokes mod callbacks
 from a native loader. If invalid native data prevents a complete restoration,
 cleanup discards the claims without publishing a partial snapshot.
+
+## Owned audio playback
+
+Declare named `audio` files in the manifest and permissions `resources.read`,
+`game.read`, `game.write`. Loading is bounded and atomic per package. Startup
+never plays a sound. These shared host calls are available to Lua and native
+plugins; the runtime supplies owner identity, not the arguments.
+
+| Operation | Arguments | Result / behavior |
+|---|---|---|
+| `audio.state` | `{}` | Caller-only `sounds` (id, rate, frames, bytes) and `voices` (handle, id, playing, position in source frames) |
+| `audio.play` | `{id, loop=false, volume=1, pan=0}` | Queued playback; volume 0..1, pan -1..1 with equal-power pan |
+| `audio.stop` | `{handle}` | Queued stop of the caller's current voice; missing/foreign/stale handles reject |
+
+Playback writes require gameplay and must be the callback's sole engine write,
+with no money change. Owned scalar state and events can still participate in the
+callback transaction. The sound starts only after the callback succeeds.
+`play` returns the normal queued acknowledgement; retrieve the voice handle with
+`audio.state` on a subsequent callback. Do not persist handles across save loads.
+
+For example, register a button using the existing shared mod manager:
+
+```lua
+assert(chronicle.action('tone', 'Play tone', 'Play the declared notification', function()
+  assert(chronicle.call('audio.play', {id='notification', volume=0.5}))
+end))
+```
+
+Voices stop when the owner fails, gameplay leaves or changes mode/map/floor,
+the runtime is restarted/replaced, or the game run exits. A stopped voice does
+not resume automatically. Cleanup retains registered sound assets until owner
+retirement/restart. Voices and decoder state are never serialized. Sound IDs
+are owner-local; multiple mods may use the same local ID without conflict.
+There are 16 simultaneous voices per owner and 64 globally.
+
+This supports custom sound playback. Retail SE/BGM control, owned sequence music
+replacement, seek/pause/gain updates, device listening tests and broader platform
+validation remain separate work. Existing retail playback is unchanged when no
+mod requests audio.

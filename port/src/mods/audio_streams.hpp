@@ -9,7 +9,7 @@ namespace mods {
 // Mixer must outlive this object. No global mixer registration on construction.
 class AudioStreams {
 public:
-    explicit AudioStreams(audio::Mixer &mixer) : mixer_(mixer) {}
+    explicit AudioStreams(audio::Mixer &mixer);
     ~AudioStreams();
     AudioStreams(const AudioStreams &) = delete;
     AudioStreams &operator=(const AudioStreams &) = delete;
@@ -21,6 +21,9 @@ public:
     void Retain(std::span<const std::string> owners);
     void Prune();
     void Clear();
+    void StopVoices();
+    static std::string Validate(std::string_view operation, const nlohmann::json &arguments);
+    bool Apply(const std::vector<GameCommand> &commands, int money, std::string &error);
     nlohmann::json State(std::string_view owner) const;
 private:
     struct Sound { std::shared_ptr<const audio::PcmTrack> track; std::size_t bytes; };
@@ -28,6 +31,7 @@ private:
     audio::Mixer &mixer_;
     std::map<std::pair<std::string, std::string>, Sound> sounds_;
     std::map<std::string, Voice> voices_;
+    std::string prefix_;
     std::uint64_t next_ = 1;
 };
 }

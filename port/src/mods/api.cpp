@@ -12,6 +12,7 @@
 #include "georama_placement.hpp"
 #include "camera_orbit.hpp"
 #include "lighting_control.hpp"
+#include "audio_streams.hpp"
 #include "retail_inventory.hpp"
 #include "savedata.hpp"
 #include "shops.hpp"
@@ -116,6 +117,9 @@ constexpr Operation operations[] = {
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
     {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
+    {"audio.state", "game.read", "Inspect the caller's registered sounds and voice handles.", false},
+    {"audio.play", "game.write", "Play a declared owned sound after callback commit.", true},
+    {"audio.stop", "game.write", "Stop an owned audio voice after callback commit.", true},
     {"render.camera_get", "game.read", "Inspect the active native dungeon camera pose and orbit.", false},
     {"dungeon.lighting_get", "game.read", "Inspect native front/back lighting, fog, and current view scale.", false},
     {"dungeon.lighting_set", "game.write", "Apply bounded owned lighting groups and view scale.", true},
@@ -377,6 +381,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
         return ValidateGeoramaElements(name, a);
     }
     if (name == "georama.placement_state" || name == "georama.place" || name == "georama.remove") return ValidateGeoramaPlacement(name, a);
+    if (name.starts_with("audio.")) return AudioStreams::Validate(name, a);
     if (name == "render.camera_get") return a.is_object() && a.empty() ? "" : "render.camera_get takes no arguments";
     if (name == "dungeon.lighting_get") return a.is_object() && a.empty() ? "" : "dungeon.lighting_get takes no arguments";
     if (name == "dungeon.lighting_set" || name == "dungeon.lighting_reset") return LightingControl::Validate(name, a);

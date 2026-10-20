@@ -29,7 +29,7 @@ schema 1; put release notes and attribution in a separate README.
 | `permissions` | No | String array, `[]` | `economy.write`, `game.read`, `game.write`, `resources.read`, `native.extension`; no duplicates |
 | `quests` | No | Array, `[]` | Up to 64 quest definitions, described below |
 | `resources` | No | Object, `{}` | Up to 16 resource ID → contained relative file mappings; each file at most 64 KiB |
-| `audio` | No | Object, `{}` | Up to 16 local IDs (`[a-z][a-z0-9._-]*`, at most 64 bytes) mapped to contained WAV/FLAC/Ogg Vorbis paths; nonempty, at most 32 MiB each and 64 MiB encoded per package; see staged support below |
+| `audio` | No | Object, `{}` | Up to 16 local IDs (`[a-z][a-z0-9._-]*`, at most 64 bytes) mapped to contained WAV/FLAC/Ogg Vorbis paths; nonempty, at most 32 MiB each and 64 MiB encoded per package; see audio support below |
 | `native_library` | No | Relative path | Contained `.dll`, `.so`, or `.dylib`, 1 byte–64 MiB; requires `native.extension` and separate local trust |
 
 Do not invent fields such as `load_order`, `priority`, `entrypoint`, `rewards`,
@@ -172,7 +172,7 @@ or solver that installs another version. Save-state version matching remains exa
 Capability `services.native.v1` enables optional ABI 2 native query/command
 exports with the same authorization and transactions as Lua services.
 
-## Audio asset declarations (staged support)
+## Audio asset declarations
 
 ```json
 "audio": {
@@ -193,7 +193,9 @@ packages. PCM limits are 32 MiB per track, 64 MiB per owner and 128 MiB globally
 at most 16 sounds per owner and 64 globally. Decoders accept 8..192 kHz and
 1..8 source channels, duplicating mono or retaining the front stereo pair.
 
-**Playback host calls and startup integration are still pending.** Declaring
-`audio` alone currently causes no playback or engine change. No public audio
-capability is advertised yet; this schema support prepares packages/tooling for
-the subsequent shared Lua/native API.
+Active code packages with audio require `resources.read`; startup decodes their
+assets before running Lua/native initialization. A failure stops that package
+and appears in its diagnostics. Declaring audio does not start playback.
+`audio.state` requires `game.read`; `audio.play` and `audio.stop` require
+`game.write`. Use `requires_operations` to require these operations. See the
+[audio host API](MOD_HOST_API.md#owned-audio-playback).

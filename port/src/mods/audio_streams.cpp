@@ -3,6 +3,7 @@
 #include <fstream>
 #include "audio/mixer.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
 #include <numbers>
@@ -15,6 +16,10 @@ bool Id(std::string_view id) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
     });
 }
+}
+AudioStreams::AudioStreams(audio::Mixer &mixer) : mixer_(mixer) {
+    static std::atomic<std::uint64_t> instance{1};
+    prefix_ = "audio-" + std::to_string(instance.fetch_add(1, std::memory_order_relaxed)) + "-";
 }
 AudioStreams::~AudioStreams() { Clear(); }
 bool AudioStreams::LoadPackage(const Package &package, std::string &error) {
@@ -105,7 +110,7 @@ std::string AudioStreams::Play(std::string_view owner, std::string_view id, bool
     const double angle = (pan + 1) * std::numbers::pi / 4;
     channel->SetVolume(float(volume * std::cos(angle) * std::numbers::sqrt2),
                        float(volume * std::sin(angle) * std::numbers::sqrt2));
-    const auto handle = "audio-" + std::to_string(next_++);
+    const auto handle = prefix_ + std::to_string(next_++);
     auto [it, inserted] = voices_.emplace(handle, Voice{std::string(owner), std::string(id), std::move(channel)});
     try {
         // Add can allocate. Keep the channel idle until registration succeeds.
@@ -141,10 +146,11 @@ void AudioStreams::Retain(std::span<const std::string> owners) {
     std::erase_if(sounds_, [&](const auto &entry) { return std::ranges::find(owners, entry.first.first) == owners.end(); });
     Prune();
 }
-void AudioStreams::Clear() {
+void AudioStreams::StopVoices() {
     for (auto &[id, voice] : voices_) mixer_.RemoveStreamChannel(voice.channel.get());
-    voices_.clear(); sounds_.clear();
+    voices_.clear();
 }
+void AudioStreams::Clear() { StopVoices(); sounds_.clear(); }
 nlohmann::json AudioStreams::State(std::string_view owner) const {
     auto result = nlohmann::json{{"sounds", nlohmann::json::array()}, {"voices", nlohmann::json::array()}};
     for (const auto &[name, sound] : sounds_) if (name.first == owner)
@@ -153,5 +159,40 @@ nlohmann::json AudioStreams::State(std::string_view owner) const {
         result["voices"].push_back({{"handle", handle}, {"id", voice.id},
             {"playing", voice.channel->State() == audio::StreamState::Playing}, {"position", voice.channel->Position()}});
     return result;
+}
+}
+
+namespace mods {
+std::string AudioStreams::Validate(std::string_view operation, const nlohmann::json &a) {
+    if (!a.is_object()) return "audio arguments must be an object";
+    if (operation == "audio.state") return a.empty() ? "" : "audio.state takes no arguments";
+    if (operation == "audio.stop") {
+        if (a.size() != 1 || !a.contains("handle") || !a["handle"].is_string() || a["handle"].get_ref<const std::string &>().empty() || a["handle"].get_ref<const std::string &>().size() > 64)
+            return "audio.stop requires a voice handle";
+        return {};
+    }
+    if (operation != "audio.play") return "unknown audio operation";
+    if (!a.contains("id") || !a["id"].is_string() || !Id(a["id"].get_ref<const std::string &>())) return "audio.play requires a local sound ID";
+    for (const auto &[key, value] : a.items()) {
+        if (key == "id") continue;
+        if (key == "loop") { if (!value.is_boolean()) return "loop must be boolean"; continue; }
+        if (key != "volume" && key != "pan") return "unknown audio.play argument";
+        if (!value.is_number()) return "volume and pan must be numbers";
+        const auto number = value.get<double>();
+        if (!std::isfinite(number) || number > 1 || number < (key == "pan" ? -1 : 0)) return "volume must be 0..1 and pan -1..1";
+    }
+    return {};
+}
+bool AudioStreams::Apply(const std::vector<GameCommand> &commands, int money, std::string &error) {
+    if (money || commands.size() != 1 || commands[0].owner.empty()) {
+        error = "audio playback requires one owned audio write and no other engine writes"; return false;
+    }
+    const auto &command = commands[0];
+    error = Validate(command.operation, command.arguments);
+    if (!error.empty()) return false;
+    const auto &a = command.arguments;
+    if (command.operation == "audio.play") return !Play(command.owner, a["id"].get<std::string>(), a.value("loop", false), a.value("volume", 1.0), a.value("pan", 0.0), error).empty();
+    if (command.operation == "audio.stop") return Stop(command.owner, a["handle"].get<std::string>(), error);
+    error = "audio state is read-only"; return false;
 }
 }

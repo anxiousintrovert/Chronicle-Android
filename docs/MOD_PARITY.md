@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 125 implemented operations, native plugins and author
+a real host-call boundary, 128 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -22,7 +22,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
+| Rendering / audio | Bounded owned WAV/FLAC/Ogg playback through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -2857,3 +2857,30 @@ still required. Public operation count remains 125.
 Clang 23.1.2 builds and 858 native tests passed, with 92 skipped and one
 disabled. All 37 Python tests passed, including packing/installing declared
 audio. No PS2 changes.
+
+
+### Shared runtime audio host calls (2026-10-20)
+
+Public operations now total 128: audio.state, audio.play and audio.stop use the
+same permission/owner boundary for Lua and native plugins. Active code packages
+with declared audio require resources.read and load a bounded snapshot before
+initialization; failed packages retire their registrations. No playback occurs
+at startup. Audio writes are deferred until callback success and require one
+audio command, no money delta and no other engine writes. State reads expose only
+the caller's assets/voices. Handles include an instance prefix to avoid reuse
+after runtime/save replacement.
+
+Runtime ticks retire failed owners and stop voices on gameplay leave and
+mode/map/floor changes; explicit game mode/run entry/exit/exception boundaries
+stop voices too. With no audio assets the runtime creates no AudioStreams or
+default-mixer dependency. Existing shared-menu actions can request playback.
+Tests exercise Lua menu actions against actual default-mixer samples, stop and
+scene retirement, failed-callback rollback, mixed-write rejection and stale
+handles across instance replacement. Native uses the common dispatch but a
+dedicated native-plugin audio replay and retail/device listening are still
+outstanding, alongside music replacement and broader audio controls.
+
+Validation: Clang 23.1.2 builds; 861 native tests passed, 92 skipped, one
+disabled; 37 Python checks passed. Fresh 3840-case empty/disabled seed comparison
+against 50eaff63 again differs only in map_bytes (142512 versus 76576), with no
+non-size difference. This does not prove all-gameplay equivalence. PS2 unchanged.
