@@ -12,6 +12,9 @@
 #include "chronicle/dungeon_prepare.hpp"
 #include "chronicle/random_state.hpp"
 #include "chronicle/monster_collision.hpp"
+#include "chronicle/monster_population.hpp"
+#include "chronicle/monster_audio.hpp"
+#include "collisiondata.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
@@ -40,6 +43,10 @@ bool               expected_expanded = false, road_captured = false;
 int                expected_rooms = 6;
 int                expected_monsters = 5;
 bool               managed_layout = false;
+int                audit_population = 0;
+bool               population_injected = false;
+bool               high_slot_seen = false;
+std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
 std::string        last_state;
@@ -79,6 +86,9 @@ void BackPump() {
     InputPoll();
     InputScriptApply(GameFrameCount());
     const auto state = mods::ReadBackFloor();
+    if (population_injected && gameTask == GAME_TASK_PLAY && NowMonstorUnit->SlotLimit() == unsigned(audit_population)) {
+        high_slot_seen |= NowMonstorUnit->monster[audit_population - 1].state == 2;
+    }
     last_state = state.dump();
     if (std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT") && GameFrameCount() % 100 == 0) {
         float position[4]{};
@@ -97,8 +107,9 @@ void BackPump() {
     if (!queued && state.value("ready", false)) {
         for (const auto &action : mods::Scripts().Actions("audit.back")) {
             if (action.id == "enter" && action.available) {
+                if (population_injected && GameFrameCount() < population_frame + 180) return;
                 ASSERT_NO_THROW(AuditMonsterTerrain());
-                if (managed_layout) {
+                if (managed_layout && !population_injected) {
                     const auto state = mods::ReadLayout({
                         {"dungeon", selectMapNo}
                     });
@@ -129,6 +140,25 @@ void BackPump() {
                         EXPECT_EQ(MainDungeonMap.GridExtent(), 20);
                         EXPECT_EQ(UraDungeonMap.GridExtent(), 20);
                     }
+                }
+                if (audit_population && !population_injected) {
+                    chronicle::monsters::PreparePopulationForFloor(*NowMonstorUnit, *NowDngMap, *NowColData, audit_population, 0);
+                    const auto requested = NowDngMap->port_monster_count;
+                    NowDngMap->port_monster_count = 0;
+                    NowMonstorUnit->ArrangementPos(NowDngMap, audit_population, -1, 0);
+                    NowDngMap->port_monster_count = requested;
+                    EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), audit_population);
+                    EXPECT_EQ(NowMonstorUnit->SlotLimit(), unsigned(audit_population));
+                    EXPECT_GT(NowColData->HitLimit(), 96u);
+                    EXPECT_TRUE(chronicle::monsters::ExpandedEffectVoicesActive());
+                    EXPECT_GT(chronicle::monsters::SoundSequenceLimit(), 32u);
+                    float nearby[4]{};
+                    CharaMain.GetPosition(nearby);
+                    nearby[0] += 60;
+                    NowMonstorUnit->chara[audit_population - 1][0].SetPosition(nearby);
+                    population_injected = true;
+                    population_frame = GameFrameCount();
+                    return;
                 }
                 if (expected_expanded) {
                     EXPECT_EQ(MainDungeonMap.GridExtent(), 48);
@@ -169,6 +199,7 @@ void BackPump() {
                     }
                 }
                 std::string error;
+                if (audit_population) EXPECT_TRUE(high_slot_seen);
                 inventory_before = SaveData->GetDngStatus()->item_pack;
                 std::copy_n(SaveData->GetDngStatus()->event_flags, 50, flags_before.begin());
                 queued = mods::Scripts().QueueAction("audit.back", "enter", error);
@@ -190,6 +221,13 @@ void BackPump() {
             ASSERT_NO_THROW(AuditMonsterTerrain());
             if (managed_layout && expected_expanded) {
                 EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
+            }
+            if (audit_population) {
+                EXPECT_TRUE(population_injected);
+                EXPECT_EQ(NowMonstorUnit->SlotLimit(), 16u);
+                EXPECT_EQ(NowColData->HitLimit(), 96u);
+                EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 32u);
+                EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
             }
             if (expected_expanded) {
                 float pos[4]{};
@@ -223,7 +261,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -234,6 +272,10 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool manage
     queued = arrived = false;
     expected_expanded = expanded;
     managed_layout = managed;
+    audit_population = population;
+    population_injected = false;
+    high_slot_seen = false;
+    population_frame = 0;
     expected_rooms = rooms;
     expected_monsters = monsters;
     road_captured = false;
@@ -352,4 +394,5 @@ TEST(ModBackFloorRetail, ManagedDemonShaftLayout) { RunBackAudit(6, true, 64, tr
 TEST(ModBackFloorRetail, RejectedManagedLayoutUsesRetail) { RunBackAudit(0, false, 2, true); }
 TEST(ModBackFloorRetail, MinimumCavePopulation) { RunBackAudit(0, true, 64, true, 2); }
 TEST(ModBackFloorRetail, MinimumForestPopulation) { RunBackAudit(1, true, 64, true, 3); }
+TEST(ModBackFloorRetail, ExpandedPopulationReturnsToRetailLimits) { RunBackAudit(0, true, 64, true, 5, 32); }
 } // namespace

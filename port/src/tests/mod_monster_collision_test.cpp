@@ -6,6 +6,8 @@
 #include "chronicle/monster_collision.hpp"
 #include "chronicle/monster_population.hpp"
 #include "chronicle/monster_scripts.hpp"
+#include "chronicle/monster_audio.hpp"
+#include "collisiondata.hpp"
 #include "dataalloc.hpp"
 #include "dun/gameloop.hpp"
 #include "dungeonmap.hpp"
@@ -162,6 +164,30 @@ TEST(ModMonsterCollision, FloorBoundaryInitializesExpandedSlotsAndClearsThemBefo
         EXPECT_EQ(unit->script_state[i], 0);
         EXPECT_EQ(unit->script[i], nullptr);
     }
+}
+
+TEST(ModMonsterCollision, CoordinatedPopulationResetRetiresHitsScriptsAndAudioTogether) {
+    TerrainFixture fixture;
+    auto unit = std::make_unique<CMonstorUnit>();
+    auto hits = std::make_unique<CCollisionData>();
+    unit->collision = &fixture.frame;
+    struct Reset {
+        ~Reset() { chronicle::monsters::ResetExpandedPopulation(); }
+    } reset;
+    chronicle::monsters::PreparePopulationForFloor(*unit, *fixture.map, *hits, 32, 0);
+    EXPECT_EQ(unit->SlotLimit(), 32u);
+    EXPECT_GT(hits->HitLimit(), 96u);
+    EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 64u);
+    EXPECT_TRUE(chronicle::monsters::ExpandedEffectVoicesActive());
+    unit->monster[31].state = 2;
+    hits->active[hits->HitLimit() - 1] = 1;
+    chronicle::monsters::ResetExpandedPopulation();
+    EXPECT_EQ(unit->SlotLimit(), 16u);
+    EXPECT_EQ(unit->monster[31].state, -1);
+    EXPECT_EQ(unit->script[31], nullptr);
+    EXPECT_EQ(hits->HitLimit(), 96u);
+    EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 32u);
+    EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
 }
 
 TEST(ModMonsterCollision, DensePopulationPreservesTerrainAndExceedsOldBufferSafely) {

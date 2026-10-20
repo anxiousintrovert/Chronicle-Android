@@ -1,4 +1,5 @@
 #include "sound_effect.h"
+#include "chronicle/monster_population.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -171,6 +172,7 @@ nlohmann::json ReadSnapshot(std::string_view service) {
 } // namespace
 
 void TickGame() {
+    if (mode != GAME_MODE_DUNGEON) chronicle::monsters::ResetExpandedPopulation();
     if (HasOwnedLayouts()) RetainOwnedLayouts(Scripts().ActiveOwners());
     RetainQuickUse();
     RetainPlayerTuningOwners();

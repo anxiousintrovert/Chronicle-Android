@@ -2322,3 +2322,31 @@ Clang 23.1.2 Windows game/test builds pass: 818 tests passed, 59 skipped,
 1 disabled; 29 Python checks and three fresh PAL replays pass. Both
 3,840-case seed exports retain prior hashes and differ from pinned upstream
 only by map storage size. PS2 unchanged; other platforms unverified.
+
+
+### Coordinated population loading and first populated replay (2026-10-20)
+
+PreparePopulationForFloor coordinates monster/script slots, hit records,
+sound sequences and voice routing. Sequence stops resolve through old leases
+before routing resets. The native monster-load boundary invokes preparation
+after resources load; ordinary maps select sixteen slots. Leaving dungeon
+mode through the mod game tick resets an explicitly expanded population.
+
+A fresh PAL test prepares 32 actors with native ArrangementPos on a managed
+Cave floor, moves slot 31 near the player, confirms it reaches active state,
+runs 180 frames, and invokes the shared-action native back-floor transition.
+The normal back floor restores monster=16, hits=96, sequences=32 and disabled
+expanded audio routing. A unit test also checks coordinated script/hit/audio
+retirement. This is initial native gameplay evidence, not proof of dense
+combat, every dungeon or the maximum population.
+
+Public layout requests remain capped at 15 while testing higher counts,
+placement limits, error reporting and transition/quit behavior. The replay
+injects an internal request; it does not claim the public API exposes 32 yet.
+The rest of the API/tooling coverage ledger remains outstanding.
+
+Clang 23.1.2 Windows game/test builds pass: 819 tests passed, 60 skipped,
+1 disabled; 29 Python checks pass. Fresh retail Cave, managed Cave/Forest
+and the populated Cave transition pass. Both 3,840-case seed exports retain
+prior hashes and differ from pinned upstream only by map storage size.
+PS2 unchanged; other platforms unverified.
