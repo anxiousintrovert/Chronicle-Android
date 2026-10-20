@@ -9,21 +9,22 @@
 
 namespace mods {
 namespace {
-// Fail compilation if native storage and framework indexing drift apart.
+// Fail compilation if paired native storage arrays drift apart.
 // Inner per-monster collision/sound dimensions are deliberately independent.
-static_assert(std::extent_v<decltype(CMonstorUnit::monster)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::script)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::script_state)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::chara)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::interpreter)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::effect)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::effect2)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::effect3)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::sound)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::event)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::event2)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::guard)> == EntityHandles::Capacity);
-static_assert(std::extent_v<decltype(CMonstorUnit::event_flags)> == EntityHandles::Capacity);
+static_assert(EntityHandles::Capacity <= chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::monster)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::script)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::script_state)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::chara)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::interpreter)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect2)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::effect3)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::sound)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event2)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::guard)> == chronicle::monsters::StorageCapacity);
+static_assert(std::extent_v<decltype(CMonstorUnit::event_flags)> == chronicle::monsters::StorageCapacity);
 EntityHandles handles;
 CMonstorUnit *tracked = nullptr;
 } // namespace
@@ -33,7 +34,7 @@ EntityHandles &TrackEntities(CMonstorUnit &unit) {
         handles.Deactivate();
         tracked = &unit;
         handles.Activate();
-        for (unsigned i = 0; i < EntityHandles::Capacity; ++i) {
+        for (unsigned i = 0; i < unit.SlotLimit(); ++i) {
             if (unit.monster[i].state != -1) {
                 handles.Construct(i);
             }

@@ -269,7 +269,7 @@ bool EntityTransaction::Stage(CMonstorUnit *unit, const std::vector<GameCommand>
             return false;
         }
         const auto slot = TrackEntities(*unit).Resolve(Parse(command.arguments.at("entity").get_ref<const std::string &>()));
-        if (!slot || !Live(unit->monster[*slot]) || unit->monster[*slot].state != 2) {
+        if (!slot || *slot >= unit->SlotLimit() || !Live(unit->monster[*slot]) || unit->monster[*slot].state != 2) {
             error = "enemy is stale, hidden, dead or not actively participating";
             return false;
         }
@@ -496,7 +496,7 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
         const auto   center = a.at("center").get<std::array<double, 3>>();
         const double radius = a.at("radius").get<double>();
         auto         matches = nlohmann::json::array();
-        for (unsigned slot = 0; slot < EntityHandles::Capacity; ++slot) {
+        for (unsigned slot = 0; slot < unit->SlotLimit(); ++slot) {
             if (!Live(unit->monster[slot]) || unit->monster[slot].state != 2 || !handles.Get(slot)) {
                 continue;
             }
@@ -518,7 +518,7 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
     }
     if (operation == "entities.get" || operation == "physics.velocity_get") {
         const auto slot = handles.Resolve(Parse(a.at("entity").get_ref<const std::string &>()));
-        if (!slot || !Live(unit->monster[*slot])) {
+        if (!slot || *slot >= unit->SlotLimit() || !Live(unit->monster[*slot])) {
             if (operation == "physics.velocity_get") {
                 throw std::runtime_error("enemy handle is expired");
             }
@@ -533,7 +533,7 @@ nlohmann::json ReadEntities(CMonstorUnit *unit, std::string_view operation, cons
         return Snapshot(unit->monster[*slot], unit->chara[*slot][0], handles.Get(*slot));
     }
     auto result = nlohmann::json::array();
-    for (unsigned slot = 0; slot < EntityHandles::Capacity; ++slot) {
+    for (unsigned slot = 0; slot < unit->SlotLimit(); ++slot) {
         if (Live(unit->monster[slot]) && handles.Get(slot)) {
             result.push_back(Snapshot(unit->monster[slot], unit->chara[slot][0], handles.Get(slot)));
         }

@@ -1521,8 +1521,9 @@ ordinary random-model placement with a positive native count; explicit-model
 and zero-count calls retain their native behavior. Native model choice,
 spacing, placement retry limits and key assignment remain in use, so the
 request is not a guarantee that every attempted placement succeeds.
-The current sixteen monster slots are unchanged. Larger populations require
-the remaining linked script/character/effect/combat storage work.
+The active limit remains sixteen monster slots. Paired native storage now
+reserves 256 slots, but larger populations still require script allocation,
+lifecycle and active iteration support before they can be requested.
 
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is

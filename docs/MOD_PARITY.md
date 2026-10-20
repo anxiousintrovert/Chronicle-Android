@@ -2074,3 +2074,24 @@ Capacity is still sixteen: native allocation, lifecycle and active iteration
 must be extended together before larger populations can be exposed.
 Clang 23.1.2 game/test builds pass, all 44 affected entity/combat/physics
 tests pass, and all 29 Python checks pass. No PS2 files changed.
+
+
+### Dormant expanded monster storage
+
+The generated port header now reserves 256 entries in all thirteen paired
+CMonstorUnit arrays. No PS2 source changes. Native and framework active limits
+remain sixteen; public population requests still stop at fifteen. A SlotLimit
+boundary now protects entity tracking, queries and writes from dormant storage.
+Per-monster sound, hit, guard and collision dimensions are unchanged.
+
+This is storage groundwork, not completed 256-monster gameplay. Scripts for
+additional actors, lifecycle initialization, active iteration, resource budgets
+and high-population playthroughs are still required. A test fills dormant
+slots with apparently live actors and verifies retail counting, framework
+queries and cleanup ignore them. All 45 affected entity/combat/physics tests,
+29 Python checks, seven retail and two managed PAL transport replays pass.
+Both 3,840-case seed exports retain their previous hashes; the existing
+map-size difference remains the only difference from pinned upstream.
+
+Clang 23.1.2 Windows game/test builds pass. Full suite: 798 passed, 59
+skipped, 1 disabled. Other platforms remain unverified.

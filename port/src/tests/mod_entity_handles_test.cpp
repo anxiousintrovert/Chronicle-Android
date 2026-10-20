@@ -92,6 +92,30 @@ TEST(ModEntityHandles, NativeDamageDispatchAccountsForDeathExactlyOnce) {
     EXPECT_EQ(UserStatus->kills[0][1], 1);
 }
 
+TEST(ModEntityHandles, DormantExpandedStorageIsNotALiveActor) {
+    auto unit = std::make_unique<CMonstorUnit>();
+    mods::StopTrackingEntities();
+    unit->CleanViewMonstor(0);
+    ASSERT_EQ(unit->SlotLimit(), 16u);
+    ASSERT_EQ(std::size(unit->monster), 256u);
+    // Poison dormant slots as apparently live actors: retail iteration and
+    // framework tracking must still ignore them without touching their state.
+    for (unsigned i = unit->SlotLimit(); i < std::size(unit->monster); ++i) {
+        unit->monster[i].state = 2;
+        unit->monster[i].revealed = 1;
+        unit->monster[i].hp = unit->monster[i].max_hp = 10;
+    }
+    EXPECT_EQ(unit->GetMonstorNum(), 0);
+    EXPECT_EQ(mods::TrackEntities(*unit).Get(255), 0u);
+    EXPECT_TRUE(mods::ReadEntities(unit.get(), "entities.list", nlohmann::json::object())["entities"].empty());
+    unit->CleanViewMonstor(0);
+    EXPECT_EQ(unit->monster[255].state, 2);
+    EXPECT_EQ(std::size(unit->effect[255].timer), 16u);
+    EXPECT_EQ(std::size(unit->sound[255].id), 16u);
+    EXPECT_EQ(std::size(unit->effect3[255].timer), 12u);
+    mods::StopTrackingEntities();
+}
+
 TEST(ModEntityHandles, ReactionCapacityIsBoundedAndReleasedByFloorCleanup) {
     auto first = std::make_unique<CMonstorUnit>();
     auto second = std::make_unique<CMonstorUnit>();

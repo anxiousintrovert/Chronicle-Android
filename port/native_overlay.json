@@ -1405,6 +1405,86 @@
           "count": 1
         }
       ]
+    },
+    "include/monstorunit.hpp": {
+      "sha256": "3ab7e4b10330a2a479e8501adeb77992ea88f3086f9f9695faa4ea2aa69f8bea",
+      "replacements": [
+        {
+          "old": "#pragma once",
+          "new": "#pragma once\n#include \"chronicle/monster_limits.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "script[16]",
+          "new": "script[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "script_state[16]",
+          "new": "script_state[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "monster[16]",
+          "new": "monster[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "chara[16]",
+          "new": "chara[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "interpreter[16]",
+          "new": "interpreter[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "effect[16]",
+          "new": "effect[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "effect2[16]",
+          "new": "effect2[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "effect3[16]",
+          "new": "effect3[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "sound[16]",
+          "new": "sound[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "event[16]",
+          "new": "event[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "event2[16]",
+          "new": "event2[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "event_flags[16]",
+          "new": "event_flags[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "guard[16]",
+          "new": "guard[chronicle::monsters::StorageCapacity]",
+          "count": 1
+        },
+        {
+          "old": "class CMonstorUnit {\npublic:",
+          "new": "class CMonstorUnit {\npublic:\n    // Dormant storage is not an active actor. Expansion requires allocation/lifecycle support.\n    unsigned SlotLimit() const { return chronicle::monsters::RetailSlots; }",
+          "count": 1
+        }
+      ]
     }
   }
 }
