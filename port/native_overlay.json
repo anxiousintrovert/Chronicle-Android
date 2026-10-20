@@ -46,7 +46,7 @@
         },
         {
           "old": "    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;",
-          "new": "    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;\n    s32 port_monster_count = 0;\n    int PopulationCount(int native_count, int model_no) const {\n        return GridExtent() == chronicle::dungeon::GridStride && native_count > 0 && model_no == -1 &&\n            port_monster_count >= 1 && port_monster_count <= 15 ? port_monster_count : native_count;\n    }",
+          "new": "    s32 port_grid_extent = chronicle::dungeon::RetailGridExtent;\n    s32 port_monster_count = 0;\n    int PopulationCount(int native_count, int model_no) const {\n        return GridExtent() == chronicle::dungeon::GridStride && native_count > 0 && model_no == -1 &&\n            port_monster_count >= 1 && port_monster_count <= 256 ? port_monster_count : native_count;\n    }",
           "count": 1
         }
       ]

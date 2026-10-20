@@ -378,12 +378,12 @@ end}
     EXPECT_EQ(result, 0);
     EXPECT_EQ(queued, !quit_with_population) << last_state;
     EXPECT_TRUE(arrived) << last_state << " task=" << gameTask << " longest_play=" << maximum_stable;
-    if (quit_with_population) {
+    if (quit_with_population || expected_monsters > 16) {
         EXPECT_EQ(NowMonstorUnit->SlotLimit(), 16u);
         EXPECT_EQ(NowColData->HitLimit(), 96u);
         EXPECT_EQ(chronicle::monsters::SoundSequenceLimit(), 32u);
         EXPECT_FALSE(chronicle::monsters::ExpandedEffectVoicesActive());
-        for (int i = 16; i < audit_population; ++i) {
+        for (int i = 16; i < std::max(audit_population, expected_monsters); ++i) {
             EXPECT_EQ(NowMonstorUnit->monster[i].state, -1);
             EXPECT_EQ(NowMonstorUnit->script[i], nullptr);
         }
@@ -457,4 +457,11 @@ TEST(ModBackFloorRetail, MaximumDemonShaftPopulation) { RunBackAudit(6, true, 64
 TEST(ModBackFloorRetail, QuitWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true); }
 TEST(ModBackFloorRetail, ExceptionWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true, true); }
 TEST(ModBackFloorRetail, PartialPopulationIsReported) { RunBackAudit(0, true, 64, true, 5, 32, false, false, true); }
+TEST(ModBackFloorRetail, PublicMaximumCavePopulation) { RunBackAudit(0, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumForestPopulation) { RunBackAudit(1, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumShipwreckPopulation) { RunBackAudit(2, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumTemplePopulation) { RunBackAudit(3, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumMoonSeaPopulation) { RunBackAudit(4, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumGalleryPopulation) { RunBackAudit(5, true, 64, true, 256); }
+TEST(ModBackFloorRetail, PublicMaximumDemonShaftPopulation) { RunBackAudit(6, true, 64, true, 256); }
 } // namespace

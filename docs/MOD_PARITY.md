@@ -17,8 +17,8 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
-| World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts with conflict/rejection reporting; vanilla generation unchanged | Registered-map and broader floor transitions, population/chest-loot/floor-rule overrides, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
+| World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, chest-loot/floor-rule overrides, extra floors |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -2444,3 +2444,24 @@ Python tests and the PAL partial-placement/back-floor replay pass. Both
 3,840-case seed exports retain their previous hashes and differ from pinned
 upstream only by map storage size. No PS2 changes; other platforms remain
 unverified.
+
+
+### Public expanded monster populations (2026-10-20)
+
+The public dungeon.layout_set monsters option now accepts 2..256 (Forest
+minimum three), backed by the loaded-floor resource coordinator and preflight
+fallback. Native explicit-model and zero-count placement calls remain unchanged.
+Docs describe opt-in density, resource lifetime and actual placement reports.
+
+Seven fresh PAL replays request 256 through a real Lua package, with no internal
+population injection. All seven procedural dungeons place 256 on both front and
+back floors, report actual counts, preserve required front-floor key carriers,
+complete the shared-action native back-floor transition and restore retail
+limits/script pointers on exit. These are 64-room scenarios, not proof that
+all layouts can fit 256 or sustained-combat coverage. Partial placement remains
+reported rather than guaranteed away.
+
+Clang 23.1.2 Windows game/test builds pass: 821 passed, 78 skipped, one disabled.
+All 29 Python tests pass. Both 3,840-case no-mod/disabled-mod exports retain
+their prior hashes and differ from pinned upstream only in map storage size.
+PS2 unchanged; Linux/macOS/Android and broader capability parity remain open.

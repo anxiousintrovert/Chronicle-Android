@@ -36,6 +36,13 @@ TEST(ModDungeonBuild, PopulationRequiresExplicitExpandedMapAndSurvivesCopy) {
     EXPECT_EQ(map->PopulationCount(8, -1), 5);
     EXPECT_EQ(map->PopulationCount(0, -1), 0);
     EXPECT_EQ(map->PopulationCount(15, 2), 15);
+    map->port_monster_count = 256;
+    EXPECT_EQ(map->PopulationCount(15, -1), 256);
+    EXPECT_EQ(map->PopulationCount(8, -1), 256);
+    EXPECT_EQ(map->PopulationCount(15, 2), 15);
+    map->port_monster_count = 257;
+    EXPECT_EQ(map->PopulationCount(15, -1), 15);
+    map->port_monster_count = 5;
     auto copy = std::make_unique<CDungeonMap>(*map);
     EXPECT_EQ(copy->PopulationCount(8, -1), 5);
     copy->initalize();

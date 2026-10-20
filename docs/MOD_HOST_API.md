@@ -1512,20 +1512,23 @@ range. Exhaustion or bounded placement failure rejects the staged layout and
 falls back to retail generation. Larger capacity and chest loot overrides
 remain separate work.
 
-An optional `monsters=5` requests 2–15 placement attempts on each floor
+An optional `monsters=5` requests 2–256 placement attempts on each floor
 (at least three for Wise Owl Forest's three keys). One monster would bypass
 native key assignment and is rejected.
 Omission keeps native counts. The setting survives on the generated map for
 back-floor entry and is cleared by map initialization. It applies only to
 ordinary random-model placement with a positive native count; explicit-model
 and zero-count calls retain their native behavior. Native model choice,
-spacing, placement retry limits and key assignment remain in use, so the
-request is not a guarantee that every attempted placement succeeds.
-The active limit remains sixteen monster slots. Paired native storage now
-reserves 256 slots, and an internal helper can allocate their scripts on demand.
-Per-unit lifecycle and iteration can now address the additional storage
-internally. Internal 256-actor floor, transition and quit tests pass; larger
-public requests and their failure handling remain under integration.
+placement retry limits and key assignment remain in use, so the request is
+not a guarantee that every attempted placement succeeds. Requests above 192
+raise the nearby-count threshold from three to four within the native
+480-unit radius; the native minimum separation remains unchanged. This density change applies
+only with explicitly expanded active slots.
+Requests above sixteen allocate extra scripts and activate the required monster,
+hit and audio resources at floor load. Floors without an expanded request and
+game exit restore retail active limits. No-mod floors keep sixteen active slots.
+Read placement reports rather than assuming that a small layout can fit the
+requested population.
 
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is
@@ -1548,8 +1551,8 @@ An expanded population rejected by collision-resource preflight reports
 population override is cleared for that map and retail resource limits are
 restored before native placement. Null does not claim a fallback placement
 count. This handles resource-validation rejection only; allocation or native
-setup exceptions propagate. Public population requests remain capped at 15
-while the larger-request public path is being validated.
+setup exceptions propagate. Map-generation success is independent of this
+population resource check.
 
 `dungeon.layout_reset {dungeon=0}` (`game.write`) removes the caller's claim.
 Owner retirement or runtime reset also removes claims. Existing loaded floors
