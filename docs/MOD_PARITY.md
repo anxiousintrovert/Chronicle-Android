@@ -4207,3 +4207,19 @@ validation remain pending.
 Validation: Clang 23.1.2 game and test builds passed; full native regression
 passed 1,053 tests, with 107 skipped and one disabled. All 76 Python author-tool
 tests passed. PS2 baseline and upstream renderer pin checks remain unchanged.
+
+## Defensive skill PAL probe (2026-10-20)
+
+The existing shared-action combat scenario now trains an outgoing and defensive
+skill together. In a loaded PAL dungeon, a controlled native four-point life
+deduction becomes one point after the incoming rule and trained skill each apply
+a 50 percent factor. Healing remains unchanged. After explicit rank reset and
+rule removal, a four-point deduction again removes four points. The existing
+outgoing check and native back-floor transition also pass, with both skill caches
+inactive afterward. Test-only HP changes are restored after each measurement.
+
+Clang 23.1.2 rebuilt the test executable and the single isolated retail scenario
+passed without skipping. Local evidence is under
+`issue-evidence/framework-expansion-20261019/skill-defense-retail-20261020`.
+This is a running-game native-hook probe, not a controller-driven combat
+playthrough or an owner-failure scenario. Those broader limits remain explicit.

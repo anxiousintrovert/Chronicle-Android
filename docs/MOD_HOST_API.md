@@ -2803,5 +2803,7 @@ invulnerability or attack-only armor.
 The shared skill menu displays per-rank and current reduction. Rank/save loading,
 transaction rollback and owner cleanup use the same rules as outgoing effects.
 Nothing is installed or trained by default. Automated native-hook tests cover
-life deductions and healing; a representative retail combat playthrough and
-non-Windows validation remain outstanding.
+life deductions and healing. A PAL dungeon probe also checks rule/skill stacking,
+healing, rank/rule release and the subsequent native back-floor transition. It
+uses controlled native life calls, not controller-driven combat. A representative
+combat playthrough and non-Windows validation remain outstanding.
