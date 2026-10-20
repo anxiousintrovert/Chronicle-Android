@@ -430,3 +430,49 @@ TEST_F(ModDynamicQuestRuntime, FailurePersistsMigratesAndRollsBackWithCallbackFa
     Start();runtime.ResetState();runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(runtime.Diagnostics().empty());
     EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_failed"));EXPECT_FALSE(State()["mods"]["test.mod"].contains("quest_definitions"));
 }
+
+TEST(ModDynamicQuests, CustomObjectivesRequireProviderAndMatchDetachedPayloadFields) {
+    mods::Package package;package.id="test.consumer";Json state=Json::object();
+    Json definition={{"id","signal"},{"title","Challenge"},{"description","External signal"},{"objectives",{{{"id","win"},{"title","Win"},{"goal",1},{"event","custom"},{"owner","test.provider"},{"name","challenge.complete"},{"payload_match",{{"arena","bridge"},{"success",true}}}}}}};
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.register",definition),std::runtime_error);EXPECT_TRUE(state.empty());
+    package.dependencies={"test.provider"};mods::CallOwnedQuest(package,state,"quests.register",definition);
+    Json event={{"owner","test.provider"},{"name","challenge.complete"},{"payload",{{"arena","bridge"},{"success",true}}}};
+    EXPECT_EQ(mods::QuestEventAdvances(package,state,"custom",event).size(),1u);
+    auto bad=event;bad["owner"]="other.provider";EXPECT_TRUE(mods::QuestEventAdvances(package,state,"custom",bad).empty());
+    bad=event;bad["name"]="challenge.failed";EXPECT_TRUE(mods::QuestEventAdvances(package,state,"custom",bad).empty());
+    bad=event;bad["payload"]["success"]=false;EXPECT_TRUE(mods::QuestEventAdvances(package,state,"custom",bad).empty());
+    bad=event;bad["payload"].erase("arena");EXPECT_TRUE(mods::QuestEventAdvances(package,state,"custom",bad).empty());
+    for(const auto &change:std::vector<Json>{{{"owner",true}},{{"name",""}},{{"payload_match",{{"nested",Json::object()}}}},{{"event","enemy_killed"}}}) {
+        auto invalid=definition;invalid["objectives"][0].update(change);EXPECT_FALSE(mods::ValidateQuestOperation("quests.register",invalid).empty());
+    }
+    package.dependencies.clear();EXPECT_THROW(mods::QuestDefinitions(package,state),std::runtime_error);
+}
+TEST_F(ModDynamicQuestRuntime, DependencyCustomEventAdvancesQuestBeforeIndependentListenerAndRewardsOnce) {
+    Add("test.provider",R"(local sent=false;return {on_tick=function()
+        if sent then return end;sent=true
+        assert(chronicle.call('events.emit',{name='challenge.complete',payload={arena='other'}}))
+        assert(chronicle.call('events.emit',{name='challenge.complete',payload={arena='bridge'}}))
+    end})");
+    Add("test.consumer",R"(assert(chronicle.subscribe_custom('test.provider','challenge.complete',function(w)
+        if w.event.payload.arena=='bridge' then assert(chronicle.call('quests.get',{id='signal'}).complete) end
+    end));return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='signal',title='Signal',description='Bridge challenge',objectives={
+          {id='win',title='Win challenge',goal=1,event='custom',owner='test.provider',name='challenge.complete',payload_match={arena='bridge'}}},
+          rewards={{operation='economy.add',arguments={amount=9}}}}))
+    end})");
+    auto path=root/"test.consumer/mod.json";Json manifest;{std::ifstream file(path);file>>manifest;}manifest["requires"]={"test.provider"};std::ofstream(path)<<manifest.dump();
+    Start();int grants=0;mods::CommitGame commit=[&](const auto &commands,int,std::string &){++grants;EXPECT_EQ(commands.size(),1u);EXPECT_EQ(commands[0].arguments["amount"],9);return true;};
+    const mods::World world{2,0,0,true,0,1};runtime.Tick(world,{},{},{},commit);ASSERT_TRUE(runtime.Diagnostics().empty());
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_EQ(runtime.Quests()[0].progress,0);EXPECT_EQ(grants,0);
+    runtime.Tick(world,{},{},{},commit);ASSERT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(runtime.Quests()[0].progress,1);EXPECT_EQ(grants,1);
+    const auto saved=runtime.SaveState();runtime.ResetState();std::string error;ASSERT_TRUE(runtime.LoadState(saved,error))<<error;
+    runtime.Tick(world,{},{},{},commit);runtime.Tick(world,{},{},{},commit);EXPECT_EQ(grants,1);EXPECT_TRUE(runtime.Diagnostics().empty());
+}
+TEST_F(ModDynamicQuestRuntime, RolledBackCustomEmissionCannotAdvanceSelfQuest) {
+    Add("test.mod",R"(return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='signal',title='Signal',description='Self event',objectives={
+          {id='win',title='Win',goal=1,event='custom',owner='test.mod',name='ready'}}}))
+    end,on_tick=function() assert(chronicle.call('events.emit',{name='ready',payload={}}));error('reject emission') end})");
+    Start();runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(runtime.Diagnostics().empty());
+    runtime.Tick({2,0,0,true,0,1});EXPECT_FALSE(State()["mods"]["test.mod"].contains("quests"));
+}

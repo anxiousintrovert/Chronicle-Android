@@ -1,6 +1,7 @@
 #include "quests.hpp"
 #include "api.hpp"
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <stdexcept>
 namespace mods {
@@ -91,7 +92,7 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
         if(!a.contains("objectives")||!a["objectives"].is_array()||a["objectives"].empty()||a["objectives"].size()>16)return "quest requires 1..16 objectives";
         std::set<std::string> ids;int total=0;
         for(const auto &objective:a["objectives"]) {
-            if(!objective.is_object()||objective.size()!=3u+unsigned(objective.contains("event"))+unsigned(objective.contains("match"))+unsigned(objective.contains("after"))||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
+            if(!objective.is_object()||objective.size()!=3u+unsigned(objective.contains("event"))+unsigned(objective.contains("match"))+unsigned(objective.contains("after"))+unsigned(objective.contains("owner"))+unsigned(objective.contains("name"))+unsigned(objective.contains("payload_match"))||!objective.contains("id")||!Id(objective["id"])||!ids.insert(objective["id"].get<std::string>()).second||
                !objective.contains("title")||!Text(objective["title"])||!objective.contains("goal")||!objective["goal"].is_number_integer()||objective["goal"]<1||objective["goal"]>1000000)
                 return "objectives require unique id, bounded title and integer goal 1..1000000";
             if(objective.contains("after")) {
@@ -103,8 +104,20 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
                 }
             }
             if(objective.contains("event")) {
-                if(!objective["event"].is_string()||(objective["event"]!="enemy_killed"&&objective["event"]!="map_enter"&&objective["event"]!="floor_enter"))return "unsupported quest objective event";
+                if(!objective["event"].is_string()||(objective["event"]!="enemy_killed"&&objective["event"]!="map_enter"&&objective["event"]!="floor_enter"&&objective["event"]!="custom"))return "unsupported quest objective event";
             }
+            if(objective.value("event",Json())=="custom") {
+                if(!objective.contains("owner")||!Id(objective["owner"])||!objective.contains("name"))return "custom objective requires provider owner and event name";
+                const auto error=ValidateOperation("events.emit",{{"name",objective["name"]},{"payload",Json::object()}});if(!error.empty())return error;
+                if(objective.contains("payload_match")) {
+                    const auto &match=objective["payload_match"];
+                    if(!match.is_object()||match.size()>8)return "payload_match requires at most eight scalar fields";
+                    for(const auto &[key,value]:match.items()) {
+                        if(key.empty()||key.size()>64||!Text(Json(key)))return "invalid custom payload match key";
+                        if(!(value.is_null()||value.is_boolean()||(value.is_number()&&std::isfinite(value.get<double>()))||(value.is_string()&&value.get_ref<const std::string &>().size()<=256)))return "payload match values must be bounded scalars";
+                    }
+                }
+            } else if(objective.contains("owner")||objective.contains("name")||objective.contains("payload_match"))return "provider/name/payload_match require a custom event";
             if(objective.contains("match")) {
                 const auto &match=objective["match"];
                 if(!objective.contains("event")||!match.is_object()||match.size()>8)return "event match requires event and at most eight fields";
@@ -137,6 +150,10 @@ std::vector<Quest> QuestDefinitions(const Package &package,const Json &state) {
             auto arguments=value;arguments["id"]=id;
             const auto error=ValidateQuestOperation("quests.register",arguments);if(!error.empty())throw std::runtime_error(error);
             Require(std::ranges::none_of(result,[&](const Quest &quest){return quest.id==id;}),"saved dynamic quest collides with a manifest quest");
+            if(!package.id.empty()&&value.contains("objectives"))for(const auto &objective:value["objectives"])if(objective.value("event",Json())=="custom") {
+                const auto owner=objective["owner"].get<std::string>();
+                Require(owner==package.id||std::ranges::find(package.dependencies,owner)!=package.dependencies.end(),"custom quest event provider must be self or a declared dependency");
+            }
             result.push_back(ParseQuest(id,value));
         }
     }
@@ -208,6 +225,14 @@ std::vector<Json> QuestEventAdvances(const Package &package,const Json &state,st
             if(objective.value("event",std::string{})!=event)continue;
             const int count=state.contains("quest_objectives")&&state["quest_objectives"].contains(id)?state["quest_objectives"][id].value(objective["id"].get<std::string>(),0):0;
             if(count>=objective["goal"].get<int>()||!BlockedBy(definition,objective,state,id).empty())continue;
+            if(event=="custom") {
+                if(!payload.contains("owner")||payload["owner"]!=objective["owner"]||!payload.contains("name")||payload["name"]!=objective["name"])continue;
+                if(objective.contains("payload_match")) {
+                    bool matches=payload.contains("payload")&&payload["payload"].is_object();
+                    if(matches)for(const auto &[key,value]:objective["payload_match"].items())if(!payload["payload"].contains(key)||payload["payload"][key]!=value){matches=false;break;}
+                    if(!matches)continue;
+                }
+            }
             bool matches=true;if(objective.contains("match"))for(const auto &[key,value]:objective["match"].items())if(!payload.contains(key)||payload[key]!=value){matches=false;break;}
             if(matches){Require(advances.size()<64,"quest event objective budget (64) exceeded");advances.push_back({{"id",id},{"objective",objective["id"]},{"amount",1}});}
         }

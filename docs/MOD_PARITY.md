@@ -4159,3 +4159,21 @@ comparison excludes the pulsing bracket edge at x=266 after six pixels there
 were identified as animation, not skill text changes. Failure persistence,
 migration, rollback, event suppression and completed-quest rejection are tested.
 PS2 and upstream Kazarov remain unchanged. Other platforms remain unverified.
+
+## Package-owned event objectives (2026-10-20)
+
+quests.custom_events.v1 binds objectives to self/dependency providers through the
+existing deferred custom-event bus. Provider, name, context and bounded scalar
+payload filters are checked; a provider cannot be spoofed by payload fields.
+Existing lifecycle, objective ordering, transactions and one-time rewards apply.
+This supplies an optional quest integration point for contributor-owned systems
+without prescribing their registries or installing native pickup/dialogue hooks.
+Those native event domains remain planned work.
+
+Validation: Clang 23.1.2 game/test builds passed; full regression recorded 1048
+passes, 107 skips and one disabled test. All 40 focused quest/custom-event/menu
+tests and all 74 Python tests passed. Tests cover provider authorization, source
+and payload filtering, deferred progression before independent listeners, single
+reward receipt through save restoration and rolled-back emission suppression.
+No PS2 or Kazarov edits. Native pickup/dialogue sources and other-platform
+execution remain unverified; no such hooks are claimed by this capability.

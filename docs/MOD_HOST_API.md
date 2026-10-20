@@ -2740,3 +2740,43 @@ migrations. Save validation rejects orphan/non-string/empty/oversized reasons,
 failed unstarted quests and failed completed quests. Recovery is a resume, not
 a restart or stage reset; branching stages and native story failure remain outside
 this contract.
+
+## Custom-event quest objectives
+
+Require `quests.custom_events.v1` and `game.write` to bind a named objective to
+an existing package-owned event. The provider may be the quest's own package or
+one of its declared `requires` dependencies. This does not install new native
+pickup, dialogue, item or cutscene hooks.
+
+```lua
+assert(chronicle.call("quests.register", {
+    id = "bridge", title = "Bridge challenge", description = "Win the challenge.",
+    objectives = {{id = "win", title = "Win", goal = 1,
+        event = "custom", owner = "author.challenges", name = "challenge.complete",
+        payload_match = {arena = "bridge", success = true}}}
+}))
+```
+
+The provider emits through the existing `events.emit` operation. Runtime assigns
+its identity; a payload cannot impersonate a different provider. Custom objectives
+require an explicit owner and event name (the same name rules as events.emit).
+Optional payload_match is an object with at most eight top-level fields. Keys
+are nonempty printable strings up to 64 bytes; values are null, boolean, finite
+number or string up to 256 bytes. Every listed field must exist and equal its
+value. Nested objects/arrays are not match values. Additional payload fields are
+ignored. Optional match retains the native context filters map/dungeon/floor;
+payload fields do not replace context fields. Provider/name/payload_match fields
+are rejected on native event objectives.
+
+Custom delivery retains the bus's committed-emission, next-tick, owner/dependency,
+context and save-load cancellation rules. One matching event increments one per
+eligible objective, never an amount taken from the payload. Failed/unstarted,
+complete and prerequisite-locked objectives ignore it. The existing 64-objective
+per-owner/event and reward-command budgets apply. Progress/rewards commit before
+independent custom listeners, whose later failure does not undo that committed
+quest event. Existing quest rollback, reward receipts and save validation apply.
+Provider requirements are rechecked when saved definitions attach to a package.
+
+This is an optional integration route for separate extensions: they choose their
+own versioned signal names and payloads. It does not prescribe their asset formats,
+registries or implementation, and does not assert that those extensions exist.

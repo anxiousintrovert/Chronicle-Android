@@ -86,3 +86,12 @@ Shop stock/price operations use existing retail definitions only. They own nativ
 lists and base-price pairs without introducing custom item/weapon schemas, IDs or
 registries. Future contributor content can integrate through a separately agreed
 definition lookup and native allocation contract; these APIs do not reserve it.
+
+## Optional quest signal integration
+
+An extension can emit package-owned events through events.emit; a dependent quest
+package can bind objectives using quests.custom_events.v1 with explicit provider,
+event name and payload filters. This is an available integration option, not a
+required content format. Contributors retain control over their registries and
+implementation. Signal contracts should be versioned by their owning package.
+See [custom-event objectives](MOD_HOST_API.md#custom-event-quest-objectives).

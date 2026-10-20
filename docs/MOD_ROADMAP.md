@@ -13,7 +13,7 @@ PNG texture replacement and reliable installation/management tools.
 Implemented foundations include disabled-by-default folder packages, dependency
 and conflict checks, the shared mod manager, texture discovery/export/package
 creation, and quest author templates. Quests support named and ordered objectives,
-explicit start, failure/resume, supported event bindings, one-time rewards and
+explicit start, failure/resume, native and package-owned event bindings, one-time rewards and
 owned save state. Full-resolution texture testing includes a 4096x4096 replacement.
 These capabilities have documented limits; implementation is not universal
 platform or full-playthrough certification.

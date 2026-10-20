@@ -1597,6 +1597,7 @@ void Runtime::Tick(const World &world, const std::function<bool(int)> &money, co
                     {"name",    event.arguments.at("name")   },
                     {"payload", event.arguments.at("payload")}
                 };
+                impl_->QuestEvent(m,"custom",event_world,commit_game);
                 const auto key = "custom:" + event.owner + ":" + event.arguments.at("name").get<std::string>();
                 if (m.listeners.contains(key)) {
                     impl_->Call(m, key.c_str(), event_world, money, read_game, query_game, commit_game);
