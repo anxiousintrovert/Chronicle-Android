@@ -77,3 +77,37 @@ TEST(ModMusicPack, PalArchivesPreflightWhenDataProvided) {
     EXPECT_EQ(count, 55);
     EXPECT_EQ(rejected, 2);
 }
+
+TEST(ModMusicPack, ConfigParsingIsDetachedAndMatchesNativeReverbLimits) {
+    mods::MusicReverb value{7, 90};
+    std::string error;
+    EXPECT_TRUE(mods::ParseMusicConfig("REVERBE 4,40\r\nTABLE 1,2\nREVERBE +3,30\n", value, error));
+    EXPECT_EQ(value.mode, 3); EXPECT_EQ(value.depth, 30);
+    EXPECT_TRUE(mods::ParseMusicConfig("REVERBE 99,-1", value, error));
+    EXPECT_EQ(value.mode, 9); EXPECT_EQ(value.depth, 0);
+    EXPECT_TRUE(mods::ParseMusicConfig("", value, error));
+    EXPECT_EQ(value.mode, 0); EXPECT_EQ(value.depth, 0);
+    for (const auto text : {"REVERBE", "REVERBE 1 2", "REVERBE 1,", "REVERBE 1,2junk",
+         "REVERBE 2147483648,1", "REVERBE 1,2\nUNKNOWN 0,0", "TABLE 1,no"}) {
+        value = {7, 90};
+        EXPECT_FALSE(mods::ParseMusicConfig(text, value, error)) << text;
+        EXPECT_EQ(value.mode, 7); EXPECT_EQ(value.depth, 90);
+    }
+    const char embedded[] = "REVERBE 1,2\0REVERBE 3,4";
+    EXPECT_FALSE(mods::ParseMusicConfig({embedded, sizeof(embedded)-1}, value, error));
+}
+TEST(ModMusicPack, ConfigPresenceDistinguishesPreserveFromReset) {
+    const std::string list = "test_a.sq\n";
+    const auto sq = chronicle_audio::fixture::MakeSq(60, 127, 480);
+    std::string error;
+    auto pack = datafix::MakePack({{"bgm0.txt", {list.begin(), list.end()}}, {"test_a.sq", sq}});
+    auto prepared = mods::PrepareMusicPack(pack, 0, error);
+    ASSERT_TRUE(prepared) << error;
+    EXPECT_FALSE(prepared->reverb);
+    pack = datafix::MakePack({{"bgm0.txt", {list.begin(), list.end()}}, {"test_a.sq", sq}, {"bgm0.cfg", {}}});
+    prepared = mods::PrepareMusicPack(pack, 0, error);
+    ASSERT_TRUE(prepared) << error;
+    ASSERT_TRUE(prepared->reverb);
+    EXPECT_EQ(prepared->reverb->mode, 0);
+    EXPECT_EQ(prepared->reverb->depth, 0);
+}

@@ -3071,3 +3071,21 @@ remain unverified.
 PAL report: bgm-play-2f26ba6bbebd40f3b112ced9810831e0/report.json in local
 framework expansion evidence. Full Clang regression completed without failures;
 PS2 diff against the Chronicle baseline is empty.
+
+
+### Detached BGM configuration validation (2026-10-20)
+
+Music preflight now parses REVERBE and TABLE integer records without running
+the native script interpreter or changing its global SoundInfo/se_list state.
+It preserves record order (last REVERBE wins), ignores TABLE values as native
+SetBGMFile does, and clamps mode/depth to the official mixer's 0-9/0-127 limits.
+Absent configuration leaves reverb unspecified; present empty configuration
+stages the native zero defaults. Malformed/unknown commands, integer overflow,
+trailing junk and data after a NUL terminator reject the request. Only whitespace
+and comma-separated integer command syntax is supported by this preflight.
+
+Clang 23.1.2 builds and six music-pack tests passed, including the supplied PAL
+archive audit: 55 accepted and the two known missing-sequence archives rejected.
+The helper still has no production caller. Track metadata validation and safe
+publication remain required before exposing set loading; public count stays 132.
+No default engine path or PS2 file changed.

@@ -1,6 +1,8 @@
 #include "music_pack.hpp"
 #include "../audio_retail.hpp"
 #include <map>
+#include <algorithm>
+#include <charconv>
 #include <cstring>
 #include <stdexcept>
 
@@ -14,6 +16,48 @@ std::uint32_t Word(std::span<const std::uint8_t> bytes, std::size_t at) {
     return std::uint32_t(bytes[at]) | (std::uint32_t(bytes[at+1]) << 8) |
            (std::uint32_t(bytes[at+2]) << 16) | (std::uint32_t(bytes[at+3]) << 24);
 }
+}
+bool ParseMusicConfig(std::string_view text, MusicReverb &result, std::string &error) {
+    if (text.size() > 65536) { error = "music config exceeds 64 KiB"; return false; }
+    MusicReverb staged;
+    const auto nul = text.find('\0');
+    if (nul != std::string_view::npos) {
+        if (text.find_first_not_of('\0', nul) != std::string_view::npos) {
+            error = "music config contains data after terminator"; return false;
+        }
+        text = text.substr(0, nul);
+    }
+    const auto space = [&] {
+        while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' || text.front() == '\n'))
+            text.remove_prefix(1);
+    };
+    const auto integer = [&](int &value) {
+        space();
+        if (text.empty()) return false;
+        if (text.front() == '+') { text.remove_prefix(1); if (text.empty() || text.front() < '0' || text.front() > '9') return false; }
+        const auto parsed = std::from_chars(text.data(), text.data() + text.size(), value);
+        if (parsed.ec != std::errc()) return false;
+        text.remove_prefix(parsed.ptr - text.data()); return true;
+    };
+    for (;;) {
+        space(); if (text.empty()) break;
+        const auto end = text.find_first_of(" \t\r\n");
+        if (end == std::string_view::npos) { error = "incomplete music config command"; return false; }
+        const auto command = text.substr(0, end); text.remove_prefix(end);
+        if (command != "REVERBE" && command != "TABLE") { error = "unknown music config command"; return false; }
+        int first, second;
+        if (!integer(first)) { error = "invalid first music config integer"; return false; }
+        space();
+        if (text.empty() || text.front() != ',') { error = "music config requires comma-separated integers"; return false; }
+        text.remove_prefix(1);
+        if (!integer(second) || (!text.empty() && text.front() != ' ' && text.front() != '\t' && text.front() != '\r' && text.front() != '\n')) {
+            error = "invalid second music config integer"; return false;
+        }
+        // TABLE is parsed by retail but SetBGMFile consumes only reverb.
+        // Match the official mixer's limits without evaluating native script.
+        if (command == "REVERBE") staged = {std::clamp(first, 0, 9), std::clamp(second, 0, 127)};
+    }
+    result = staged; error.clear(); return true;
 }
 std::shared_ptr<PreparedMusicPack> PrepareMusicPack(std::span<const std::uint8_t> bytes, int set, std::string &error) {
     try {
@@ -65,7 +109,10 @@ std::shared_ptr<PreparedMusicPack> PrepareMusicPack(std::span<const std::uint8_t
         const auto cfg = members.find("bgm" + std::to_string(set) + ".cfg");
         if (cfg != members.end()) {
             if (cfg->second.size() > 65536) throw std::runtime_error("music config exceeds 64 KiB");
-            result->config.assign(reinterpret_cast<const char *>(cfg->second.data()), cfg->second.size());
+            MusicReverb reverb;
+            if (!ParseMusicConfig({reinterpret_cast<const char *>(cfg->second.data()), cfg->second.size()}, reverb, error))
+                throw std::runtime_error(error);
+            result->reverb = reverb;
         }
         error.clear(); return result;
     } catch (const std::exception &failure) { error = failure.what(); return {}; }
