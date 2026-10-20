@@ -15,6 +15,7 @@
 #include "town.hpp"
 #include "player_tuning.hpp"
 #include "player_combat.hpp"
+#include "quick_items.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -22,6 +23,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"items.quick_slots", "game.read", "Read saved quick slots and native selection readiness.", false},
+    {"items.quick_slot_select", "game.write", "Select a loaded native quick-item slot during dungeon play.", true},
     {"weapons.equip", "game.write", "Select an owned retail weapon slot for the saved town loadout.", true},
     {"weapons.equip_state", "game.read", "Read town loadout readiness and equipped slots.", false},
     {"player.combat_state", "game.read", "Read current dungeon player timers, action gauge and readiness.", false},
@@ -230,6 +233,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (name == "weapons.equip_state") return a.is_object() && a.empty() ? "" : "weapons.equip_state takes no arguments";
     if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
+    if (name == "items.quick_slots" || name == "items.quick_slot_select") return ValidateQuickItems(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
     if (name.starts_with("shops.")) {
@@ -706,6 +710,7 @@ Json ReadSave(CSaveData &save, const World &world, std::string_view op, const Js
 }
 
 bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int money_delta, std::string &error, CommitEffects *effects, GeoramaState *georama, const EquipmentContext *equipment, bool town_loadout) {
+    int quick_selection = 0;
     if (effects) {
         *effects = {};
     }
@@ -719,7 +724,8 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
         return false;
     }
     // The copy constructor does not run save initialization or consume native RNG.
-    // Only callbacks with writes pay for staging; public setters here touch save fields only.
+    // Only callbacks with writes pay for staging. Native selection is published
+    // after the save and resource validations, alongside the save commit.
     auto                        staged = std::make_unique<CSaveData>(save);
     std::optional<GeoramaState> staged_georama;
     if (georama) {
@@ -740,7 +746,15 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
                 error = "query cannot be committed";
                 return false;
             }
-            if (op == "weapons.equip") {
+            if (op == "items.quick_slot_select") {
+                if (command.owner.empty()) {
+                    throw std::runtime_error("quick-slot selection requires a runtime package owner");
+                }
+                const int slot = a.at("slot");
+                error = ValidateQuickSelection(save, *staged->GetDngStatus(), slot);
+                if (!error.empty()) return false;
+                quick_selection = slot;
+            } else if (op == "weapons.equip") {
                 if (!town_loadout || equipment) {
                     throw std::runtime_error("equipping requires a ready town loadout context; dungeon resource switching is unavailable");
                 }
@@ -808,7 +822,12 @@ bool ApplySave(CSaveData &save, const std::vector<GameCommand> &commands, int mo
         }
         pending.refresh_weapon = std::memcmp(&old_weapon, &new_weapon, sizeof(old_weapon)) != 0;
     }
+    if (quick_selection) {
+        error = ValidateQuickSelection(save, *staged->GetDngStatus(), quick_selection);
+        if (!error.empty()) return false;
+    }
     save = *staged;
+    if (quick_selection) CommitQuickSelection(quick_selection);
     if (georama) {
         *georama = *staged_georama;
     }

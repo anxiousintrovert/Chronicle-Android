@@ -92,6 +92,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 | `weapons.synthesize` | `slot`, optional `character` | `game.write` | Status-break an unequipped level 5+ retail weapon into a SynthSphere, including fitted bonuses |
 | `items.native_definition` | `item` | `game.read` | Read existing retail item/weapon metadata; does not register custom content |
 | `items.use` | `item`, optional `character` | `game.write` | Consume one owned retail healing, water or ailment-cure item atomically |
+| `items.quick_slots` | none | `game.read` | Saved quick-slot contents plus native selection readiness/reasons |
+| `items.quick_slot_select` | `slot` (1–3) | `game.write` | Select an already-loaded dungeon quick slot after transaction validation |
 
 Character IDs are 0–5 and must be joined; omitted means the controlled character.
 Status add/remove target only the controlled character and require its native
@@ -1298,3 +1300,30 @@ item volume and cached item count are preserved, as in DeleteItemAfterUseItem.
 This is a one-shot saved effect: disabling the mod does not refund the item or
 undo healing. No polling, new menu, engine hook, native RNG draw or custom
 registration is introduced.
+
+### Native quick-slot selection
+
+`items.quick_slots {}` returns `ready`, `reason` and `slots`. Each slot reports
+one-based `slot`, retail `item`, `quantity`, `ready` and `reason`. With no save,
+slots is empty. Saved contents remain readable outside the dungeon; `selected`
+is present only when the native context is ready. Top-level readiness describes
+the context; check the individual slot's readiness before selection.
+
+`items.quick_slot_select {slot=1}` requires `game.write` and a runtime owner.
+Slots use native numbering 1–3. Selection requires ordinary dungeon play,
+action-ready player state, no event, synchronized live save/player resources,
+and a nonempty saved slot whose item matches its loaded model/cache. It does not
+load missing resources, equip items into slots or consume an item. Empty slots,
+stale caches, menus, first-person camera and active actions reject with a reason.
+
+Selection is staged with other writes. The selected slot is revalidated against
+the final staged inventory before publishing the save and both native selector
+fields. A later failure or removal of the selected item rolls back the entire
+callback. Multiple valid selections in one callback leave the last selected.
+The change is one-shot, not an ownership lease; ordinary player input may change
+it, and disabling the mod does not restore a previous selection. Lua and native
+plugins use the existing host call and shared-manager action interfaces.
+
+`items.quick_slot_use` is not implemented yet. Selection alone does not synthesize
+Square input or start animations. Native quick-slot use has different behavior
+from `items.use`; the two operations must not be substituted for each other.

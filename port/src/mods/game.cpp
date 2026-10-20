@@ -25,6 +25,7 @@
 #include "player_tuning_native.hpp"
 #include "player_combat.hpp"
 #include "weapon_loadout.hpp"
+#include "quick_items.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -227,6 +228,7 @@ void TickGame() {
         }
         if (operation == "weapons.equip_state") return ReadWeaponEquipState();
         if (operation == "player.combat_state") return ReadPlayerCombat();
+        if (operation == "items.quick_slots") return ReadQuickItems();
         if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
         if (operation == "party.town_state") return ReadTownSelection();
         if (operation == "party.switch_state") return ReadPartySwitchState();
