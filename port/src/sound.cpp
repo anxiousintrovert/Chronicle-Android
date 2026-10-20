@@ -330,6 +330,18 @@ void StartSequence(int port, int seq_no, const int *volume) {
 } // namespace
 
 namespace mods {
+bool QueueRetailEffect(const SND_SE_INFO &row, int volume, std::string &error) {
+    if (!RetailEffectReady(row, volume, error)) return false;
+    if (g_effect_queue.size() > 4096 - 8) { error = "retail effect queue capacity reached"; return false; }
+    // Reserve before the native route can publish its program/volume/key-on.
+    // Expanded voice eviction may additionally enqueue a key-off pair.
+    g_effect_queue.reserve(g_effect_queue.size() + 8);
+    const int port = row.port >= 0 ? row.port : MIDI_PORT_SE_DEFAULT;
+    if (row.vol_no < 0) volume = 127;
+    if (volume < 0) CSnd.SE_Play(port, row.vol_no, 0);
+    else CSnd.SE_Play(port, row.bank, row.prog, volume, 0);
+    error.clear(); return true;
+}
 bool RetailEffectReady(const SND_SE_INFO &row, int volume, std::string &error) {
     if (volume < -1 || volume > 127 || row.bank < 0 || row.prog < 0) {
         error = "invalid retail effect or volume"; return false;

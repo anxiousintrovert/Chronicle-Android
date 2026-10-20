@@ -2942,3 +2942,22 @@ audio suite passed eight cases, with the disc-data case skipped.
 This closes loaded-bank preflight groundwork, not the public SE operation.
 Queued dispatch, shared-menu retail replay and BGM/music replacement remain
 outstanding. Public operation count remains 128; PS2 is unchanged.
+
+
+### Explicit retail effect dispatch foundation (2026-10-20)
+
+QueueRetailEffect validates loaded samples/default-volume rows before touching
+the normal driver queue, caps admission at 4096 messages and reserves room for
+program/volume/key-on plus possible expanded-voice eviction messages. It then
+uses the same CSound SE_Play route and voice zero as native SndSePlay, including
+native unmapped-row full-volume behavior. It does not execute during startup
+or change any existing retail call site.
+
+A generated sound pack loads a synthetic HD/BD bank through the actual full-
+pointer LoadSoundFileFromPack path. The test proves silence before driver Step,
+nonzero rendered output and active voices afterward, missing-program rejection,
+and native stop cleanup. The legacy 32-bit pointer loader is deliberately not
+used: Windows places the test image above 4 GiB. Clang 23.1.2 builds pass; nine
+focused retail/monster audio tests pass and one disc-data test is skipped.
+PS2 diff is empty. Public API dispatch and shared-menu gameplay validation
+remain next; the public operation count stays 128.

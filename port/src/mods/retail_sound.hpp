@@ -10,4 +10,6 @@ std::optional<SND_SE_INFO> ResolveRetailEffect(int id, int basic, int chapter, i
 bool RetailEffectHasSamples(const audio::Bank *bank, int program, int effect);
 // Checks the actual loaded port bank and resolves native default volume.
 bool RetailEffectReady(const SND_SE_INFO &row, int volume, std::string &error);
+// Explicit commit-only dispatch; uses the normal driver Step queue.
+bool QueueRetailEffect(const SND_SE_INFO &row, int volume, std::string &error);
 }

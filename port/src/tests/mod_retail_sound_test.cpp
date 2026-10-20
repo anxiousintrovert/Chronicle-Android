@@ -2,6 +2,11 @@
 #include "../mods/retail_sound.hpp"
 #include <cstring>
 #include "audio_retail.hpp"
+#include "data_fixture.hpp"
+#include "audio/mixer.hpp"
+#include "sound.hpp"
+#include <array>
+#include <algorithm>
 #include "audio_retail_fixture.hpp"
 
 TEST(ModRetailSound, RejectsTableTailsUnusedRowsAndInvalidSelectors) {
@@ -55,4 +60,35 @@ TEST(ModRetailSound, BankReadinessUsesKeyThenSplitFallbackAndRejectsUnloadedSamp
     EXPECT_NE(error.find("not loaded"), std::string::npos);
     EXPECT_FALSE(mods::RetailEffectReady(row, 128, error));
     EXPECT_NE(error.find("invalid"), std::string::npos);
+}
+
+TEST(ModRetailSound, ExplicitDispatchWaitsForNativeStepAndRejectsMissingProgram) {
+    const auto hd = chronicle_audio::fixture::MakeHd({});
+    const auto bd = chronicle_audio::fixture::SquareVag(2);
+    const std::string list = "test_g.hd\n";
+    auto pack = datafix::MakePack({{"sound.txt", {list.begin(), list.end()}}, {"test_g.hd", hd}, {"test_g.bd", bd}});
+    CSound sound;
+    auto &mixer = audio::DefaultMixer();
+    sound.Step(); mixer.Reset();
+    char name[] = "sound.txt";
+    sound.LoadSoundFileFromPack(name, reinterpret_cast<unsigned int *>(pack.data()));
+    mixer.SetVolume(10, audio::kFullPortVolume);
+    const SND_SE_INFO row{0, 0, 0, 10, -1};
+    std::string error;
+    ASSERT_TRUE(mods::RetailEffectReady(row, 127, error)) << error;
+    ASSERT_TRUE(mods::QueueRetailEffect(row, 127, error)) << error;
+    std::array<float, 8192> output{};
+    mixer.Render(output.data(), 4096);
+    EXPECT_EQ(mixer.ActiveVoices(), 0);
+    EXPECT_TRUE(std::ranges::all_of(output, [](float sample) { return sample == 0; }));
+    sound.Step();
+    mixer.Render(output.data(), 4096);
+    EXPECT_GT(mixer.ActiveVoices(), 0);
+    EXPECT_TRUE(std::ranges::any_of(output, [](float sample) { return sample != 0; }));
+    auto missing = row; missing.bank = 100;
+    EXPECT_FALSE(mods::QueueRetailEffect(missing, 127, error));
+    sound.SE_Stop(10, 0, 0, 0); sound.Step();
+    for (int i = 0; i < 10; ++i) mixer.Render(output.data(), 4096);
+    EXPECT_EQ(mixer.ActiveVoices(), 0);
+    mixer.Reset();
 }
