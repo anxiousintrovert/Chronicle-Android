@@ -21,6 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `player.combat_state` | none | `game.read` | Native dungeon-player readiness, invincibility/recoil timers and action gauge |
+| `player.invincible` | `frames` | `game.write` | Extend the native one-shot invincibility timer to at least 1–600 frames |
 | `player.tuning_state` | none | `game.read` | Effective dungeon tuning and owners per control |
 | `player.tuning_set` | selected tuning fields | `game.write` | Replace this package's owned tuning request atomically |
 | `player.tuning_clear` | none | `game.write` | Release this package's tuning request |
@@ -180,6 +182,34 @@ Goro's unavailable motion 32 uses idle for the corresponding town motion.
 Retail tests exercise all six bodies through a shared-manager action, runtime
 shutdown/restoration and native map-transition retirement. Full movement,
 conversation, interior and cross-platform coverage remains outstanding.
+
+### One-shot player protection
+
+`player.invincible` accepts exactly `{frames=1..600}` with an integer duration.
+The current dungeon player and save must be synchronized and native player
+resources available. `player.combat_state` reports `ready` and `reason`; when ready
+it also returns `character`, `invincible_frames`, `recoil_frames` and `action_gauge`.
+Outside a valid dungeon context it omits those values rather than returning stale
+combat data. Requests do not take a character ID or caller-supplied owner.
+
+The write shares callback transaction validation with other engine writes. Any
+failed save/entity/shop/tuning write cancels the timer request too. At commit,
+the timer becomes the maximum of its native value and all requested durations;
+shorter requests never remove an existing longer protection interval. Only this
+timer changes; HP, recoil, gauge and equipped resources are untouched by the call.
+
+This is a one-shot native effect, not an owned tuning lease. After commit the
+native movement loop counts down the timer, including its normal pause rules.
+Disabling the caller does not cancel an already granted interval; scene changes
+follow native reset behavior. Frames are simulation updates, not wall-clock
+seconds. It follows native hit checks, not immunity from every HP mutation:
+explicit `player.damage`, scripted damage or thirst can have separate semantics.
+Nothing runs or changes without a requested write.
+
+For a shared-manager action, queue `chronicle.call("player.invincible",
+{frames=120})` once gameplay resumes and inspect `player.combat_state` on a later
+tick. Do not continuously refresh the timer unless persistent protection is the
+intended gameplay mod behavior. No protection mod is included or enabled.
 
 ### Owned player tuning
 

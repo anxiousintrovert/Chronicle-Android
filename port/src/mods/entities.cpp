@@ -13,6 +13,7 @@
 #include "runtime.hpp"
 #include "shops.hpp"
 #include "player_tuning_native.hpp"
+#include "player_combat.hpp"
 #include "userstatus.hpp"
 #include "weaponelement.hpp"
 
@@ -107,6 +108,9 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
         *effects = {};
     }
     ShopTransaction shops;
+    PlayerCombatTransaction player;
+    if (!player.Stage(save, commands, error)) return false;
+    const bool has_player = std::ranges::any_of(commands, [](const auto &command) { return command.operation == "player.invincible"; });
     const bool has_tuning = std::ranges::any_of(commands, [](const auto &command) { return PlayerTuning::IsWrite(command.operation); });
     std::optional<PlayerTuning> tuning;
     if (has_tuning) {
@@ -118,20 +122,21 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
     }
     std::vector<GameCommand> filtered;
     const bool               has_shops = std::ranges::any_of(commands, [](const auto &command) { return IsShopWrite(command.operation); });
-    if (has_shops || has_tuning) {
+    if (has_shops || has_tuning || has_player) {
         for (const auto &command : commands) {
-            if (!IsShopWrite(command.operation) && !PlayerTuning::IsWrite(command.operation)) {
+            if (!IsShopWrite(command.operation) && !PlayerTuning::IsWrite(command.operation) && command.operation != "player.invincible") {
                 filtered.push_back(command);
             }
         }
     }
-    const auto &batch = has_shops || has_tuning ? filtered : commands;
+    const auto &batch = has_shops || has_tuning || has_player ? filtered : commands;
     if (!std::ranges::any_of(batch, [](const auto &command) { return IsEntityWrite(command.operation); })) {
         if (!ApplySave(save, batch, money, error, effects, georama, equipment)) {
             return false;
         }
         shops.Commit();
         if (tuning) OwnedPlayerTuning().Swap(*tuning);
+        player.Commit();
         return true;
     }
     if (effects) {
@@ -153,6 +158,7 @@ bool ApplyEntityAndSave(CSaveData &save, CMonstorUnit *unit, const std::vector<G
     entities.Commit();
     shops.Commit();
     if (tuning) OwnedPlayerTuning().Swap(*tuning);
+    player.Commit();
     return true;
 }
 

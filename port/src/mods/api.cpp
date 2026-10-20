@@ -14,6 +14,7 @@
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning.hpp"
+#include "player_combat.hpp"
 #include "userstatus.hpp"
 
 namespace mods {
@@ -21,6 +22,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"player.combat_state", "game.read", "Read current dungeon player timers, action gauge and readiness.", false},
+    {"player.invincible", "game.write", "Grant one-shot native invincibility without shortening an existing timer.", true},
     {"player.tuning_state", "game.read", "Inspect effective dungeon player tuning and per-field owners.", false},
     {"player.tuning_set", "game.write", "Own selected dungeon player tuning controls until cleared or disabled.", true},
     {"player.tuning_clear", "game.write", "Release this package's player tuning controls.", true},
@@ -222,6 +225,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (!FindOperation(name)) {
         return "unsupported host operation";
     }
+    if (name == "player.combat_state" || name == "player.invincible") return ValidatePlayerCombat(name, a);
     if (name == "player.tuning_state") return a.is_object() && a.empty() ? "" : "player.tuning_state takes no arguments";
     if (PlayerTuning::IsWrite(name)) return PlayerTuning::Validate(name, a);
     if (name.starts_with("shops.")) {

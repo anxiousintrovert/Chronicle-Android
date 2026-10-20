@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 86 implemented operations, native plugins and author
+a real host-call boundary, 88 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -15,7 +15,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
-| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
+| Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; item use; weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
@@ -1012,3 +1012,37 @@ matrix still matches pinned upstream for empty and disabled mods. No PS2 files
 changed. These checks do not prove rendered minimap output, every live movement
 or damage scenario, custom motion behavior, other platforms, or full parity.
 Those validation gaps and all other unfinished coverage remain open.
+
+## One-shot player invincibility and combat readback (2026-10-19)
+
+The pinned reference's `player.invincible` is now implemented with exactly one
+integer `frames` argument, 1–600. `player.combat_state` adds detached readiness,
+character, native invincibility/recoil counters and action-gauge inspection. This
+brings the catalog to 88 implemented operations. Unavailable dungeon resources,
+mismatched native/save player state, invalid party indices and town/title context
+reject the write; unavailable reads omit stale combat values and explain why.
+
+Requests stage beside save/entity/shop/tuning writes. Commit only extends the
+native timer, preserving a longer existing value and combining multiple requests
+by maximum duration. Failed transactions and invalid entity handles publish no
+timer or wallet change. A staged transaction does not mutate the engine, and its
+commit consumes the pending request rather than allowing accidental replay.
+This is not an owned persistent effect: once granted, the native timer expires
+normally even after the calling package stops. It does not override every direct
+HP mutation, rewind resources, allocate a frame hook or change retail capacities.
+
+Six Clang tests cover schema/permission boundaries, caller identity, detached
+read/empty-write byte and RNG preservation, unavailable resources/scenes, native
+save identity, monotonic timer extension, mixed-domain rollback, detached staging
+and one-shot commit. A fresh PAL run uses an existing shared-manager action and
+Lua host calls to grant 600 frames, request one frame without shortening it,
+observe 60 ticks of native countdown, stop the runtime and verify continued
+countdown afterward. The CLI exposes both operations. Full native enemy-hit
+immunity scenarios and cross-platform validation remain open; this does not
+complete the other coverage-ledger requirements.
+
+Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
+754 registered, 737 passed, 16 skipped and one disabled, with no failures. The
+optional PAL host-call/countdown scenario passed separately. All 18 Python
+checks passed, and all 3,840 empty/disabled generator cases match pinned upstream.
+No PS2 files changed.

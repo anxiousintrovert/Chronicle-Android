@@ -23,6 +23,7 @@
 #include "party.hpp"
 #include "town.hpp"
 #include "player_tuning_native.hpp"
+#include "player_combat.hpp"
 #include "snd.hpp"
 extern s32 mode;
 extern s32 gameTask;
@@ -223,6 +224,7 @@ void TickGame() {
             result["writable"] = ShopWritesReady();
             return result;
         }
+        if (operation == "player.combat_state") return ReadPlayerCombat();
         if (operation == "player.tuning_state") return OwnedPlayerTuning().State();
         if (operation == "party.town_state") return ReadTownSelection();
         if (operation == "party.switch_state") return ReadPartySwitchState();
