@@ -1312,3 +1312,39 @@ Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
 The PAL explicit-entry test passed separately. All 18 Python checks and 3,840
 empty/disabled generator comparisons passed. CLI discovery lists both new
 operations. PS2 files remain unchanged. Other platforms remain unverified.
+
+
+### Back-floor native-path audit
+
+Implementation remains open. The pinned MoonMod Chronicle adapter exposes
+`dungeons.back_floor_get` and `dungeons.back_floor_enter`. Entry sets a pending
+flag and dungeon ID, then waits until GAME_TASK_SCRIPT_RUN to assign
+BT_REQUEST_URA_DUNGEON. It does not immediately travel from ordinary play. Its
+inspection returns NowDngMap->gate_key_no and item count; that field is documented
+as the floor exit gate key, so it must not be presented as proof that a back-floor
+transport requirement has been met.
+
+Native source establishes these integration requirements:
+
+- port/src/dun/movechara.cpp consumes BT_REQUEST_URA_DUNGEON in the script-running
+  branch and advances to GAME_TASK_URA_SWAP. The swap loads monster resources,
+  changes map/event/random-item pointers and lighting, then returns to
+  GAME_TASK_SCRIPT_RUN. It depends on an existing native script continuation.
+- ps2/src/btsysscript.cpp `_SET_URA_DUNGEON` merely publishes that request.
+  Directly switching BtUraDongeon or gameTask from ordinary play would omit the
+  script context and is not an equivalent transition implementation.
+- ps2/src/dun/gameloop.cpp generates MainDungeonMap and UraDungeonMap together in
+  the normal procedural floor path. BtLoadMonstor indexes the chosen front/back
+  enemy-layout table with cur_floor. A non-null dungeon table alone does not
+  establish that a particular event/boss floor has a usable back-floor map.
+- A pending request must not overwrite an unrelated native request. The native
+  swap toggles sides, so replay after arrival could send the player back.
+
+The adapter still needs an owner/epoch/save/dungeon/floor-bound request with
+explicit pending/cancellation results, native script-boundary arbitration, and
+validation of the current map/resources. An empty queue must bypass these checks.
+A retail shared-manager scenario must demonstrate the complete native sequence,
+including position and return to play, unchanged inventory when bypassing the
+transport requirement, and no replay. Cancellation, existing native requests,
+unsupported floors and no-mod paths need separate tests. This audit is source
+evidence only; it adds no API or engine hook and does not close the coverage gap.
