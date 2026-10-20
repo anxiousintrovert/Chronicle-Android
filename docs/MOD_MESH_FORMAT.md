@@ -1,12 +1,11 @@
-# Mesh authoring format (preparation stage)
+# Mesh replacement and authoring
 
-`tools/chronicle_mesh.py` prepares triangle geometry for the forthcoming mesh
-replacement path. **The game validates this format but cannot activate mesh packages yet.** Do not add
-it to a manifest's `files` mapping: that mapping still replaces compatible native
-assets. No new mesh runtime capability is advertised by this tool, and it does
-not install packages, edit game assets, enable mods, launch the game, or fetch
-external resources. Runtime attachment is integrated for internal catalogs; public package activation
-and retail replacement evidence remain gated. Staged declarations are available below.
+Enabled packages can replace existing native model geometry through
+`assets.mesh_replace.v1`. Declare replacements in `meshes`, not the manifest
+`files` mapping. Packages are disabled by default; enable them through the shared
+Options > Mods menu and restart. Mesh-only packages need no Lua or native plugin.
+`tools/chronicle_mesh.py` prepares geometry without installing or enabling mods,
+changing game assets, launching the game, or fetching external resources.
 
 ## Commands
 
@@ -43,7 +42,7 @@ A UTF-8 JSON object contains exactly three fields:
 Each vertex is `[x,y,z,nx,ny,nz,u,v]` in source model coordinates. Each triangle is
 `[strip,a,b,c]`, where the three zero-based vertex indices retain source winding.
 `strip` is a native material-strip selector from 0 to 255, not an item, weapon,
-character, model, or texture registry ID. An eventual runtime adapter must check
+character, model, or texture registry ID. The runtime adapter checks
 that the chosen source visual actually has every referenced strip; this offline
 tool cannot prove that match. The format does not prescribe contributor-owned
 custom content IDs or skeleton registries.
@@ -63,12 +62,11 @@ Limits:
 The native `DecodeMeshAsset` decoder enforces the same limits before returning
 detached float32 geometry. It rejects nested objects and excessive JSON nesting,
 and performs no graphics allocation, native-state write, RNG call or file read.
-Native visual construction now connects through the internal package bridge;
-public package activation remains gated pending retail validation.
+Native visual construction connects through the package bridge described below.
 
 The format stores geometry only. Texture pixels, external material definitions,
 vertex colors, skin weights, animation, attachments and transforms are not
-imported. GLB/DAE and runtime replacement remain follow-up work. Importing an OBJ
+imported. GLB/DAE import remains follow-up work. Importing an OBJ
 successfully does not establish that it fits a particular retail skeleton,
 material layout, allocation budget or model.
 
@@ -90,7 +88,7 @@ Object/group names, smoothing declarations and material-library declarations are
 ignored. Material libraries are never opened, so absolute/relative paths in an
 `mtllib` line cannot make the converter read another file. This is deliberate:
 use explicit normals for smooth surfaces and numbered material strips for the
-future native material mapping.
+native material mapping.
 
 
 ## Native skin-binding preparation
@@ -109,12 +107,12 @@ Pose reset and bone application allocate no memory. Invalid/nonfinite weights,
 matrices or overflowing results reject an influence without partially changing
 its affected vertices. Preparation does not write source points or consume RNG.
 
-This is an internal adapter, not an exposed package feature yet. Native
+The runtime uses this adapter for enabled mesh declarations. Native
 `MotionProc2` notifications now drive attached bindings, and visual rebuild,
 arena retirement and transient sweeping detach them. Bindings reject changed rest
 pointers/counts and invalid influences until explicitly rebuilt. Registration is
 bounded to 256 visuals and one million source/replacement points each. Native morph/color/material updates and GPU publication are integrated for
-internal bindings. Package activation and retail replacement-rendering tests remain required before mesh replacement is advertised.
+enabled package bindings.
 No custom skeleton, motion, item, weapon or cutscene registry is introduced.
 
 
@@ -135,11 +133,10 @@ Material refresh preserves replacement index ranges. It validates all updates
 before publishing and allocates nothing, so malformed updates cannot leave a
 partially refreshed visual.
 
-These helpers feed native construction through the internal package bridge.
-The public package activation gate remains in place. Internal registration can now upload a separate GPU
-mesh, and native draw/remake paths resolve and refresh it while retaining the
-original as fallback. Native animation and synthetic GPU tests are not retail
-replacement-model validation. Package activation and retail visual evidence are still required. Replacement-aware frame bounds are now integrated as described below.
+These helpers feed native construction through the package bridge. Registration
+uploads a separate GPU mesh, and native draw/remake paths resolve and refresh it
+while retaining the original as fallback. Replacement-aware frame bounds are
+integrated as described below.
 
 
 ## Internal GPU publication
@@ -162,8 +159,8 @@ and updates in place.
 Limits are 256 replacement visuals, one million replacement vertices, one million
 flattened source points, and three million triangle indices across committed
 replacements, in addition to the per-asset and skin-registry limits. These bound
-framework resources; they do not change native array capacities. This internal
-registration API is not yet callable by packages or a new public host operation.
+framework resources; they do not change native array capacities. Packages use declarative targets rather than calling the internal registration
+API directly; no new public host operation is needed.
 
 
 ## Replacement-aware culling
@@ -183,18 +180,11 @@ behavior is unchanged. Failed replacements cease contributing bounds; native
 fallback remains available. With no registered replacement, the helper returns
 before querying the visual's model identity or calculating bounds.
 
-This does not enable mesh packages. Target discovery and public activation remain
-pending; staged declarations and conflict diagnostics are described below.
+## Package declarations
 
-
-## Staged package declarations
-
-Mesh package activation is **not yet available**. Authors can validate, pack,
-install and inspect conflicts for this declaration now, but enabling a package
-with meshes blocks the whole package with an explicit diagnostic. Its scripts,
-plugins and other overrides do not become active. Packages remain disabled by
-default. Native construction attachment is integrated; this staging gate will be removed
-only after retail validation; no mesh capability is advertised yet.
+Packages remain disabled by default. Enable a validated package in Options > Mods
+and restart to load its geometry. Add `assets.mesh_replace.v1` to
+`requires_capabilities` so older hosts reject an unsupported package explicitly.
 
 Add an optional `meshes` array to the normal `mod.json`:
 
@@ -228,12 +218,13 @@ the target and other owner's ID in their shared mod-manager diagnostics. Every
 collision is reported, including three-way collisions; blocked dependencies are
 propagated. Distinct exact vertex counts do not conflict. Disabled packages do
 not claim targets. This is a conservative declaration check; native target
-resolution and ambiguity checks still need runtime integration.
+resolution additionally rejects ambiguous matches across different textures on
+the same model, retains the native visual, and reports the owners involved.
 
 `chronicle_mod.py validate`, `pack`, `install` and `check-set` understand mesh
 files. Packing includes only declared files and existing permitted metadata;
-installation does not enable a package. `check-set` also reports the temporary
-activation gate, so an offline-valid draft cannot be mistaken for a runnable mod.
+installation does not enable a package. `check-set` checks declared conflicts;
+offline validation cannot establish a match to an actual model or skeleton.
 
 
 ## Internal decoded catalog
@@ -241,7 +232,7 @@ activation gate, so an offline-valid draft cannot be mistaken for a runnable mod
 `MeshCatalog` stages an immutable geometry snapshot per active owner. Loading
 rechecks path containment and file size, decodes all declarations and publishes
 the owner snapshot only after every asset succeeds. Failed loads preserve the
-previous snapshot; startup integration must retire failed owners before native
+previous snapshot; startup integration retires failed owners before native
 construction. Inactive packages perform no filesystem work. Removing an owner's
 last declaration removes its cached definitions on successful reload.
 
@@ -262,16 +253,14 @@ Selected definitions are shared immutable snapshots. Retiring an owner or cleari
 the catalog removes it from future selection without invalidating a selection
 already in use. Selection performs no filesystem access, geometry copying or GPU
 allocation. The catalog does not itself attach visuals. The package bridge below handles
-attachment; public activation and retail evidence remain pending.
+attachment.
 
 
 ## Native package bridge and diagnostics
 
 The runtime owns a `MeshPackages` catalog. Eligible packages are decoded at
 startup, before callbacks, and mesh-only owners can participate without Lua or a
-native plugin. The manager's temporary activation gate still prevents ordinary
-mesh packages from entering that startup load order. Internal native fixtures
-exercise the complete bridge without claiming retail package readiness.
+native plugin. Packages that fail startup are retired before native construction.
 
 Native MDT construction captures the flattened-to-native vertex correspondence
 only while a catalog is active. After normal visual construction/upload, the
@@ -292,8 +281,8 @@ messages are deduplicated and bounded to 64, with at most 64 live refresh messag
 Native fixture tests cover construction, unchanged MDT bytes, cached geometry
 after file removal, remake/morph updates, ambiguous two-texture models, material
 mismatch, refresh failure, and an actual Lua callback failure retiring its mesh.
-Author target discovery/export is available below. Actual retail replacement
-model/animation screenshots remain open.
+Author target discovery/export is available below. Retail validation scope is
+described at the end of this document.
 
 
 ## Discovering real model targets
@@ -347,5 +336,22 @@ Replace `HASH` with a listed snapshot name. Outputs must be new files outside PS
 folders. OBJ uses `usemtl strip0` through `strip255`; preserve those native strip
 assignments when editing. OBJ import can deduplicate identical flattened vertices,
 so use the snapshot's `native_vertices` for the manifest target, not the exported
-OBJ vertex count. Export and import never install or enable a package. Public mesh
-activation remains gated pending retail replacement/animation validation.
+OBJ vertex count. Export and import never install or enable a package.
+
+
+## Validation and limitations
+
+The repeatable `chronicle_mod_smoke.py --suite meshes` PAL scenario exercises
+Toan's 403-vertex skinned body across both render buffers with doubled X positions.
+It verifies changing animation, replacement selection, native position and RNG
+preservation during rebuild, and cleanup/native restoration after disabling via
+the shared manager lifecycle. Separate ordinary executable starts validate the
+same package disabled and enabled. These are Windows llvm-mingw Clang/Vulkan
+checks, not proof for every model or platform.
+
+Replacements inherit existing skeletons, materials and animation. New skeletons,
+animations, character registries, GLB/DAE imports and contributor-owned custom
+item/weapon/cutscene frameworks are outside this feature. Discovery exports the
+currently built geometry; inspect its pose before using it as a rest-shape authoring
+reference. A malformed or unsupported runtime match falls back to native rendering
+with a diagnostic in the shared manager.

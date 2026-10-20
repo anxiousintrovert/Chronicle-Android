@@ -341,15 +341,15 @@ TEST_F(ModManager, AudioDeclarationsAreContainedBoundedAndDisabledByDefault) {
     EXPECT_FALSE(manager.Packages()[0].problems.empty());
 }
 
-TEST_F(ModManager, MeshDeclarationsValidateGeometryAndStayDisabledOrExplicitlyUnavailable) {
+TEST_F(ModManager, MeshDeclarationsValidateGeometryAndActivateOnlyWhenExplicitlyEnabled) {
     auto manifest=Manifest("test.mesh");manifest["meshes"]={{{"texture","HERO.TM2"},{"native_vertices",3},{"source","hero.mesh.json"}}};
     Add("mesh",manifest);
     Write(root/"mods/mesh/hero.mesh.json",R"({"schema_version":1,"vertices":[[0,0,0,0,0,1,0,0],[1,0,0,0,0,1,1,0],[0,1,0,0,0,1,0,1]],"triangles":[[0,0,1,2]]})");
     manager.Scan({root/"mods"},base);
     ASSERT_EQ(Find("test.mesh").meshes.size(),1u);EXPECT_EQ(Find("test.mesh").meshes[0].texture,"hero.tm2");
     EXPECT_FALSE(Find("test.mesh").enabled);EXPECT_TRUE(Find("test.mesh").problems.empty());
-    Scan();EXPECT_FALSE(Find("test.mesh").Active());EXPECT_TRUE(manager.LoadOrder().empty());
-    EXPECT_NE(manager.Report().find("activation is not yet available"),std::string::npos);
+    Scan();EXPECT_TRUE(Find("test.mesh").Active());EXPECT_EQ(manager.LoadOrder().size(),1u);
+    EXPECT_TRUE(mods::Supports("assets.mesh_replace.v1"));
     Write(root/"mods/mesh/hero.mesh.json","{}");Scan();EXPECT_FALSE(Find("test.mesh").problems.empty());
 }
 TEST_F(ModManager, MeshConflictsIncludeWildcardCountsEveryOwnerAndBlockedDependents) {
@@ -365,6 +365,7 @@ TEST_F(ModManager, MeshConflictsIncludeWildcardCountsEveryOwnerAndBlockedDepende
     EXPECT_TRUE(has("b","also replaced by 'a'"));EXPECT_TRUE(has("c","also replaced by 'a'"));
     EXPECT_FALSE(has("b","also replaced by 'c'"));EXPECT_TRUE(has("dependent","blocked"));
     enabled["a"]=false;Scan();EXPECT_FALSE(has("b","also replaced"));EXPECT_FALSE(has("c","also replaced"));
+    EXPECT_TRUE(Find("b").Active());EXPECT_TRUE(Find("c").Active());EXPECT_TRUE(Find("dependent").Active());
 }
 TEST_F(ModManager, MeshDeclarationsRejectAmbiguityUnsafePathsCountsAndUnknownFields) {
     auto manifest=Manifest("test.mesh");const Json good={{"texture","hero"},{"source","mesh.json"}};

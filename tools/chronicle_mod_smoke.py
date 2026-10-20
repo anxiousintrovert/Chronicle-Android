@@ -13,6 +13,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {
+    'meshes': ['ModMeshRetail.SharedManagerReplacementAnimatesAndDisablesWithoutNativeMutation'],
     'combat': ['CombatRulesThroughSharedActionRestoreBeforeBackTransition'],
     'actors': ['ActorModelsThroughSharedActionPreservesBackTransition', 'ActorSpawnDespawnThroughSharedActionPreservesBackTransition', 'ActorOwnerFailureCleansUpBeforeBackTransition', 'ActorLifetimeEndsAtNativeBackFloorReset', 'ActorSpawnTuningPreservesLoadedTemplateAndBackTransition'],
     'audio': ['RetailSoundThroughSharedActionPreservesBackTransition', 'BgmStopThroughSharedActionPreservesBackTransition', 'BgmPlayThroughSharedActionPreservesBackTransition', 'BgmLoadThroughSharedActionPreservesBackTransition', 'MusicReplacementThroughSharedActionPreservesBackTransition'],
@@ -34,6 +35,7 @@ SUITES = {
 }
 
 SCENARIO_PROFILES = {
+    'ModMeshRetail.SharedManagerReplacementAnimatesAndDisablesWithoutNativeMutation': 'DC_MESH_AUDIT',
     'ModGeoramaRetail.SharedActionsUpdateRequestCacheAndSurviveNativeSave': 'DC_GEORAMA_REQUEST_AUDIT',
     'ModGeoramaRetail.SharedActionsPlaceRemoveAndPersistNativeTown': 'DC_GEORAMA_PLACEMENT_AUDIT',
 }

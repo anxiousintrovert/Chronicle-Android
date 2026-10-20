@@ -378,7 +378,7 @@ void Problem(Package &package, const std::string &message) {
 } // namespace
 
 bool Supports(std::string_view capability) {
-    return capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
+    return capability == "assets.mesh_replace.v1" || capability == "combat.rules.v1" || capability == "entities.spawn_tuning.v1" || capability == "assets.replace.v1" || capability == "scripts.lua.v1" ||
            capability == "quests.progress.v1" || capability == "save.metadata.v1" ||
            capability == "economy.write.v1" || capability == "events.map.v1" || capability == "events.tick.v1" || capability == "player.read.v1" ||
            capability == "party.read.v1" || capability == "inventory.read.v1" ||
@@ -489,11 +489,6 @@ void Manager::Scan(const std::vector<fs::path> &roots, const FileIndex &base, co
             }
         }
     }
-
-    // Staged authoring support; never silently activate a package whose mesh
-    // declarations cannot yet be attached during native visual construction.
-    for (auto &package : packages_) if (package.enabled && !package.meshes.empty())
-        Problem(package, "Mesh package activation is not yet available in this build");
 
     // DFS identifies the actual cycle; dependents receive dependency diagnostics below.
     std::vector<int>                 visited(packages_.size(), 0);

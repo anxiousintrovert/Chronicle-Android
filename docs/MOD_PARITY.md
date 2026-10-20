@@ -3842,3 +3842,33 @@ PS2 and Kazarov diffs remain empty.
 Author target discovery is now usable. Public mesh activation remains blocked
 until retail replacement-model/animation rendering is validated; the discovery
 run is not replacement rendering evidence. Remaining coverage is still open.
+
+
+## Enabled mesh packages and retail animation validation (2026-10-20)
+
+Removed the temporary mesh activation gate and advertised assets.mesh_replace.v1
+in the runtime and author tools. Packages remain disabled by default and use the
+shared manager enable/restart lifecycle. No Lua or native plugin is required.
+Existing native models retain their original visuals for fallback and inherit
+native animation/materials; no custom content registries are introduced.
+
+The repeatable PAL meshes suite passed on Toan's 403-vertex body across two
+render buffers, with doubled X coordinates. It verified changing animation,
+maximum replacement/native vertex delta 5.5449, unchanged native position bytes
+and RNG during rebuilds, and zero skin bindings after disable. The scenario
+completed at frame 6674. Separate ordinary executable starts exited successfully
+with the package disabled and enabled; reports and screenshots confirmed the
+respective native and visibly widened body. Test packages/data remain local.
+
+Fixed Windows snapshot publication at long evidence paths in Chronicle without
+modifying upstream Kazarov. Added a long-path publication regression test and
+updated author documentation to describe current activation and limitations.
+Clang 23.1.2 builds passed; final regression: 974 passed, 105 skipped, one disabled
+benchmark. All 59 Python checks passed. Dormant PAL combat/shared-manager replay
+passed. PS2 baseline and Kazarov diffs are empty.
+
+Evidence: issue-evidence/framework-expansion-20261019/mesh-smoke-10b1353a7f6c43159bf0a7d097d3fc4b
+and mesh-startup-bc8e92a4aefc4a6297b3fc0f421e3b8d (local only).
+This closes existing-model mesh activation, not full MoonMod coverage. GLB/DAE,
+new model/skeleton/animation registration and broader API work remain open;
+other models and platforms still require retail validation.

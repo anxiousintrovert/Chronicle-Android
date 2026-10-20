@@ -18,6 +18,18 @@ void CheckPath(const std::filesystem::path &path) {
         Require(name!="ps2","mesh discovery may not write within a PS2 directory");
     }
 }
+// Keep upstream atomic publication while allowing its temporary-file suffix on
+// Windows paths whose final snapshot already approaches MAX_PATH.
+std::filesystem::path PublicationPath(std::filesystem::path path) {
+#ifdef _WIN32
+    const auto native=path.make_preferred().native();
+    if(native.starts_with(LR"(\\?\)"))return path;
+    if(native.starts_with(LR"(\\)"))return std::filesystem::path(std::wstring(LR"(\\?\UNC\)")+native.substr(2));
+    return std::filesystem::path(std::wstring(LR"(\\?\)")+native);
+#else
+    return path;
+#endif
+}
 Json Snapshot(const Draw3DVisual &visual,unsigned native_vertices) {
     Require(!visual.immediate&&native_vertices&&native_vertices<=100000,"unsupported native model vertex count or immediate visual");
     Require(visual.vertices.size()>=3&&visual.vertices.size()<=100000&&visual.strips.size()<=256&&visual.indices.size()<=600000,"unsupported native mesh size");
@@ -57,7 +69,7 @@ bool MeshDiscovery::Start(const std::filesystem::path &directory,std::string &er
         Require(!active_,"mesh discovery is already active");Require(!directory.empty(),"mesh discovery needs a new output directory");
         CheckPath(directory);const auto absolute=std::filesystem::absolute(directory).lexically_normal();CheckPath(absolute);
         const auto root=std::filesystem::canonical(absolute.parent_path())/absolute.filename();CheckPath(root);
-        Require(FilesCreateDirectory(root)==FilesResult::kWritten,"mesh discovery requires a new directory under an existing parent");
+        Require(FilesCreateDirectory(PublicationPath(root))==FilesResult::kWritten,"mesh discovery requires a new directory under an existing parent");
         root_=root;seen_.clear();errors_.clear();bytes_=0;active_=true;return true;
     }catch(const std::exception &failure){error=failure.what();return false;}
 }
@@ -69,7 +81,7 @@ void MeshDiscovery::Observe(const Draw3DVisual &visual,unsigned native_vertices)
         Require(text.size()<=16*1024*1024,"mesh discovery snapshot exceeds 16 MiB");
         const auto digest=Sha256(text);if(seen_.contains(digest))return;
         if(seen_.size()>=256||text.size()>64*1024*1024-bytes_) {active_=false;throw std::runtime_error("mesh discovery stopped at its 256-model/64-MiB output limit");}
-        Require(FilesWrite(root_/(digest+".model.json"),text.data(),text.size(),false)==FilesResult::kWritten,"cannot exclusively publish mesh snapshot");
+        Require(FilesWrite(PublicationPath(root_/(digest+".model.json")),text.data(),text.size(),false)==FilesResult::kWritten,"cannot exclusively publish mesh snapshot");
         seen_.insert(digest);bytes_+=text.size();
     }catch(const std::exception &failure) {
         if(errors_.size()<64&&std::ranges::find(errors_,failure.what())==errors_.end()) {

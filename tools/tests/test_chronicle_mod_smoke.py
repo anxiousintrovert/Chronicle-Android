@@ -58,6 +58,15 @@ class RetailSmoke(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'new directory'):
             self.invoke()
 
+    def test_mesh_suite_uses_its_own_isolated_profile(self):
+        with patch.object(smoke.subprocess, 'run', side_effect=self.fake_run) as run, contextlib.redirect_stdout(io.StringIO()):
+            report = smoke.run_smoke(self.build, self.data, self.output, ['meshes'])
+        self.assertTrue(report['passed'])
+        self.assertEqual(len(run.call_args_list), 1)
+        env = run.call_args.kwargs['env']
+        self.assertIn('DC_MESH_AUDIT', env)
+        self.assertNotIn('DC_BACK_FLOOR_AUDIT', env)
+
     def test_skip_missing_empty_and_wrong_test_never_pass(self):
         xml = self.root / 'result.xml'
         for content, expected in [('<testsuites/>', 'failed'),

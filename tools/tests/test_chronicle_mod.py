@@ -263,7 +263,7 @@ class AuthorTools(unittest.TestCase):
         (folder / 'hero.mesh.json').write_text(json.dumps(geometry))
         return folder
 
-    def test_mesh_pack_install_keeps_declared_geometry_and_reports_unavailable_activation(self):
+    def test_mesh_pack_install_keeps_declared_geometry_and_checks_selected_targets(self):
         folder = self.mesh_package('test.mesh', [{'texture': 'HERO', 'native_vertices': 3, 'source': 'hero.mesh.json'}])
         self.assertEqual(len(tool.validate(folder)['meshes']), 1)
         archive = self.root / 'mesh.zip'
@@ -274,7 +274,8 @@ class AuthorTools(unittest.TestCase):
         tool.install(archive, destination)
         self.assertTrue((destination / 'test.mesh/hero.mesh.json').is_file())
         report = tool.check_set(destination, ['test.mesh'])
-        self.assertTrue(any('activation is not yet available' in p for p in report['problems']['test.mesh']))
+        self.assertEqual(report['problems']['test.mesh'], [])
+        self.assertIn('assets.mesh_replace.v1', tool.CAPABILITIES)
 
     def test_mesh_conflicts_match_case_and_overlapping_counts_only(self):
         self.mesh_package('test.any', [{'texture': 'HERO', 'source': 'hero.mesh.json'}])

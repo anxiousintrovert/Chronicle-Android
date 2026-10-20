@@ -30,7 +30,7 @@ schema 1; put release notes and attribution in a separate README.
 | `quests` | No | Array, `[]` | Up to 64 quest definitions, described below |
 | `resources` | No | Object, `{}` | Up to 16 resource ID → contained relative file mappings; each file at most 64 KiB |
 | `audio` | No | Object, `{}` | Up to 16 local IDs (`[a-z][a-z0-9._-]*`, at most 64 bytes) mapped to contained WAV/FLAC/Ogg Vorbis paths; nonempty, at most 32 MiB each and 64 MiB encoded per package; see audio support below |
-| `meshes` | No | Array, `[]` | Staged authoring only: up to 16 validated existing-model replacements, 16 MiB each/64 MiB total. See [mesh declarations](MOD_MESH_FORMAT.md#staged-package-declarations). Packages with meshes cannot activate in this build. |
+| `meshes` | No | Array, `[]` | Up to 16 existing-model replacements, 16 MiB each/64 MiB total. Requires explicit enable and restart. See [mesh declarations](MOD_MESH_FORMAT.md#package-declarations). |
 | `native_library` | No | Relative path | Contained `.dll`, `.so`, or `.dylib`, 1 byte–64 MiB; requires `native.extension` and separate local trust |
 
 Do not invent fields such as `load_order`, `priority`, `entrypoint`, `rewards`,
@@ -106,6 +106,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | Capability | Host service |
 |---|---|
 | `assets.replace.v1` | Existing same-size game asset replacement |
+| `assets.mesh_replace.v1` | Declarative existing-model geometry replacement with inherited native animation/materials |
 | `scripts.lua.v1` | Isolated Lua script runtime |
 | `quests.progress.v1` | Declared objectives and owned progress |
 | `save.metadata.v1` | Namespaced state attached to native saves |

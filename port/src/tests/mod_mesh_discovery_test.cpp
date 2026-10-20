@@ -45,6 +45,17 @@ TEST_F(ModMeshDiscovery, InvalidGeometryIsReportedOnceAndDoesNotPublishPartialSn
     discovery.Observe(visual,3);discovery.Observe(visual,3);EXPECT_EQ(discovery.Errors().size(),1u);EXPECT_TRUE(fs::is_empty(root/"export"));
     visual=Visual();discovery.Observe(visual,3);EXPECT_EQ(discovery.Count(),1u);
 }
+TEST_F(ModMeshDiscovery, AtomicPublicationSupportsLongSnapshotPaths) {
+    const auto parent=root/std::string(125,'a');fs::create_directory(parent);
+    ASSERT_TRUE(discovery.Start(parent/"export",error))<<error;
+    discovery.Observe(Visual(),3);EXPECT_TRUE(discovery.Errors().empty());EXPECT_EQ(discovery.Count(),1u);
+    const auto files=Files(parent/"export");ASSERT_EQ(files.size(),1u);
+    auto path=files[0];
+#ifdef _WIN32
+    path=fs::path(std::wstring(LR"(\\?\)")+path.make_preferred().native());
+#endif
+    std::ifstream input(path);Json snapshot;ASSERT_NO_THROW(input>>snapshot);EXPECT_EQ(snapshot["native_vertices"],3);
+}
 TEST_F(ModMeshDiscovery, OutputBudgetStopsCaptureAndNeverOverwritesExistingSnapshots) {
     ASSERT_TRUE(discovery.Start(root/"export",error));auto visual=Visual();
     for(unsigned i=0;i<257;++i) {for(auto &v:visual.vertices)v.position[0]+=1;discovery.Observe(visual,3);}
