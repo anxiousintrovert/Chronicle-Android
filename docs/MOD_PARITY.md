@@ -1530,3 +1530,43 @@ semantic coordinates; do not drop extra occupied cells or room/link differences
 to make the comparison pass. This audit changes no engine behavior and does not
 claim that expanded generation or its no-mod invariants have been validated.
 
+### Checked native overlay tooling
+
+`tools/native_overlay.py` provides the build-copy foundation for the expanded
+layout work. It mirrors the complete native `include/` and `src/` trees into
+a separate output tree, preserving unpatched bytes. Mirroring all headers lets
+transitive quoted includes resolve to the same generated definitions. This tool
+is not yet wired into CMake and does not itself expand any engine capacity or
+publish an additional host operation.
+
+Usage from the repository root:
+
+```sh
+python tools/native_overlay.py --source-root ps2 --output-root build/native-overlay --manifest path/to/overlay.json
+```
+
+The manifest has exactly `schema_version: 1` and a `files` object. Each key is a
+canonical `include/...` or `src/...` path; each entry contains `sha256` and a
+nonempty `replacements` array. Each replacement specifies nonempty `old`, `new`
+and a positive exact `count`, applied in order. Hashes cover UTF-8 text with CRLF
+normalized to LF, so checkout line endings do not invalidate the pin. An empty
+`files` object produces an identity mirror. `--check` validates without writing.
+
+All hashes, replacement counts and destination paths are checked before output
+changes begin. Source/output overlap, PS2 output directories, path traversal,
+symlinks/junctions and unmanaged-file overwrites reject. An ownership index
+tracks generated files so removed inputs cannot leave stale managed headers;
+unrelated files are preserved. Unchanged copies keep their timestamps. Output
+files are replaced individually; the tool is not a whole-tree atomic deployment
+and must finish successfully before compilation starts. Upstream hash mismatches
+require reviewing the affected transformation before updating the pin.
+
+Validation: nine focused Python cases cover identity copies, patching without
+input writes, line-ending normalization, stale pins/counts, dry runs, protected
+paths, stale/unmanaged outputs, invalid ownership indexes and schemas, and
+simulated link rejection. All 27 Python checks pass. A real 322-file identity
+mirror compiled its dungeon/monster headers with llvm-mingw Clang 23.1.2 and
+asserted retail room/cell capacities. No original PS2 file changed. This proves
+the copy/check mechanism and header compilation, not expanded-layout runtime
+behavior or complete build integration; those remain the next implementation work.
+
