@@ -4234,3 +4234,14 @@ This does not implement save branching, migration execution or semantic/native
 save validation. Tests cover corruption in native and metadata bytes, malformed
 JSON, duplicates, excessive nesting, size limits and native image-boundary drift.
 All 79 Python author-tool tests passed. No engine changes were needed.
+
+## Save requirement availability comparison (2026-10-20)
+
+`inspect-save --mods` compares required IDs/versions with validated installed
+packages. It distinguishes exact versions, declared direct migrations, version
+mismatches, duplicate IDs and missing/invalid packages. Shared package scanning
+keeps offline conflict checks and save inspection aligned. It neither executes
+migrations nor declares a save loadable, and ignores retained-only owners when
+checking requirements. All 80 Python tests pass, including unchanged input files
+and rejection of inferred multi-step migration availability. Engine behavior,
+shared menus, PS2 files and the upstream renderer remain unchanged.

@@ -327,8 +327,8 @@ def mesh_overlap(left, right):
         left['native_vertices'] == right['native_vertices'])
 
 
-def check_set(root, enabled, data=None):
-    """Offline plan only. No profile writes, native loading, Lua or game execution."""
+def scan_packages(root, data=None):
+    """Read and validate installed manifests without activating packages."""
     packages, errors = {}, []
     for folder in sorted(Path(root).iterdir()):
         if not folder.is_dir() or folder.name.startswith('.'):
@@ -338,6 +338,12 @@ def check_set(root, enabled, data=None):
             packages.setdefault(mod['id'], []).append(mod)
         except (ValueError, OSError, UnicodeError) as error:
             errors.append(f"{folder.name}: {error}")
+    return packages, errors
+
+
+def check_set(root, enabled, data=None):
+    """Offline plan only. No profile writes, native loading, Lua or game execution."""
+    packages, errors = scan_packages(root, data)
     selected = set(enabled)
     problems = {key: [] for key in sorted(selected)}
     for key in sorted(selected):
@@ -568,6 +574,32 @@ def inspect_save(path):
                 required=dict(sorted(required.items())), state_owners=sorted(owners))
 
 
+def inspect_save_packages(path, mods_root):
+    report = inspect_save(path)
+    packages, errors = scan_packages(mods_root)
+    requirements = []
+    for owner, version in report['required'].items():
+        candidates = packages.get(owner, [])
+        item = {'id': owner, 'saved_version': version,
+                'installed_versions': sorted(mod['version'] for mod in candidates)}
+        if not candidates:
+            item['status'] = 'missing_or_invalid'
+        elif len(candidates) != 1:
+            item['status'] = 'duplicate_id'
+        elif candidates[0]['version'] == version:
+            item['status'] = 'exact_version'
+        elif any(rule['from'] == version for rule in candidates[0].get('save_migrations', [])):
+            item['status'] = 'direct_migration_declared'
+        else:
+            item['status'] = 'version_mismatch'
+        requirements.append(item)
+    report['installed_requirements'] = requirements
+    report['invalid_packages'] = errors
+    report['installation_scope'] = ('availability only; enablement, trust, dependency conflicts, '
+                                    'migration success and load compatibility are not established')
+    return report
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -585,6 +617,7 @@ def main(argv=None):
     installer.add_argument("--replace", action="store_true"); installer.add_argument("--data")
     saved = commands.add_parser("inspect-save", help="read save requirements without loading or modifying the save")
     saved.add_argument("save")
+    saved.add_argument("--mods", help="compare requirements with installed package versions without enabling them")
     commands.add_parser("capabilities")
     commands.add_parser("apis", help="print implemented host operations and permissions")
     doctor = commands.add_parser("check-set", help="preview selected package conflicts without enabling anything")
@@ -597,7 +630,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.command == "inspect-save":
-            print(json.dumps(inspect_save(args.save), indent=2))
+            print(json.dumps(inspect_save_packages(args.save, args.mods) if args.mods else inspect_save(args.save), indent=2))
             return 0
         if args.command == "compare-seeds":
             report = compare_seeds(args.baseline, args.candidates, args.allow_map_size_change)

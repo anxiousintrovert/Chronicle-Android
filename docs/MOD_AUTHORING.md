@@ -258,3 +258,17 @@ that its size matches the expected image size; the game must validate the native
 version/checksum. For every save, owned-state semantics, installed dependency
 compatibility and migration availability still require game validation. Keep a
 backup before changing the packages used by an existing save.
+
+Add `--mods path/to/mods` to compare a save's required versions with installed
+packages. `installed_requirements` reports `exact_version`,
+`direct_migration_declared`, `version_mismatch`, `duplicate_id`, or
+`missing_or_invalid`. Invalid package diagnostics are listed separately. A direct
+migration must explicitly name the saved version; the inspector does not infer
+multi-step migrations or execute them. Retained state owners not listed in the
+save's `required` map are not treated as required packages.
+
+This comparison reports availability, not permission to load: even an exact
+version may be disabled, conflict with another package, lack native trust or fail
+runtime validation. Inspection returns successfully when it can produce a report;
+its process exit code is not a save-compatibility gate. Check the report and use
+the game manager for the actual selected package set.

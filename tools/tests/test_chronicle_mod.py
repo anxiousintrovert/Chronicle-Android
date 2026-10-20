@@ -60,6 +60,31 @@ class AuthorTools(unittest.TestCase):
             {'path': ['test.root', 'test.provider'], 'reason': 'declared conflict: test.other'},
             {'path': ['test.root', 'test.provider', 'test.absent'], 'reason': 'missing or duplicate package ID'}])
 
+    def test_save_requirements_distinguish_installed_versions_and_declared_migrations(self):
+        import zlib
+        mods = self.root / 'mods'
+        for folder, owner, version, migrations in [
+                ('exact', 'test.exact', '1', []),
+                ('upgrade', 'test.upgrade', '2', [{'from': '1', 'defaults': {'new': True}}]),
+                ('mismatch', 'test.mismatch', '3', [{'from': '2'}]),
+                ('dup-a', 'test.duplicate', '1', []), ('dup-b', 'test.duplicate', '2', [])]:
+            directory=mods/folder;tool.create(owner,directory)
+            path=directory/'mod.json';manifest=json.loads(path.read_text())
+            manifest.update(version=version,save_migrations=migrations);path.write_text(json.dumps(manifest))
+        invalid=mods/'invalid';invalid.mkdir();(invalid/'mod.json').write_text('{}')
+        required={key:'1' for key in ['test.exact','test.upgrade','test.mismatch','test.duplicate','test.missing']}
+        metadata={'schema_version':1,'required':required,'mods':{key:{} for key in required}}
+        raw=bytes(tool.SAVE_NATIVE_SIZE)+tool.SAVE_MARKER+json.dumps(metadata).encode()
+        saved=self.root/'save.bin';saved.write_bytes(raw+zlib.crc32(raw).to_bytes(4,'little'))
+        before={path:path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        report=tool.inspect_save_packages(saved,mods)
+        self.assertEqual({item['id']:item['status'] for item in report['installed_requirements']}, {
+            'test.exact':'exact_version','test.upgrade':'direct_migration_declared',
+            'test.mismatch':'version_mismatch','test.duplicate':'duplicate_id','test.missing':'missing_or_invalid'})
+        self.assertEqual(len(report['invalid_packages']),1)
+        self.assertEqual(before,{path:path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
+        self.assertIn('not established',report['installation_scope'])
+
     def test_save_inspection_boundary_matches_native_writer(self):
         import re
         source = Path(tool.__file__).resolve().parents[1] / 'port/src/memorycardaccess.cpp'
