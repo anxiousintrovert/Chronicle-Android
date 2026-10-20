@@ -305,8 +305,12 @@ void TickGame() {
         }
         return ReadSave(*SaveData, world, operation, arguments); }, [playing](const std::vector<GameCommand> &commands, int money, std::string &error) {
         if (!playing || !SaveData) { error = "game state unavailable"; return false; }
-        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.bgm_stop" || command.operation == "audio.bgm_play"; })) {
+        if (std::ranges::any_of(commands, [](const auto &command) { return command.operation == "audio.bgm_stop" || command.operation == "audio.bgm_play" || command.operation == "audio.bgm_load"; })) {
             if (!ShopWritesReady() || NextMapNo >= 0 || existFlag) { error = "BGM control requires stable gameplay"; return false; }
+            if (commands.size() == 1 && commands[0].operation == "audio.bgm_load") {
+                if (load_snd_set >= 0 || load_voice_set >= 0) { error = "a native sound load is pending"; return false; }
+                return LoadRetailBgm(commands, money, error);
+            }
             if (commands.size() == 1 && commands[0].operation == "audio.bgm_play") return PlayRetailBgm(commands, money, error);
             return StopRetailBgm(commands, money, error);
         }

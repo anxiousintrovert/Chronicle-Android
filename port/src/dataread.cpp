@@ -199,6 +199,25 @@ bool DataFileAvailable(std::string_view path) {
     return !error && size > 0 && size <= INT32_MAX && std::ifstream(*file, std::ios::binary).good();
 }
 
+bool ReadDataFileOwned(std::string_view path, std::size_t limit, std::vector<std::uint8_t> &out, std::string &error) {
+    try {
+        if (!data_indexed) { error = "game data index unavailable"; return false; }
+        const auto *file = Lookup(path);
+        if (!file) { error = "game data file unavailable"; return false; }
+        std::error_code ec;
+        const auto size = fs::file_size(*file, ec);
+        if (ec || !size || size > limit || size > INT32_MAX) { error = "game data file exceeds read limit or is empty"; return false; }
+        std::ifstream stream(*file, std::ios::binary);
+        if (!stream) { error = "cannot open game data file"; return false; }
+        std::vector<std::uint8_t> staged(static_cast<std::size_t>(size));
+        stream.read(reinterpret_cast<char *>(staged.data()), static_cast<std::streamsize>(size));
+        if (stream.gcount() != static_cast<std::streamsize>(size) || stream.peek() != std::char_traits<char>::eof() || stream.bad()) {
+            error = "game data file changed during read"; return false;
+        }
+        out = std::move(staged); error.clear(); return true;
+    } catch (const std::exception &failure) { error = failure.what(); return false; }
+}
+
 PORT_OVERRIDE int LoadFile2(char *path, void *buffer, int *out_size, int mode) {
     if (out_size) {
         *out_size = 0;

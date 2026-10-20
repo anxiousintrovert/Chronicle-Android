@@ -332,3 +332,17 @@ TEST(DataRead, PathsDefaultToWorkingDirectory) {
     fs::current_path(fs::temp_directory_path());
     fs::remove_all(dir);
 }
+
+TEST(DataRead, OwnedPreflightIsBoundedAndPreservesOutputOnFailure) {
+    const auto dir = InstallStandardData("read_owned");
+    std::vector<std::uint8_t> owned{42};
+    std::string error;
+    EXPECT_FALSE(ReadDataFileOwned("dun/pack/maindat.pac", 4999, owned, error));
+    EXPECT_EQ(owned, (std::vector<std::uint8_t>{42}));
+    EXPECT_FALSE(ReadDataFileOwned("missing.bin", 5000, owned, error));
+    EXPECT_EQ(owned, (std::vector<std::uint8_t>{42}));
+    ASSERT_TRUE(ReadDataFileOwned("dun/pack/maindat.pac", 5000, owned, error)) << error;
+    EXPECT_EQ(owned, StandardDisc().files[0].data);
+    fs::remove_all(dir);
+    EXPECT_EQ(owned.size(), 5000);
+}

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include <cstdint>
+#include <string>
 #include <string_view>
 
 #include "common.h"
@@ -15,3 +17,7 @@ std::vector<s32> SupportedLanguages();
 
 // Read-only preflight against the already initialized data index and active replacements.
 bool DataFileAvailable(std::string_view path);
+
+// Explicit mod preflight: bounded owned bytes, no shared buffers or localization.
+// Requires an initialized data index and preserves out on failure.
+bool ReadDataFileOwned(std::string_view path, std::size_t limit, std::vector<std::uint8_t> &out, std::string &error);

@@ -189,3 +189,12 @@ std::string ValidateRetailBgmPlay(const nlohmann::json &a) {
     return {};
 }
 }
+
+namespace mods {
+std::string ValidateRetailBgmLoad(const nlohmann::json &a) {
+    if (!a.is_object() || a.size() != 1 || !a.contains("set") ||
+        !a["set"].is_number_integer() || a["set"].get<double>() < 0 || a["set"].get<double>() > 255)
+        return "audio.bgm_load requires only an integer set 0..255";
+    return {};
+}
+}

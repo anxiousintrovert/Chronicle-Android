@@ -13,6 +13,8 @@
 
 #include "expanded_effect_voices.hpp"
 #include "mods/retail_sound.hpp"
+#include "mods/music_pack.hpp"
+#include "dataread_port.hpp"
 #include "chronicle/monster_audio.hpp"
 #include "chronicle/monster_limits.hpp"
 #include "audio/mixer.hpp"
@@ -349,6 +351,70 @@ nlohmann::json ReadRetailBgm() {
     return {{"set", now_bgm_no}, {"playing", now_bgm_play == 1}, {"paused", now_bgm_play == 2},
             {"disabled", bgm_off != 0}, {"loading", load_bgm_no >= 0}, {"bank_loaded", bool(g_slot_banks[0])},
             {"tracks", std::move(tracks)}};
+}
+bool LoadRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error) {
+    if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.bgm_load") {
+        error = "BGM load requires one owned command and no other engine writes"; return false;
+    }
+    error = ValidateRetailBgmLoad(commands[0].arguments);
+    if (!error.empty()) return false;
+    if (load_bgm_no >= 0) { error = "a native music load is pending"; return false; }
+    const int set = commands[0].arguments.at("set").get<int>();
+    std::vector<std::uint8_t> bytes;
+    if (!ReadDataFileOwned("sound/bgm/bgm" + std::to_string(set) + ".snd", 128 * 1024 * 1024, bytes, error)) return false;
+    const auto pack = PrepareMusicPack(bytes, set, error);
+    if (!pack) return false;
+    struct Slot {
+        std::shared_ptr<audio::Bank> bank;
+        std::array<std::shared_ptr<audio::SqFile>, kSequencesPerSlot> sequences{};
+        std::array<MIDI_SEQUENCE *, kSequencesPerSlot> descriptions{};
+        int count = 0;
+        bool touched = false;
+    };
+    std::array<Slot, 2> staged;
+    for (const auto &entry : pack->entries) {
+        // Native BGM archives use A (music) and E (ambient). Do not let a music
+        // request replace unrelated effect banks through another slot letter.
+        if (entry.slot != 'a' && entry.slot != 'e') { error = "BGM archive targets a non-music bank"; return false; }
+        auto &slot = staged[entry.slot == 'a' ? 0 : 1];
+        slot.touched = true;
+        if (entry.bank) {
+            slot.bank = entry.bank; slot.count = 0;
+            slot.sequences.fill({}); slot.descriptions.fill(nullptr);
+        } else {
+            if (!slot.bank || slot.count >= kSequencesPerSlot) { error = "BGM sequence precedes its bank or exceeds capacity"; return false; }
+            MIDI_SEQUENCE *description = nullptr;
+            for (int i = 0; i < std::clamp(sq_inf_tbl.count, 0, 400); ++i)
+                if (std::strncmp(entry.name.c_str(), sq_inf_tbl.sequence[i].name, 9) == 0) { description = &sq_inf_tbl.sequence[i]; break; }
+            if (!description) { error = "BGM sequence description unavailable: " + entry.name; return false; }
+            slot.sequences[slot.count] = entry.sequence;
+            slot.descriptions[slot.count++] = description;
+        }
+    }
+    // A set must provide its own playable BGM, not accidentally reuse the
+    // previous set's bank or track-zero default volume.
+    if (!staged[0].bank || !staged[0].count) { error = "archive contains no playable BGM bank and track"; return false; }
+    // All file access, decoding, table lookup and capacity checks precede stop.
+    SndBgmStop();
+    for (int i = 0; i < 2; ++i) {
+        const auto &source = staged[i]; if (!source.touched) continue;
+        const int slot = i == 0 ? 0 : 2, port = i == 0 ? MIDI_PORT_BGM : MIDI_PORT_AMBIENT;
+        Player().Stop(port);
+        FreeSlot(slot);
+        g_slot_banks[slot] = source.bank;
+        auto &target = midi_state.port[slot];
+        target.bank = source.bank.get();
+        BindPort(slot, port, i == 0 ? 0x3020 : 0x3060);
+        target.sequence_count = source.count;
+        for (int track = 0; track < kSequencesPerSlot; ++track) {
+            g_slot_sequences[slot][track] = source.sequences[track];
+            target.sequence_address[track] = source.sequences[track].get();
+            target.sequence[track] = source.descriptions[track];
+        }
+    }
+    if (pack->reverb) CSnd.SetReverb(0, pack->reverb->mode, pack->reverb->depth);
+    now_bgm_no = set; now_bgm_play = 0;
+    error.clear(); return true;
 }
 bool PlayRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error) {
     if (commands.size() != 1 || money || commands[0].owner.empty() || commands[0].operation != "audio.bgm_play") {

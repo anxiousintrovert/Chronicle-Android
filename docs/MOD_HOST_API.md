@@ -2015,3 +2015,34 @@ custom stream voices. No mod request means no new driver action.
 The audio author smoke suite now includes a PAL shared-action stop/restart
 scenario which checks playing state on the next callback before back-floor
 travel. This is gameplay dispatch evidence, not physical-device listening.
+
+### Load a native music set
+
+`audio.bgm_load {"set": 3}` (`game.write`) reads `sound/bgm/bgm3.snd` into an
+owned buffer, validates its archive/configuration and decodes its music before
+replacing live banks. Set IDs are integers 0-255. This is a deferred sole engine
+write with no currency delta, requiring stable gameplay and no pending native
+music/sound/voice load. Missing files, malformed members/configuration, missing
+sequence descriptions and more than ten tracks per bank reject before playback
+changes. Same-set requests explicitly reload the archive.
+
+A successful load stops native music and leaves the new set stopped. On a later
+callback inspect `audio.bgm_state`, then call `audio.bgm_play` with a ready track.
+Loading does not override the user's disabled-music setting. It uses the indexed
+disc file or the existing validated same-size asset replacement; it does not
+accept arbitrary paths. The maximum encoded archive size is 128 MiB. A separate
+decoded-bank allocation budget is not implemented yet.
+
+This operation accepts music slot A plus optional ambient slot E, each with its
+bank before its sequences, and requires a playable A bank/track. Other bank
+letters are rejected so a BGM request cannot replace effect banks. Ambient-only
+sets are not supported by this operation. Omitted ambient data keeps the current
+ambient bank. Missing reverb configuration preserves current reverb; present
+configuration uses REVERBE/TABLE comma-separated integer records, with native
+mixer clamping. Unknown or malformed commands are rejected.
+
+PAL archives 120 and 130 have missing sequence references and are rejected;
+the loader does not guess another filename. The native no-mod loader is
+unchanged. Public load/play/stop are one-time requests, not persistent music
+replacement or ownership. The author audio suite exercises loading a different
+set and playing it through a shared action before back-floor travel.

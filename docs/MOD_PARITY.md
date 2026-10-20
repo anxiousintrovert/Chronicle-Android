@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 132 implemented operations, native plugins and author
+a real host-call boundary, 133 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -3089,3 +3089,26 @@ archive audit: 55 accepted and the two known missing-sequence archives rejected.
 The helper still has no production caller. Track metadata validation and safe
 publication remain required before exposing set loading; public count stays 132.
 No default engine path or PS2 file changed.
+
+
+### Native BGM set loading (2026-10-20)
+
+Added audio.bgm_load with bounded owned file reads, detached archive/config
+preflight, decoded banks/sequences, registered-description checks and per-bank
+track capacity checks before native stop. A successful explicit request installs
+music A and optional ambient E, applies staged reverb and leaves the set stopped.
+Playback is a subsequent audio.bgm_play request. No-mod loading is unchanged.
+Effect-bank letters and ambient-only sets reject; missing ambient data is kept.
+The API docs describe these boundaries and the pending decoded-memory budget.
+
+Clang 23.1.2 builds and focused load/failure tests passed. Tests cover bounded
+owned reads, missing descriptions, invalid archives, pending loads and unchanged
+playing-state snapshots on rejection. All four PAL audio shared-action replays
+passed, including changing sets, starting the new track and back-floor travel;
+38 Python tests passed. The author default suite now has 37 scenarios. Public
+operation count is 133. Owned music replacement, broader content APIs and
+cross-platform validation remain unfinished.
+
+Full regression: 878 passed, 97 skipped, one disabled. PAL evidence:
+bgm-load-602e64c80cee4a7fb34de4b60ffa52a2/report.json under the local framework
+expansion evidence folder. PS2 diff against the baseline is empty.

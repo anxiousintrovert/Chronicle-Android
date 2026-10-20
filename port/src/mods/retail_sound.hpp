@@ -9,6 +9,8 @@ namespace mods {
 // imply the corresponding bank/sample is currently loaded or dispatch audio.
 std::optional<SND_SE_INFO> ResolveRetailEffect(int id, int basic, int chapter, int voice, std::string &error);
 nlohmann::json ReadRetailBgm();
+std::string ValidateRetailBgmLoad(const nlohmann::json &arguments);
+bool LoadRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error);
 std::string ValidateRetailBgmPlay(const nlohmann::json &arguments);
 bool PlayRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error);
 bool StopRetailBgm(const std::vector<GameCommand> &commands, int money, std::string &error);

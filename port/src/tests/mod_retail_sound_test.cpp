@@ -5,6 +5,8 @@
 #include "data_fixture.hpp"
 #include "audio/mixer.hpp"
 #include "sound.hpp"
+#include "dataread.hpp"
+#include "platform/paths.hpp"
 #include <array>
 #include <algorithm>
 #include "audio_retail_fixture.hpp"
@@ -153,4 +155,57 @@ TEST(ModRetailSound, BgmPlayRejectsInvalidOrUnavailableTracksWithoutStoppingMusi
          nlohmann::json{{"track", 0}, {"set", 3}}})
         EXPECT_FALSE(mods::ValidateRetailBgmPlay(a).empty());
     EXPECT_TRUE(mods::ValidateRetailBgmPlay({{"track", 9}}).empty());
+}
+
+TEST(ModRetailSound, BgmLoadRejectsPendingAndMissingFilesWithoutChangingPlayback) {
+    now_bgm_no = 3; now_bgm_play = 1; now_bgm_vol = 90; bgm_off = 0; load_bgm_no = 4;
+    std::string error;
+    const mods::GameCommand load{"audio.bgm_load", {{"set", 255}}, "test"};
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 0, error));
+    EXPECT_EQ(error, "a native music load is pending");
+    load_bgm_no = -1;
+    EXPECT_FALSE(mods::LoadRetailBgm({load, load}, 0, error));
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 1, error));
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 0, error));
+    EXPECT_EQ(now_bgm_no, 3); EXPECT_EQ(now_bgm_play, 1); EXPECT_EQ(now_bgm_vol, 90);
+    for (const auto &a : {nlohmann::json::object(), nlohmann::json{{"set", -1}},
+         nlohmann::json{{"set", 256}}, nlohmann::json{{"set", 0.5}},
+         nlohmann::json{{"set", 0}, {"track", 0}}})
+        EXPECT_FALSE(mods::ValidateRetailBgmLoad(a).empty());
+}
+
+TEST(ModRetailSound, StagedLoadPreservesPlayingSetOnMissingMetadataAndMalformedArchive) {
+    const auto root = datafix::TempDir("bgm_load_atomic");
+    const std::string list = "test_a.hd\ntest_a.sq\n", table = "sequences\ntest_a.sq 100\n";
+    const auto hd = chronicle_audio::fixture::MakeHd({});
+    const auto bd = chronicle_audio::fixture::SquareVag(2);
+    const auto sq = chronicle_audio::fixture::MakeSq(60, 127, 480);
+    const auto pack = datafix::MakePack({{"bgm0.txt", {list.begin(), list.end()}},
+        {"test_a.hd", hd}, {"test_a.bd", bd}, {"test_a.sq", sq}});
+    datafix::WriteBytes(root / "data/sound/bgm/bgm0.snd", pack);
+    datafix::WriteBytes(root / "data/sq.txt", {table.begin(), table.end()});
+    PathsSetDataRoot(root / "data"); PathsSetSaveRoot(root / "save"); InitCDFile();
+    now_bgm_no = -1; now_bgm_play = 0; bgm_off = 0; load_bgm_no = -1;
+    std::string error;
+    const mods::GameCommand load{"audio.bgm_load", {{"set", 0}}, "test"};
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 0, error));
+    EXPECT_NE(error.find("description unavailable"), std::string::npos);
+    EXPECT_EQ(now_bgm_no, -1);
+    std::array<unsigned int, 1024> buffer{}; char name[] = "sq.txt";
+    CSnd.LoadSqInf(name, buffer.data());
+    ASSERT_TRUE(mods::LoadRetailBgm({load}, 0, error)) << error;
+    ASSERT_TRUE(mods::PlayRetailBgm({{"audio.bgm_play", {{"track", 0}}, "test"}}, 0, error)) << error;
+    const auto before = mods::ReadRetailBgm();
+    EXPECT_EQ(before["playing"], true);
+    const std::string missing = "test_a.hd\nothr_a.sq\n";
+    auto invalid = datafix::MakePack({{"bgm0.txt", {missing.begin(), missing.end()}},
+        {"test_a.hd", hd}, {"test_a.bd", bd}, {"othr_a.sq", sq}});
+    datafix::WriteBytes(root / "data/sound/bgm/bgm0.snd", invalid);
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 0, error));
+    EXPECT_EQ(mods::ReadRetailBgm(), before);
+    datafix::WriteBytes(root / "data/sound/bgm/bgm0.snd", {1, 2, 3});
+    EXPECT_FALSE(mods::LoadRetailBgm({load}, 0, error));
+    EXPECT_EQ(mods::ReadRetailBgm(), before);
+    EXPECT_TRUE(mods::StopRetailBgm({{"audio.bgm_stop", nlohmann::json::object(), "test"}}, 0, error));
+    std::filesystem::remove_all(root);
 }

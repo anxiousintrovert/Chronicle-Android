@@ -119,6 +119,7 @@ constexpr Operation operations[] = {
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
     {"georama.placement_state", "game.read", "Inspect loaded retail placement slots and built stock.", false},
     {"audio.bgm_state", "game.read", "Inspect native music state and decoded track readiness.", false},
+    {"audio.bgm_load", "game.write", "Load and validate a native BGM set without starting playback.", true},
     {"audio.bgm_play", "game.write", "Restart a validated track in the currently loaded native music set.", true},
     {"audio.bgm_stop", "game.write", "Stop native background music after callback commit.", true},
     {"audio.se_play", "game.write", "Queue a loaded retail sound effect after callback commit.", true},
@@ -387,6 +388,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (name == "georama.placement_state" || name == "georama.place" || name == "georama.remove") return ValidateGeoramaPlacement(name, a);
     if (name == "audio.bgm_state" || name == "audio.bgm_stop") return a.is_object() && a.empty() ? "" : "BGM state and stop take no arguments";
+    if (name == "audio.bgm_load") return ValidateRetailBgmLoad(a);
     if (name == "audio.bgm_play") return ValidateRetailBgmPlay(a);
     if (name == "audio.se_play") return ValidateRetailEffect(a);
     if (name.starts_with("audio.")) return AudioStreams::Validate(name, a);
