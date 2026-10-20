@@ -36,6 +36,8 @@ using Json = nlohmann::json;
 
 namespace {
 constexpr Operation operations[] = {
+    {"quests.list", "game.read", "List this package's declared quests and saved objective progress.", false},
+    {"quests.get", "game.read", "Read one quest owned by this package.", false},
     {"combat.rules_get", "game.read", "Inspect ordered owned incoming and outgoing damage rules.", false},
     {"combat.rule_set", "game.write", "Register or replace an owned native damage rule.", true},
     {"combat.rule_remove", "game.write", "Remove this package's named native damage rule.", true},
@@ -322,6 +324,13 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     }
     if (!a.is_object()) {
         return "arguments must be an object";
+    }
+    if (name == "quests.list") return a.empty() ? "" : "quests.list takes no arguments";
+    if (name == "quests.get") {
+        if (a.size()!=1 || !a.contains("id") || !a["id"].is_string()) return "provide only quest id";
+        const auto &id=a["id"].get_ref<const std::string &>();
+        if (id.empty() || id.size()>96 || id.front()<'a' || id.front()>'z' || !std::ranges::all_of(id,[](char c){return (c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-';})) return "invalid quest id";
+        return {};
     }
     if (name == "services.command" || name == "services.query") {
         if (a.size() != 3 || !a.contains("provider") || !a["provider"].is_string() ||

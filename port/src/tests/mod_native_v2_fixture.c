@@ -80,6 +80,12 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
             return 0;
         return !mode(host, "\"fail_command\"");
     }
+    if (mode(host, "\"quests\"")) {
+        return host->call(host->context, "quests.list", "{}", &result) && strstr(result, "\"visit\"") &&
+               host->call(host->context, "quests.get", "{\"id\":\"visit\"}", &result) && strstr(result, "\"goal\":2") &&
+               !host->call(host->context, "quests.get", "{\"id\":\"foreign\"}", &result) &&
+               host->state_set(host->context, "quest_read", "true", &result);
+    }
     if (!increment(host, "ticks"))
         return 0;
     host->log(host->context, "v2 tick");

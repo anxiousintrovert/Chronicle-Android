@@ -29,6 +29,15 @@ class AuthorTools(unittest.TestCase):
         manifest.write_text(json.dumps(data))
         return folder
 
+    def test_shared_quest_queries_are_discoverable_and_require_read_permission(self):
+        names=['quests.list','quests.get'];operations={entry['name']:entry for entry in tool.apis()}
+        for name in names:
+            self.assertFalse(operations[name]['writes']);self.assertEqual(operations[name]['permission'],'game.read')
+        folder=self.package('test.quests',requires_capabilities=['quests.read.v1'],requires_operations=names,permissions=['game.read'])
+        self.assertEqual(tool.validate(folder)['requires_operations'],names)
+        manifest=folder/'mod.json';value=json.loads(manifest.read_text());value['permissions']=[];manifest.write_text(json.dumps(value))
+        with self.assertRaises(ValueError):tool.validate(folder)
+
     def test_save_migrations_validate_and_survive_pack_install(self):
         rules=[{'from':'1','rename_values':{'old':'new'},'rename_quests':{'old.quest':'new.quest'},
                 'remove_values':['obsolete'],'defaults':{'new':99,'introduced':True}}]

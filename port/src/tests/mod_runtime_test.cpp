@@ -190,6 +190,30 @@ TEST_F(ModRuntime, LuaReceivesGameEventsAndIsolatedState) {
     EXPECT_TRUE(runtime.Diagnostics().empty());
 }
 
+TEST_F(ModRuntime, SharedQuestQueriesAreOwnedAndReadStagedProgressWithoutGameProvider) {
+    auto manifest=Manifest();manifest["permissions"]={"game.read"};manifest["requires_operations"]={"quests.list","quests.get"};
+    Add(R"(return {on_tick=function()
+        local before=assert(chronicle.call('quests.list',{}))
+        assert(#before.quests==1 and before.quests[1].id=='visit')
+        assert(chronicle.quest_add('visit',1))
+        local q=assert(chronicle.call('quests.get',{id='visit'}))
+        assert(q.progress==1 and q.goal==2 and not q.complete)
+        assert(not chronicle.call('quests.get',{id='foreign'}))
+        assert(not chronicle.call('quests.list',{owner='test.other'}))
+        chronicle.set('passed',true)
+    end})",manifest);
+    auto other=Manifest("test.other");other["quests"][0]["id"]="foreign";Add("return {}",other);
+    Start();runtime.Tick({1,2,0,true});EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(State()["values"]["passed"],true);
+    EXPECT_EQ(State()["quests"]["visit"],1);
+}
+TEST_F(ModRuntime, QuestQueriesRequirePermissionAndObserveRollback) {
+    Add(R"(return {on_tick=function() assert(not chronicle.call('quests.list',{})); chronicle.set('denied',true) end})");
+    Start();runtime.Tick({1,2,0,true});EXPECT_EQ(State()["values"]["denied"],true);
+    auto manifest=Manifest();manifest["permissions"]={"game.read"};
+    Add(R"(return {on_tick=function() chronicle.quest_add('visit',1); assert(chronicle.call('quests.get',{id='visit'}).progress==1); error('rollback') end})",manifest);
+    Start();runtime.Tick({1,2,0,true});EXPECT_FALSE(runtime.Diagnostics().empty());EXPECT_FALSE(State().contains("quests"));
+}
+
 TEST_F(ModRuntime, QuestMapEntryDoesNotRepeatEveryTickOrOnMenus) {
     Add("return {}");
     Start();
@@ -988,7 +1012,7 @@ protected:
         runtime.Start(empty);
         runtime.ResetState();
         auto manifest = Manifest("test.native.v2");
-        manifest.erase("quests");
+        if(mode!="quests") manifest.erase("quests");
         manifest["permissions"] = {"native.extension", "game.read", "game.write", "economy.write"};
         manifest["requires_capabilities"] = {"plugins.native.v2"};
         if (mode == "audio" || mode == "audio_fail") {
@@ -1028,6 +1052,11 @@ protected:
         ModRuntime::TearDown();
     }
 };
+
+TEST_F(ModNativeV2, SharedQuestQueriesUseNativeOwnersDeclaredObjectives) {
+    LoadPlugin("quests");runtime.Tick({1,2,0,true});
+    EXPECT_TRUE(runtime.Diagnostics().empty());EXPECT_EQ(Values()["quest_read"],true);
+}
 
 TEST_F(ModNativeV2, LifecycleEventsAreOwnedOrderedAndLeaveCannotCallGame) {
     LoadPlugin();

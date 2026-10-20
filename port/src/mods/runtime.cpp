@@ -440,6 +440,19 @@ bool InvokeQueryService(Module &m, const Json &a, Json &result, std::string &err
     }
 }
 
+Json ReadOwnedQuests(const Module &m, std::string_view operation, const Json &arguments) {
+    Json entries=Json::array();
+    for (const auto &quest:m.package.quests) {
+        const int progress=m.state->contains("quests")?(*m.state)["quests"].value(quest.id,0):0;
+        Json entry={{"id",quest.id},{"title",quest.title},{"description",quest.description},
+                    {"progress",std::min(progress,quest.goal)},{"goal",quest.goal},{"complete",progress>=quest.goal}};
+        if(operation=="quests.get"&&arguments.at("id")==quest.id)return entry;
+        entries.push_back(std::move(entry));
+    }
+    if(operation=="quests.get")throw std::runtime_error("quest is not declared by this package");
+    return Json{{"quests",std::move(entries)}};
+}
+
 int ApiCall(lua_State *L) {
     const char *name = luaL_checkstring(L, 1);
     const auto *op = FindOperation(name);
@@ -462,6 +475,11 @@ int ApiCall(lua_State *L) {
     m.call_error = ValidateOperation(name, m.arguments);
     if (!m.call_error.empty()) {
         return Failure(L, m.call_error.c_str());
+    }
+    if (op->name == "quests.list" || op->name == "quests.get") {
+        try { m.snapshot=ReadOwnedQuests(m,op->name,m.arguments); }
+        catch(const std::exception &error) { m.call_error=error.what(); return Failure(L,m.call_error.c_str()); }
+        PushJson(L,m.snapshot);return 1;
     }
     if (op->name == "services.query") {
         if (!InvokeQueryService(m, m.arguments, m.snapshot, m.call_error)) {
@@ -570,6 +588,10 @@ int NativeCall(void *context, const char *name, const char *arguments, const cha
         }
         if (m.read_only && op->writes) {
             throw std::runtime_error("query exports cannot write managed or game state");
+        }
+        if (op->name == "quests.list" || op->name == "quests.get") {
+            m.native_result=ReadOwnedQuests(m,op->name,args).dump();
+            *result=m.native_result.c_str();return 1;
         }
         if (op->name == "services.query") {
             Json        value;

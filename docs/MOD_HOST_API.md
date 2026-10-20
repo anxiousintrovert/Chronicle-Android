@@ -21,6 +21,8 @@ active town/dungeon gameplay. Unknown operations and fields fail explicitly.
 
 | Operation | Arguments | Permission | Result / effect |
 |---|---|---|---|
+| `quests.list` | none | `game.read` | This owner's declared quests and saved objective progress |
+| `quests.get` | `id` | `game.read` | One declared quest owned by the caller; unknown IDs fail |
 | `weapons.equip_state` | none | `game.read` | Town loadout readiness/reason and saved equipped slots for joined characters |
 | `weapons.equip` | `slot`, optional `character` | `game.write` | Select an owned retail weapon slot while walking outdoors in town |
 | `player.combat_state` | none | `game.read` | Native dungeon-player readiness, invincibility/recoil timers and action gauge |
@@ -2297,3 +2299,37 @@ and transaction limits. No gameplay package is installed or enabled by this API.
 The offline [mesh authoring format](MOD_MESH_FORMAT.md) documents OBJ conversion,
 structural validation and inspection with `tools/chronicle_mesh.py`. This is an
 authoring intermediate; runtime mesh replacement is not yet implemented.
+
+
+## Shared quest inspection and manager quest page
+
+Require `quests.read.v1` and `game.read`, or list `quests.list`/`quests.get` in
+`requires_operations`. Both Lua and native host calls use the runtime-assigned
+owner. They need an active gameplay callback but no native query provider.
+
+```lua
+local result = assert(chronicle.call("quests.list", {}))
+for _, quest in ipairs(result.quests) do
+    assert(chronicle.log("info", quest.title .. ": " .. quest.progress .. "/" .. quest.goal))
+end
+local visit = assert(chronicle.call("quests.get", {id = "visit"}))
+if visit.complete then
+    -- Decide separately whether your own reward flag permits a reward.
+end
+```
+
+Each entry contains `id`, `title`, `description`, `progress`, `goal`, and Boolean
+`complete`. The list retains declaration order; an owner with no quests gets an
+empty array. Progress is capped at the declared goal for display. Reads within a
+callback see that callback's staged objective updates; callback failure still
+rolls those updates back. Results are detached from managed state. There is no
+owner override, cross-package enumeration, engine state write or implicit reward.
+
+The shared manager exposes **L1 Quests** for packages with currently active quest
+declarations. It lists objective titles and completion marks, provides paginated
+progress/description details, and filters All/In progress/Completed with Square
+or a mouse click. Controller navigation, mouse selection/wheel, and Circle/right
+click use the existing menu framework. It reflects the current session even when
+next-launch enable preferences have changed. Inactive packages do not gain a
+quest page merely from discovery. Runtime registration of new quest definitions,
+dialogue/skill trees and native quest events remain separate unfinished services.

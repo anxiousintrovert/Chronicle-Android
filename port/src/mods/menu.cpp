@@ -41,6 +41,13 @@ UI::ListView             action_list({
     .draw_cursor = false
 });
 
+std::string quest_owner;
+int quest_selected=0,quest_detail=0,quest_filter=0;
+UI::ListView quest_list({
+    .bounds={42,150,226,189}, .row_height=24, .row_stride=27,
+    .visible_rows=7, .wrap_navigation=false, .draw_cursor=false
+});
+
 // Manifest strings are literal text, never game message control codes.
 std::string Literal(std::string value) {
     for (std::size_t p = 0; (p = value.find('{', p)) != std::string::npos; p += 2) {
@@ -150,6 +157,67 @@ std::string SelectedActionOwner() {
         }
     }
     return {};
+}
+
+std::string SelectedQuestOwner() {
+    const auto &packages=Shared().Preview().Packages();
+    if(selected<0||selected>=static_cast<int>(packages.size()))return {};
+    const auto &p=packages[selected];
+    for(const auto &active:Shared().Active().Packages())
+        if(active.root==p.root&&active.id==p.id&&active.Active()&&!active.quests.empty())return p.id;
+    return {};
+}
+
+std::vector<QuestStatus> JournalQuests() {
+    auto entries=Scripts().Quests();
+    std::erase_if(entries,[](const auto &q){return q.owner!=quest_owner||(quest_filter==1&&q.progress>=q.goal)||(quest_filter==2&&q.progress<q.goal);});
+    return entries;
+}
+
+void OpenQuests() {
+    quest_owner=SelectedQuestOwner();quest_selected=quest_detail=quest_filter=0;quest_list.Reset();
+}
+
+void RunQuests(std::uint16_t pressed) {
+    if(pressed)pointer=false;
+    const auto mouse=InputTakeMenuMouse();int w=640,h=480;WindowSize(w,h);
+    const float scale=1.0f/std::max(0.1f,std::min(w/640.0f,h/480.0f));
+    px=std::clamp(px+mouse.dx*scale,0.0f,639.0f);py=std::clamp(py+mouse.dy*scale,0.0f,479.0f);
+    const auto clicked=mouse.buttons&~buttons;buttons=mouse.buttons;
+    if(mouse.dx||mouse.dy||clicked||mouse.wheel)pointer=true;
+    if((pressed&PAD_CIRCLE)||(clicked&2)||((clicked&1)&&Inside(490,393,100,28))){quest_owner.clear();return;}
+    if((pressed&PAD_SQUARE)||((clicked&1)&&Inside(42,393,330,28))){quest_filter=(quest_filter+1)%3;quest_selected=quest_detail=0;quest_list.Reset();}
+    const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());const int previous=quest_selected;
+    if(pressed&PAD_UP)--quest_selected;
+    if(pressed&PAD_DOWN)++quest_selected;
+    if(pressed&PAD_LEFT)--quest_detail;
+    if(pressed&PAD_RIGHT)++quest_detail;
+    if(mouse.wheel){if(Inside(290,95,305,275))quest_detail+=mouse.wheel<0?1:-1;else quest_selected+=mouse.wheel<0?1:-1;}
+    if(clicked&1){const int hit=quest_list.HitTest(px,py,count);if(hit>=0)quest_selected=hit;
+        else if(Inside(300,365,100,25))--quest_detail;else if(Inside(480,365,100,25))++quest_detail;}
+    quest_selected=std::clamp(quest_selected,0,std::max(0,count-1));quest_list.SetSelectedIndex(quest_selected,count);
+    if(previous!=quest_selected)quest_detail=0;quest_detail=std::max(0,quest_detail);
+}
+
+void DrawQuests() {
+    UI::Divider::DrawVertical(282,148,348);
+    Text(0,"Mod Quests",42,94,540,true);
+    const char *filters[]={"All","In progress","Completed"};
+    Text(1,Literal(quest_owner)+" - "+filters[quest_filter],42,120,550);
+    const auto entries=JournalQuests();const int count=static_cast<int>(entries.size());
+    quest_selected=std::clamp(quest_selected,0,std::max(0,count-1));quest_list.SetSelectedIndex(quest_selected,count);
+    quest_list.Draw(count,[&](int i,const UI::Rect &rect,bool selected_row,int){
+        Text(10+i-quest_list.FirstRow(),std::string(entries[i].progress>=entries[i].goal?"[+] ":"[ ] ")+Literal(entries[i].title),rect.x,rect.y,rect.w,selected_row);
+    });
+    std::string body="No quests match this filter.";
+    if(count){const auto &q=entries[quest_selected];body=q.id+"\n\n"+(q.progress>=q.goal?"Completed":"In progress")+"\n"+std::to_string(q.progress)+" / "+std::to_string(q.goal)+"\n\n"+q.description;}
+    const auto lines=Lines(body,298);const int pages=std::max(1,(static_cast<int>(lines.size())+8)/9);
+    quest_detail=std::clamp(quest_detail,0,pages-1);
+    for(int i=0;i<9&&quest_detail*9+i<static_cast<int>(lines.size());++i)Text(40+i,Literal(lines[quest_detail*9+i]),295,150+i*21,300);
+    Text(60,"<  Details "+std::to_string(quest_detail+1)+"/"+std::to_string(pages)+"  >",300,365,285);
+    Text(61,std::string("{square} Filter: ")+filters[quest_filter],42,395,330);
+    Text(63,"{circle} Back",490,395,110);
+    if(pointer){cursor.SetPointer(px,py);cursor.Draw();}
 }
 
 void OpenActions() {
@@ -271,16 +339,19 @@ void Open() {
     buttons = InputTakeMenuMouse().buttons;
     trust_id.clear();
     action_owner.clear();
+    quest_owner.clear();
 }
 
 void Close() {
     open = false;
     action_owner.clear();
+    quest_owner.clear();
 }
 
 bool IsOpen() { return open; }
 
 void Run(std::uint16_t pressed) {
+    if (!quest_owner.empty()) { RunQuests(pressed); return; }
     if (!action_owner.empty()) {
         RunActions(pressed);
         return;
@@ -337,7 +408,8 @@ void Run(std::uint16_t pressed) {
     if (pressed & PAD_TRIANGLE) {
         ReviewTrust();
     }
-    if (pressed & PAD_R1) {
+    if (pressed & PAD_L1) { OpenQuests(); }
+    else if (pressed & PAD_R1) {
         OpenActions();
     }
     const auto mouse = InputTakeMenuMouse();
@@ -373,7 +445,9 @@ void Run(std::uint16_t pressed) {
             ReviewTrust();
         } else if (Inside(490, 393, 100, 28)) {
             Close();
-        } else if (Inside(42, 365, 225, 25)) {
+        } else if (Inside(42, 365, 112, 25)) {
+            OpenQuests();
+        } else if (Inside(165, 365, 112, 25)) {
             OpenActions();
         } else if (Inside(300, 365, 100, 25)) {
             detail = std::max(0, detail - 1);
@@ -389,6 +463,7 @@ void Run(std::uint16_t pressed) {
 
 void Draw() {
     UI::Window::Draw(25, 85, 590, 351, 0x80, UI::WindowPreset::BlueStone);
+    if (!quest_owner.empty()) { DrawQuests(); return; }
     if (!action_owner.empty()) {
         DrawActions();
         return;
@@ -480,8 +555,9 @@ void Draw() {
         Text(40 + i, Literal(lines[detail * page_lines + i]), 295, 150 + i * 21, 300);
     }
     Text(60, "<  Details " + std::to_string(detail + 1) + "/" + std::to_string(pages) + "  >", 300, 365, 285);
+    if (!SelectedQuestOwner().empty()) Text(66, "{L1} Quests", 42, 365, 112);
     if (!SelectedActionOwner().empty()) {
-        Text(65, "{R1} Actions", 42, 365, 225);
+        Text(65, "{R1} Actions", 165, 365, 112);
     }
     Text(61, "{cross} Toggle", 42, 395, 135);
     Text(62, "{square} Rescan", 180, 395, 135);

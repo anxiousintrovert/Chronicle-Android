@@ -7,13 +7,13 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 143 implemented operations, native plugins and author
+a real host-call boundary, 145 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
 |---|---|---|
 | Packages and conflicts | Folder discovery, version-constrained dependencies, cycles, duplicate IDs, declared conflicts, exclusive claims and asset collisions; validated offline ZIP install/update with backups; new packages disabled | Automatic remote downloads/update discovery are not implemented |
-| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
+| In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists and a filtered/paginated quest page with controller/mouse navigation | Skill-tree/character-sheet UI, broader journal services and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
@@ -21,7 +21,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup; ordered deterministic owned incoming/outgoing damage formulas with atomic rule APIs | Broader actual-hit combat, actor lifecycle and platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible assets, package resources and explicitly enabled existing-model mesh replacement with inherited native animation/materials and runtime fallback | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
-| Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
+| Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state, shared Lua/native quest reads and dedicated manager quest page | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | Bounded offline OBJ/GLB geometry conversion, native target discovery/export, mesh inspection and enabled package loading; new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
@@ -3918,3 +3918,31 @@ reward-flag author responsibility and source-save preservation. This covers owne
 scalar/quest transformations, not arbitrary native inventory/world migrations,
 NG+ prototype trailer conversion, scripted transforms or independent save branches.
 Those remaining save capabilities and broader MoonMod coverage remain unfinished.
+
+
+## Shared quest reads and manager quest page (2026-10-20)
+
+quests.read.v1 exposes quests.list/get to Lua and native plugins using the trusted
+caller identity. They return declared metadata, goal, capped progress and complete
+state; foreign-owner selectors and unknown quest IDs fail. Queries observe the
+callback's staged progress and preserve existing rollback semantics without a
+native query provider or new game hook. The host now advertises 145 operations.
+
+The existing shared UI manager adds L1 Quests for active quest packages, a
+scrollable objective list, paginated description/progress, and All/In progress/
+Completed filters. Controller and mouse navigation preserve owned state. The
+options screen forwards L1 while the manager is open; no separate UI framework
+or automatic quest-page activation is introduced.
+
+Clang 23.1.2 game/test builds passed. Final regression: 985 passed, 105 skipped,
+one disabled benchmark. All 67 Python checks passed. Tests exercise Lua ownership,
+permissions, staged reads/rollback, a real ABI-2 DLL using the same calls, and
+shared-menu controller/mouse/filter/scroll behavior. The PAL-backed menu fixture
+loads native font textures; screenshots were inspected (the texture-free fixture
+alone is not text-layout evidence). Its pixel comparisons exclude native pulsing
+selection brackets. The dormant PAL combat/shared-manager replay passed.
+PS2 baseline and official Kazarov diffs remain empty.
+
+Local visual evidence: issue-evidence/framework-expansion-20261019/quest-menu-verified-7576bab9b91748da8ce5a4c0004d746c.
+Skill trees, character sheets, dynamic quest registration, native quest events
+and broader journal/input APIs remain unfinished; this is not complete parity.
