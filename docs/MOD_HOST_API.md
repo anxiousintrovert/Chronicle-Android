@@ -1827,3 +1827,24 @@ automatically after a menu or event.
 Settings are transient, not saved. There is no mod callback from a native
 cleanup boundary. Without claims, the cleanup calls return before reading or
 changing native camera state.
+
+## Dungeon lighting inspection
+
+`dungeon.lighting_get {}` requires `game.read` and a loaded native dungeon map.
+Declare it in `requires_operations`. It returns `side` (`"front"` or `"back"`),
+the current map's `view_scale`, and separate `front`/`back` lighting objects.
+Each side contains:
+
+- `fog`: native `near`, `far`, `min`, `max`, and RGB `color`.
+- `background`: three native RGB bytes.
+- `ambient`: three native floating-point color components.
+- `lights`: three entries with zero-based `light`, a three-component `direction`,
+  and three-component native `color`.
+
+Values are native script/render values, not converted to a 0..1 color scale.
+Directions are reported per light even though native storage uses matrix
+columns. `view_scale` is the current map's draw-distance multiplier, not a
+separate multiplier for each lighting side. The getter rejects a missing map,
+non-dungeon mode or non-finite native floating-point data. Results are detached;
+reading does not change lighting, advance rendering or consume RNG. Lighting
+writes and ownership cleanup are not exposed yet.

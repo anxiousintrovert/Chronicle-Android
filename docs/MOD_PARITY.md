@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 122 implemented operations, native plugins and author
+a real host-call boundary, 123 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -22,7 +22,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Native dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera controls, lighting/audio controls, activated only by callers |
+| Rendering / audio | Native front/back lighting inspection, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera controls, lighting/audio controls, activated only by callers |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
 | Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/lifecycle smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
@@ -2675,3 +2675,23 @@ a substitute for those gameplay scenarios. The operation count is now 122.
 
 Validation: Clang 23.1.2 builds; 839 passed, 90 skipped, one disabled;
 35 Python tests and the explicit PAL orbit replay passed. PS2 unchanged.
+
+
+### Native dungeon lighting inspection (2026-10-20)
+
+dungeon.lighting_get exposes the exact native front/back fog rates/colors,
+background, ambient and three directional-light vectors/colors, plus the active
+lighting side and current map draw-distance scale. Direction columns and color
+rows are converted to per-light arrays without modifying or normalizing native
+state. Missing maps, wrong mode and non-finite values reject. The read is
+on-demand and adds no automatic engine hook.
+
+Focused tests verify both sides, detached data and RNG preservation, rejection
+and asymmetric native matrix mapping. An explicit PAL shared-menu-action replay
+reads actual floor values, verifies Lua mutation cannot alter native lighting,
+and completes back-floor travel. This covers lighting inspection only. Owned
+lighting writes, floor-load cleanup, view-scale mutation and rendered write
+verification remain open. The public operation count is 123.
+
+Clang 23.1.2 validation: 841 passed, 91 skipped, one disabled; all 35 Python
+checks and the explicit PAL lighting replay passed. PS2 unchanged.

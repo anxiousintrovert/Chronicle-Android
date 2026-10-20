@@ -18,6 +18,7 @@
 #include "georama.hpp"
 #include "georama_placement.hpp"
 #include "camera.hpp"
+#include "lighting.hpp"
 #include "main.hpp"
 #include "menu_dungeon.hpp"
 #include "menu_misc.hpp"
@@ -244,6 +245,7 @@ void TickGame() {
         return true; }, ReadSnapshot, [world](std::string_view operation, const nlohmann::json &arguments) {
         if (operation == "georama.placement_state") return ReadGeoramaPlacement();
         if (operation == "render.camera_get") return ReadDungeonCamera();
+        if (operation == "dungeon.lighting_get") return ReadDungeonLighting();
         if (operation == "georama.atla_list") return ReadAtla();
         if (operation == "dungeon.layout_get") return ReadLayout(arguments);
         if (operation == "dungeon.chest_loot_get") return ReadChestLoot(arguments);

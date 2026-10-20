@@ -327,7 +327,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false) {
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
@@ -401,6 +401,25 @@ end}
  c.eye[1]=999999
  local again=assert(chronicle.call('render.camera_get'))
  assert(again.eye[1]~=999999,'snapshot must be detached')
+)");
+        std::ofstream(script_path) << source;
+    }
+    if (lighting) {
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string source((std::istreambuf_iterator<char>(input_script)), {});
+        input_script.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local light=assert(chronicle.call('dungeon.lighting_get'))
+ assert(light.side=='front' and light.view_scale>0)
+ assert(#light.front.lights==3 and #light.back.lights==3)
+ assert(#light.front.lights[1].direction==3 and #light.back.ambient==3)
+ local original=light.front.fog.far
+ light.front.fog.far=-1
+ local again=assert(chronicle.call('dungeon.lighting_get'))
+ assert(again.front.fog.far==original,'lighting snapshots must be detached')
 )");
         std::ofstream(script_path) << source;
     }
@@ -600,4 +619,5 @@ TEST(ModBackFloorRetail, OwnedChestLootDemonShaft) { RunBackAudit(6, true, 64, t
 TEST(ModBackFloorRetail, AtlaCollectionThroughSharedActionPreservesBackTransition) { RunBackAudit(0, true, 64, true, 5, 0, false, false, false, false, true); }
 TEST(ModBackFloorRetail, CameraSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, true); }
 TEST(ModBackFloorRetail, CameraOrbitThroughSharedActionRestoresBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, true); }
+TEST(ModBackFloorRetail, LightingSnapshotThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, true); }
 } // namespace
