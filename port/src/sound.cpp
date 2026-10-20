@@ -12,6 +12,7 @@
 #include <stdexcept>
 
 #include "expanded_effect_voices.hpp"
+#include "mods/retail_sound.hpp"
 #include "chronicle/monster_audio.hpp"
 #include "chronicle/monster_limits.hpp"
 #include "audio/mixer.hpp"
@@ -327,6 +328,30 @@ void StartSequence(int port, int seq_no, const int *volume) {
 }
 
 } // namespace
+
+namespace mods {
+bool RetailEffectReady(const SND_SE_INFO &row, int volume, std::string &error) {
+    if (volume < -1 || volume > 127 || row.bank < 0 || row.prog < 0) {
+        error = "invalid retail effect or volume"; return false;
+    }
+    int program = row.bank, effect = row.prog;
+    // Native SndSePlay forces full volume for an unmapped row; otherwise a
+    // negative requested volume resolves through the driver's SE table.
+    if (row.vol_no >= 0 && volume < 0) {
+        if (row.vol_no >= se_inf_tbl.count) { error = "retail effect volume row is not loaded"; return false; }
+        program = se_inf_tbl.entry[row.vol_no].bank;
+        effect = se_inf_tbl.entry[row.vol_no].program;
+    }
+    const int port = EffectPort(row.port >= 0 ? row.port : MIDI_PORT_SE_DEFAULT);
+    for (const auto &route : kFadeRoutes) {
+        if (route.port == port) {
+            if (RetailEffectHasSamples(g_slot_banks[route.slot].get(), program, effect)) { error.clear(); return true; }
+            break;
+        }
+    }
+    error = "retail effect bank or sample is not loaded"; return false;
+}
+}
 
 PORT_OVERRIDE MIDI_STATE *CSound::GetMidiState() {
     return &midi_state;

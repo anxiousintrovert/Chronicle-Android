@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "../mods/retail_sound.hpp"
 #include <cstring>
+#include "audio_retail.hpp"
+#include "audio_retail_fixture.hpp"
 
 TEST(ModRetailSound, RejectsTableTailsUnusedRowsAndInvalidSelectors) {
     std::string error;
@@ -35,4 +37,22 @@ TEST(ModRetailSound, ReturnsDetachedNativeRowsWithoutChangingTablesOrRandomStrea
         EXPECT_EQ(fallback->bank, se_info[300].bank);
         EXPECT_EQ(fallback->prog, se_info[300].prog);
     } else EXPECT_FALSE(fallback);
+}
+
+TEST(ModRetailSound, BankReadinessUsesKeyThenSplitFallbackAndRejectsUnloadedSamples) {
+    auto bank = chronicle_audio::CreateBank(chronicle_audio::fixture::MakeHd({.programs=2, .key_low=30, .key_high=90}), chronicle_audio::fixture::SquareVag(2));
+    ASSERT_NE(bank, nullptr);
+    EXPECT_TRUE(mods::RetailEffectHasSamples(bank.get(), 1, 64));
+    EXPECT_TRUE(mods::RetailEffectHasSamples(bank.get(), 1, 0)); // native split-index fallback
+    EXPECT_FALSE(mods::RetailEffectHasSamples(bank.get(), 1, 29));
+    EXPECT_FALSE(mods::RetailEffectHasSamples(bank.get(), 2, 64));
+    EXPECT_FALSE(mods::RetailEffectHasSamples(nullptr, 0, 0));
+    EXPECT_FALSE(mods::RetailEffectHasSamples(bank.get(), -1, 0));
+    EXPECT_FALSE(mods::RetailEffectHasSamples(bank.get(), 0, 128));
+    std::string error;
+    const SND_SE_INFO row{0, 0, 0, 10, -1};
+    EXPECT_FALSE(mods::RetailEffectReady(row, 127, error));
+    EXPECT_NE(error.find("not loaded"), std::string::npos);
+    EXPECT_FALSE(mods::RetailEffectReady(row, 128, error));
+    EXPECT_NE(error.find("invalid"), std::string::npos);
 }

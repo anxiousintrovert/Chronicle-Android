@@ -2925,3 +2925,20 @@ count stays 128. Loaded-bank/sample readiness, queued SE dispatch and retail
 playback evidence still need implementation before exposing audio.se_play.
 The BGM audit also found that SndBgmLoad returns zero for both an already-loaded
 set and a failed load; a successful mod result cannot rely on that return alone.
+
+
+### Retail effect bank readiness (2026-10-20)
+
+RetailEffectReady follows the existing effect-port mapping to the actually
+loaded port bank and resolves default-volume rows using the driver's SE table.
+RetailEffectHasSamples mirrors the official mixer's key-first, split-index
+fallback with its eight-layer limit and requires decoded PCM. Missing banks,
+programs, invalid values and unavailable default-volume rows reject. Both are
+read-only and called only explicitly; no retail dispatch or default playback
+path was changed. Tests use decoded retail-format synthetic HD/BD samples to
+verify key and split fallback plus missing/invalid rejection. The focused Clang
+audio suite passed eight cases, with the disc-data case skipped.
+
+This closes loaded-bank preflight groundwork, not the public SE operation.
+Queued dispatch, shared-menu retail replay and BGM/music replacement remain
+outstanding. Public operation count remains 128; PS2 is unchanged.

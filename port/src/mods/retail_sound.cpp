@@ -1,5 +1,7 @@
 #include "retail_sound.hpp"
 #include <span>
+#include <array>
+#include "audio/hdbank.hpp"
 extern SND_SE_INFO cap0[92];
 extern SND_SE_INFO cap1[73];
 extern SND_SE_INFO cap2[101];
@@ -141,5 +143,17 @@ std::optional<SND_SE_INFO> ResolveRetailEffect(int id, int basic, int chapter, i
         if (const auto *table = voice_info[voice]) return Entry(Known(table), id - 400, true, error);
     }
     return Entry(se_info, id, false, error);
+}
+}
+
+namespace mods {
+bool RetailEffectHasSamples(const audio::Bank *bank, int program, int effect) {
+    if (!bank || program < 0 || program > 127 || effect < 0 || effect > 127) return false;
+    std::array<audio::Layer, 8> layers{}; // Match the official mixer layer limit.
+    int count = bank->Resolve(program, effect, 127, layers);
+    if (!count) count = bank->ResolveSplit(program, effect, 127, layers);
+    for (int i = 0; i < count; ++i)
+        if (layers[i].vag && !layers[i].vag->pcm.empty() && layers[i].rate > 0) return true;
+    return false;
 }
 }
