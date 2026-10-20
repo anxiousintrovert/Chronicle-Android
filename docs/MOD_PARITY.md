@@ -7,7 +7,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 114 implemented operations, native plugins and author
+a real host-call boundary, 116 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -19,7 +19,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
-| Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, and derived satisfaction readback; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla integration and native condition/reward evaluation |
+| Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, and native Atla inspection/atomic collection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement integration and native condition/reward evaluation; broader Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
 | Rendering / audio | Native enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays/camera/lighting/audio controls, activated only by callers |
@@ -2559,3 +2559,24 @@ Clang 23.1.2 Windows game/test builds pass. Final CTest: 826 passed, 86 skipped,
 one disabled; all 35 Python checks pass. The PAL replay also passes after the
 final stable-play guard. PS2 unchanged. Georama placement/Atla, reward-condition
 evaluation, other platforms and the broader coverage ledger remain open.
+
+
+### Native Atla inspection and atomic collection (2026-10-20)
+
+georama.atla_list exposes available current-floor spheres, native registry
+identity/reference data and part/chip contents. georama.atla_collect requires
+Toan and stable dungeon play, with collection as the callback's only engine
+write. Native grants and registry bookkeeping run on a save copy; only success
+publishes save and sphere/map-event retirement together. No global UserStatus
+redirection is used. Full chip inventory, rejected grants and invalid registry
+or floor membership preserve both sides. Demon Shaft never indexes the native
+six-row registry. No custom Atla definitions or pickup animation are introduced.
+
+Four tests cover detached reads and byte/RNG preservation, native part grants
+and registry retirement, rejection/mixed-write handling, full chip inventory
+rollback and successful chip grant. A fresh PAL Lua shared-menu-action replay
+collects a sphere, verifies its disappearance next callback and completes the
+native back-floor transition. The full Clang 23.1.2 suite passes: 830 passed,
+87 skipped and one disabled; all 35 Python checks pass. No automatic engine
+path was changed and PS2 remains untouched. Other platforms, broader Atla
+scenarios and the remaining capability ledger remain open.

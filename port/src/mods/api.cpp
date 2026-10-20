@@ -1,4 +1,5 @@
 #include "api.hpp"
+#include "atla.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -111,6 +112,8 @@ constexpr Operation operations[] = {
     {"fishing.get",               "game.read",     "Fishing point balance.",                                                       false},
     {"fishing.add",               "economy.write", "Add fishing points within native capacity.",                                   true },
     {"fishing.spend",             "economy.write", "Spend fishing points atomically.",                                             true },
+    {"georama.atla_list", "game.read", "Inspect native Atla spheres and contents on the current floor.", false},
+    {"georama.atla_collect", "game.write", "Collect one current-floor Atla as Toan with atomic save/map publication.", true},
     {"georama.request_set", "game.write", "Set saved request completion and synchronize a matching loaded town.", true},
     {"georama.satisfaction_get", "game.read", "Saved request completion totals and rounded satisfaction percentage.", false},
     {"georama.get",               "game.read",     "Saved plots, placements and request completion.",                              false},
@@ -361,6 +364,7 @@ std::string ValidateOperation(std::string_view name, const Json &a) {
     if (name == "georama.elements_get" || name == "georama.element_set") {
         return ValidateGeoramaElements(name, a);
     }
+    if (name == "georama.atla_list" || name == "georama.atla_collect") return ValidateAtla(name, a);
     if (name == "georama.request_set") return ValidateGeoramaRequest(a);
     if (name == "georama.satisfaction_get") {
         if (a.size() != 1 || !a.contains("town") || !a["town"].is_number_integer() || a["town"].get<double>() < 0 || a["town"].get<double>() > 4)

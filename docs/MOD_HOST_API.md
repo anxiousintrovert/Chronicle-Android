@@ -1725,3 +1725,34 @@ disabling the mod does not undo it, and later native condition evaluation may
 replace it. It does not run reward scripts, satisfy placement prerequisites,
 change other flags, or add requests. Use `georama.get` or
 `georama.satisfaction_get` to inspect the result.
+
+
+## Native Atla inspection and collection
+
+`georama.atla_list {}` (`game.read`) inspects the active native procedural
+floor. It returns `dungeon`, zero-based `floor`, boolean `back`, `count`, and
+`spheres`. Each available sphere contains its current-floor `slot`, native
+`registry` index, `atla` identity, `[x,y,z]` position, native `registry_floor`
+and `registry_refcount`, plus `contents`. Part contents report `kind="part"`,
+`id`, `obtained` and `stock`; chip contents report `kind="chip"`, `id` and
+`owned_count`. Registry floor values retain native conventions, including
+one-based floors and negative wildcard values. Invalid registry/definition
+bounds and non-finite positions are errors. An empty Demon Shaft sphere table
+returns an empty list without indexing the six-row native registry.
+
+`georama.atla_collect {slot=0}` (`game.write`) collects an available sphere
+from the current floor as Toan, without requiring proximity or playing the
+pickup animation. Call it only during stable dungeon play outside actions,
+menus, scripts and transitions. Slot IDs belong to the current floor: query
+again after changing floors. Declare both operations in `requires_operations`.
+
+Collection must be the callback's only engine write, including currency. Owned
+mod state can still participate in that callback. The native part/chip grant
+and registry bookkeeping run on a staged save; only a successful grant publishes
+the save, retires the sphere and removes its native map events. A full chip
+inventory, rejected native grant, stale sphere, wrong character or invalid
+registry leaves both save and map unchanged. Inspect the list on the next
+callback to observe completion. The operation does not run reward/cutscene
+scripts or add custom Atla definitions. Collection is a persistent save change;
+disabling the mod does not reverse it. No engine behavior is added when these
+operations are unused.
