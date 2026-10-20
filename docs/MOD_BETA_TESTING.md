@@ -138,7 +138,19 @@ produced an existing binary: retain the clean build log and exact source commit.
 The manifest itself is not signed and does not certify a release. Acceptance
 checks and notice review remain required, including the supplied glyph artwork's
 missing attribution noted in `notices/Glyph-provenance.md`. Keep test saves and
-logs outside this bundle, then archive and hash the approved candidate separately.
+logs outside this bundle. To verify and archive a candidate locally:
+
+```powershell
+python tools/chronicle_bundle_archive.py --bundle "C:\Candidates\chronicle-beta" --output "C:\Candidates\chronicle-beta.zip"
+```
+
+The archive and its `.sha256` sidecar must not already exist. The tool checks
+every recorded file's size and hash, rejects unlisted files and linked inputs,
+and reads every ZIP entry back before writing the checksum. Sorted entries and
+fixed ZIP metadata make the same bundle reproducible with the same Python/zlib
+toolchain. This checks integrity against the local manifest, not a signature or
+independent proof of source provenance. It does not publish or certify a release;
+complete the acceptance gates and notice review before distributing the archive.
 
 ### Repeat the staged installation rehearsal
 

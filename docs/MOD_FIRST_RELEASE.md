@@ -114,6 +114,22 @@ texture installation/restart gate; it does not close the normal-controls quest
 playthrough gate or certify every asset/platform. No native engine, PS2 or Kazarov
 sources changed. Final notice review and release archive remain pending.
 
+## Verified local candidate archive (2026-10-20)
+
+`chronicle_bundle_archive.py` now verifies the staged manifest and every listed
+file, rejects unlisted files or linked inputs, writes a sorted ZIP with fixed
+metadata, reads back every entry, and writes a SHA-256 sidecar. It refuses existing
+outputs, output inside the bundle, PS2 paths and unsafe/duplicate manifest paths.
+Unit tests cover repeatability, exact readback, changed binaries, unexpected saves
+and path rejection. All 88 Python checks passed.
+
+The 61-file staged bundle plus its manifest produced a verified 62-entry local
+archive, SHA-256 `adf7758d96807bd8ed84a2f788fd82e15abfe4c89c3aa2fe73e8afe9f50d866e`.
+This is an archive-tool rehearsal using the earlier staged build, not the approved
+release candidate. It contains no test save or retail capture. Final clean-source
+staging, notice review and normal-controls quest acceptance remain open; archive
+creation alone must not be treated as approval to publish.
+
 ## Full-resolution texture upload foundation (2026-10-20)
 
 The port decoded-texture object can now carry optional logical dimensions independently of physical image dimensions. The registry retains logical texel dimensions and forwards both dimensions to the existing upstream Kazarov TextureDesc. Defaults are zero, preserving original behavior. This is internal groundwork, not an exposed package capability.
