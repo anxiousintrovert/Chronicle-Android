@@ -18,9 +18,25 @@ Defer broader API expansion, registered maps/characters/animations, advanced sav
 
 The first release must state the platforms actually validated. A Windows build does not certify Linux/macOS/Android. Existing broader experimental APIs are not evidence that all of their retail scenarios are release-certified.
 
-## Next implementation priority
+## Testing beta acceptance gates
 
-Audit the quest authoring workflow and examples against the implemented host contracts, including explicit start, named objectives, event delivery, one-time rewards and save/reload. Texture discovery, full-resolution replacement, conflict/disable cases and a real 4096x4096 GPU upload have Windows evidence below. Palette/copy behavior and other platforms need separate validation. The dated sections below record historical milestones; outstanding statements in older entries describe their state at that milestone.
+The current delivery target is a Windows testing beta, not completion of the
+broader capability roadmap. Actor lifecycle subscriptions and other new domains
+are deferred. Existing internal actor queue groundwork is not a public API.
+
+| Gate | Evidence required before beta delivery | Current boundary |
+|---|---|---|
+| Quest playthrough | Start the shipped contract through the shared menu, enter a floor, defeat enemies through normal controls, receive exactly one reward, save/reload, and verify cancellation/restart | Runtime, disk-save and controlled native poison-death tests exist; normal-controls end-to-end acceptance is pending |
+| Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Component/isolated texture evidence exists; distribution-level rehearsal is pending |
+| Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
+| Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
+| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Packaging and clean launch validation are pending; never include disc/extracted assets, saves, profiles or enabled gameplay mods |
+| Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | Author/API docs exist; beta-specific guide and candidate limitations are pending |
+
+Do not label a candidate release-ready solely because unit tests pass. Record
+normal-input, runtime-injected and source-only evidence distinctly. Windows beta
+validation does not certify Android, Linux or macOS. Broader palette/copy cases
+and experimental APIs must be identified as unverified where applicable.
 
 ## Full-resolution texture upload foundation (2026-10-20)
 

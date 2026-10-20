@@ -64,3 +64,7 @@ permissions, saves and the shared menu framework.
 The [actor lifecycle event plan](MOD_ACTOR_EVENTS_PLAN.md) records audited native
 capture boundaries and acceptance tests for planned spawn/removal notifications.
 These subscriptions are not yet implemented.
+
+Current delivery focus: satisfy the [testing beta acceptance gates](MOD_FIRST_RELEASE.md#testing-beta-acceptance-gates).
+Further API expansion, including actor lifecycle subscriptions, is deferred until
+the focused beta is ready for testing.
