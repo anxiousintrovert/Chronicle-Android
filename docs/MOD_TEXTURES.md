@@ -24,7 +24,7 @@ The original identity is computed before localization/caption/ground processing.
 
 Replacement uses one RGBA level and retains the original alpha-mode flag. It is a static image replacement: indexed palette cycling/recoloring is not reproduced by a single RGBA image. Animated or palette-driven targets, texture-copy paths and representative retail assets still require scenario validation. No arbitrary external quest/model formats or new engine content registries are implied.
 
-This capability has synthetic native texture-entry, GPU rendering, conflict, changed-source fallback and disable/restart tests. Retail replacement rendering and broader palette/copy scenarios are still required before declaring the first release ready.
+This capability has synthetic native texture-entry, GPU rendering, conflict, changed-source fallback and disable/restart tests. Retail player-body replacement, disable and conflict scenarios now pass, including a 4096x4096 upscale. Broader palette/copy scenarios remain outside this validation.
 
 ## Discover and export a target
 
@@ -46,3 +46,13 @@ python tools/chronicle_texture.py export "C:\path\to\new-captures\<capture>.text
 Export verifies the stored content hash and exact pixel length, preserves RGBA/alpha, refuses overwrite, and prints the `name`, `original_sha256` and `source` declaration. Copy that declaration into the package's `textures` array and place the PNG at the declared package-relative source path. Edit/redraw the PNG at the intended resolution; keep the original target hash unchanged. Use `chronicle_mod.py check`, `pack` and `install` as for other packages, then explicitly enable and restart. PNG export uses only Python's standard library.
 
 A `.texture` file has one UTF-8 JSON header line (schema 1, name, width, height, original_sha256, encoding rgba8), followed by exactly width*height*4 raw bytes. It is an authoring snapshot, not a replacement image format accepted in a package.
+
+## Repeat the PAL retail texture check
+
+```powershell
+python tools/chronicle_texture_smoke.py --build build-mods --data "C:\path\to\pal-data" --output "C:\path\to\new-audit-directory"
+```
+
+The runner uses independent game processes and save/profile directories for baseline, 512x512 diagnostic replacement, 4096x4096 upscaled original, disabled package and conflicting packages. It discovers the original player-body target rather than hardcoding its digest. The 4K source uses deterministic nearest-neighbor expansion of the captured 256x256 RGBA pixels; this tests resolution handling, not invented texture detail. Each scenario reaches live dungeon gameplay and records a screenshot plus logical/physical texture sizes. The 4K case compares the SHA-256 of all 64 MiB of GPU-readback RGBA pixels with the generated source. Every case requires no gameplay-script modules. Disabled/conflicting cases must keep native 256x256 pixels and zero active texture targets.
+
+The Windows Clang PAL run passed all five scenarios. The 4K texture retains 256x256 logical coordinates and 4096x4096 physical pixels, and its rendered character appearance was inspected. This does not certify every texture, palette animation, platform, texture-copy path or device-memory limit. No capture, original PNG or generated retail-derived upscale is committed to the repository.
