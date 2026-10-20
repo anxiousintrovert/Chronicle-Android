@@ -1402,3 +1402,48 @@ Validation receipt: Clang 23.1.2 Windows game/test builds passed. Full suite:
 The optional PAL manager-action test passed separately. All 18 Python checks
 and 3,840 empty/disabled generator comparisons passed. Both operations appear
 in CLI discovery; PS2 files remain unchanged.
+
+
+## Monster loot definition integration audit
+
+Implementation remains open. In pinned MoonMod commit
+`6f5ca66e44ff29f866453b1181c9679aa9b6bd5d`, `OverrideDungeonLoot` changes
+only `MONSTOR_MODEL::rare_item` and `steal_item`; its query also exposes
+`attachment_kind` and `drops_items`. This is monster definition coverage,
+not chest loot customization. Its numeric -1..450 check is insufficient as
+native item-definition validation.
+
+The Chronicle native paths establish the following integration requirements:
+
+- `ps2/src/monstorunit.cpp`, `SetupBaseModel` and `SetMonster`: definitions
+  are copied into the loaded model cache and then live actors. Definition
+  overrides affect subsequent model loads, not already-loaded actors. Reset
+  and owner retirement likewise cannot promise to rewrite existing actors.
+- The same file's rare-drop path preserves an existing forced drop and checks
+  `drops_items`; the steal path checks inventory acceptance before starting
+  its pickup. The adapter must retain these native probabilities and gates.
+- `port/src/dun/movechara.cpp`: ordinary random drops and stolen items reach
+  `BtGetAttach_Init`, while designated gate keys use their native presentation.
+- `ps2/src/btitem.cpp`, `BtGetAttach_Init`: attachment volume is generated only
+  for the native attachment range; pickup calls `CDngStatusData::GetItem`.
+- `ps2/src/dngstatusdata.cpp`: `CheckItemGet` checks dungeon-item and attachment
+  capacity but has no weapon-capacity branch. `GetItem` indexes weapon data by
+  item ID and can use an eleventh weapon slot. Therefore a numeric upper bound
+  alone does not establish a valid or capacity-safe weapon drop. Actual native
+  definitions, attachment payload requirements and full-inventory behavior
+  need validation before claiming supported drop categories.
+
+The planned adapter needs per-field ownership, informative conflicts, atomic
+staging with other host writes, conditional restoration that preserves later
+external edits, and cleanup on owner/runtime retirement. Read-only family and
+drop-gate fields must not be mistaken for interchangeable loot identifiers.
+No claims or native table changes should exist without an explicit request.
+Contributor-owned custom item/weapon registration remains a separate extension.
+
+Required evidence includes whole-definition preservation outside requested
+fields, unchanged RNG for queries/empty batches, disjoint-owner coexistence,
+same-field conflicts, mixed-command rollback, retirement restoration, and a
+shared-manager retail scenario crossing a real model load. Pickup validation
+must include full inventory and weapon slots, not just table readback. This
+audit is source evidence only; it adds no API and makes no runtime-success claim.
+
