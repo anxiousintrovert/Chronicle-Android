@@ -28,10 +28,10 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 |---|---|---|
 | Quest playthrough | Start the shipped contract through the shared menu, enter a floor, defeat enemies through normal controls, receive exactly one reward, save/reload, and verify cancellation/restart | Scripted controller start, native menu save/load and abandon/restart passed for an unadvanced contract; normal-controls floor/combat/completed-reward acceptance remains pending |
 | Clean installation | Launch from a new distribution/save directory; install disabled packages, enable/restart, diagnose conflicts, disable/restart and recover original textures | Staged Windows PNG-package rehearsal passed through scripted controller input in the shared manager; conflict/disabled scenes matched the no-mod baseline |
-| Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
-| Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
-| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Clean-source candidate 111f55ce archived and extracted startup passed; dependency notices and hashes included. Notice review and release approval remain pending |
-| Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | [Tester procedure](MOD_BETA_TESTING.md) documents setup and acceptance; candidate-specific results and limitations remain pending |
+| Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Prior native replacement tests passed; packaged candidate 111f55ce passed the 14-phase 4K installation rehearsal, with rendered replacement reviewed and conflict/disabled scenes pixel-identical to baseline |
+| Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Candidate RelWithDebInfo Clang tests: 1,064 passed, 107 skipped, one disabled with a documented 30-second allowance; 89 author-tool tests passed. PS2 baseline and upstream renderer pin unchanged |
+| Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Clean-source candidate 111f55ce archived and extracted startup passed; dependency notices, runtime imports and pinned DLL identity audited. Supplied glyph artwork provenance and final release acceptance remain pending |
+| Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | [Tester procedure](MOD_BETA_TESTING.md) documents setup and acceptance; candidate-specific evidence is recorded below. Quest completion and artwork provenance remain open |
 
 Do not label a candidate release-ready solely because unit tests pass. Record
 normal-input, runtime-injected and source-only evidence distinctly. Windows beta
@@ -322,3 +322,34 @@ cases passed: native baseline, unchanged PNG, diagnostic replacement, full 4K
 upscale, disabled and conflict. The 4K GPU pixel hash still matched the complete
 source. The existing Clang-built test binary was used. No native engine, PS2 or
 Kazarov sources changed in this tooling update.
+
+## Candidate regression and packaged 4K acceptance (2026-10-20)
+
+Candidate 111f55ce's clean RelWithDebInfo build was extended with the native
+Clang 23.1.2 test target. Native source is unchanged between 0368ceb0 and
+111f55ce. The first full run hit the existing five-second timeout in
+`GfxGpuMeshDc2.FogChangesContinuouslyThroughZeroDepthAndW`; an isolated CTest
+retry also timed out. Running that case directly passed in 7.038 seconds.
+With the existing `DC_TEST_TIMEOUT` cache option set to 30 seconds, the full
+suite completed in 42.99 seconds: 1,064 passed, 107 skipped and one disabled.
+The fog case passed in 7.92 seconds. This is a test-run configuration change,
+not a renderer or source timeout change. The skipped cases are not certified.
+All 89 author-tool tests passed separately at b69dad8e.
+
+The packaged executable (SHA-256
+`5dfb287aaacf9314ca476ceb900ae6cf29d271a86663ee7d2e8e21a8e4cdb0b2`)
+passed all 14 shared-menu installation/restart phases using a verified
+4096x4096 replacement for `c01d03`. Visual review showed the expected brown
+gloves and boots. Enabled-scene RGB differences were confined to the player
+body region (555,567)-(730,813); conflict and disabled scenes were pixel-identical
+to the no-mod baseline. This is the existing nearest-neighbour upscale from
+retail data, not an independently authored high-detail texture. The runner's
+report checks and the separate rendered-image checks both passed.
+
+Local evidence is retained under `issue-evidence/framework-expansion-20261019/`:
+`candidate-regression.log`, `candidate-fog-recheck.log`,
+`candidate-regression-30s.log`, and `candidate-111f55ce-4k-install/`.
+The latter contains inputs, reports, profiles, images and `result.json`.
+No retail assets or local saves are committed. The PS2 baseline and upstream
+Kazarov pin remain unchanged. These results do not close normal-controls quest
+combat/reward/completed-save acceptance or supplied glyph artwork provenance.
