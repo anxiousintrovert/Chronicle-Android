@@ -2904,3 +2904,24 @@ sequence music set/clear. Its custom sound registration/play/stop is covered
 by our declarative assets plus playback APIs. Seek/pause/gain updates are not
 required by that pinned audio implementation and are not a parity blocker.
 Public operation count remains 128.
+
+
+### Retail sound table preflight (2026-10-20)
+
+The retail SE audit found variable-length chapter/voice tables behind native
+GetSeInfo's broad index ranges. Basic tables have 199 entries despite IDs
+100..299; chapter 3 has 44 entries and voice 6 has seven, including terminators.
+The port-only ResolveRetailEffect preflight now selects known bounded spans,
+rejects out-of-range selectors, holes and terminators, and returns a detached
+row. Null chapter/voice tables retain the native fixed-table fallback. It accepts
+Chronicle's actual 0..2799 ID range, not the reference API's broader 0..4095.
+No native lookup, retail playback or PS2 source is changed.
+
+Clang 23.1.2 builds and two focused native tests pass: short-table tails and
+invalid selectors reject; valid rows copy without table or RNG mutation. All
+38 Python checks pass, including a read-only source comparison that guards
+every copied table bound against the retail declarations. Public operation
+count stays 128. Loaded-bank/sample readiness, queued SE dispatch and retail
+playback evidence still need implementation before exposing audio.se_play.
+The BGM audit also found that SndBgmLoad returns zero for both an already-loaded
+set and a failed load; a successful mod result cannot rely on that return alone.
