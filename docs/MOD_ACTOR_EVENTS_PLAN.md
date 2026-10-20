@@ -67,3 +67,14 @@ or removal subscriptions until their capture, cancellation and runtime tests lan
 
 All implementation belongs outside PS2 directories. This work must not define
 custom item, weapon or cutscene registries reserved for contributor extensions.
+
+## Internal transport progress
+
+`port/src/mods/actor_events.hpp` now provides the internal 64-record value queue.
+It defaults disabled, copies bounded owner/definition labels and final scalar
+snapshots, counts dropped records, and supports unit cancellation without changing
+other records' order. Handles remain distinct across slot reuse. It has no native
+producer, global instance or public subscriber yet, so it changes no game path.
+Four Clang tests cover dormancy, value independence, bounds and cancellation;
+the two existing enemy-death queue tests also pass. Native producer integration
+and public dispatch remain the next implementation steps, not completed coverage.

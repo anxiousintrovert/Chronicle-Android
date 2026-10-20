@@ -4330,3 +4330,12 @@ as completed-spawn callbacks. Cleanup and unit-clear paths also require distinct
 semantics and stale-context cancellation. See MOD_ACTOR_EVENTS_PLAN.md for the
 implementation sequence and acceptance evidence. No new capability is advertised,
 no engine behavior changed, and this audit does not close the lifecycle gap.
+
+## Internal actor event transport (2026-10-20)
+
+The bounded actor lifecycle queue is implemented and tested as preparation for
+native producer/runtime integration. It copies values, remains disabled by
+default, reports overflow and cancels records by unit while preserving order.
+Clang 23.1.2 built the tests and all six actor/death queue checks passed. The queue
+is not yet wired into gameplay or advertised as a capability. Public lifecycle
+coverage remains open; PS2 and upstream renderer files are untouched.
