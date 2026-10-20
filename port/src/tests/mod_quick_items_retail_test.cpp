@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <fstream>
 
+#include "btactstatus.hpp"
 #include "dun/gameloop.hpp"
 #include "editmapscript.hpp"
 #include "gameloop.hpp"
@@ -21,8 +22,10 @@
 extern int start_event_no, start_system_event;
 
 namespace {
-bool        transitioned = false, queued = false, verified = false;
-std::string last_state;
+bool         transitioned = false, queued = false, verified = false;
+bool         throw_case = false, overlap_case = false, overlapped = false, saw_projectile = false, saw_aim = false;
+std::int64_t consumed_frame = -1;
+std::string  last_state;
 
 void QuickItemPump() {
     WindowPollEvents();
@@ -31,12 +34,15 @@ void QuickItemPump() {
     if (!transitioned && mods::TownLoadoutReady()) {
         // Disposable fixture inventory, installed before native dungeon loading.
         auto     &s = *SaveData->GetDngStatus();
-        const int items[] = {ITEM_REGULAR_WATER, ITEM_BREAD, ITEM_DRAN_S_FEATHER};
+        const int items[] = {throw_case ? ITEM_STONE : ITEM_REGULAR_WATER, ITEM_BREAD, ITEM_DRAN_S_FEATHER};
         for (int i = 0; i < 3; ++i) {
             s.item_pack.quick_item_slot[i] = items[i];
             s.item_pack.quick_item_qty[i] = 1;
         }
         s.active_item_vol[2] = 600;
+        if (throw_case) {
+            s.item_pack.quick_item_qty[0] = 2;
+        }
         s.hp[0] = s.next_hp[0] = 10;
         s.max_hp[0] = 100;
         s.life_step[0] = 0;
@@ -53,6 +59,42 @@ void QuickItemPump() {
     }
     const auto state = mods::ReadQuickItems();
     last_state = state.dump();
+    bool hold_ready = false;
+    if (queued && overlap_case) {
+        const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
+        hold_ready = saved.at("mods").at("audit.quick").value("values", nlohmann::json::object()).value("hold_ready", false);
+    }
+    if (throw_case && overlap_case && !overlapped && hold_ready) {
+        InputScript overlap;
+        std::string error;
+        const auto  frame = GameFrameCount();
+        ASSERT_TRUE(InputScriptParse("0\n" + std::to_string(frame) + " square\n" + std::to_string(frame + 30) + "\n", overlap, error)) << error;
+        InputScriptInstall(std::move(overlap));
+        InputScriptApply(frame);
+        overlapped = true;
+    }
+    if (throw_case && queued && activeItem.models) {
+        for (const auto model : activeItem.models->model) {
+            saw_projectile |= model == ITEM_MODEL_THROWN;
+        }
+        saw_aim |= BtActStatus.action_on == 2 && BtActStatus.motion_no == 0x1a;
+        if (UserStatus->item_pack.quick_item_qty[0] == 1 && consumed_frame < 0) {
+            consumed_frame = GameFrameCount();
+        }
+        if (consumed_frame >= 0 && GameFrameCount() >= consumed_frame + 90) {
+            EXPECT_EQ(UserStatus->item_pack.quick_item_qty[0], 1);
+            EXPECT_TRUE(saw_projectile);
+            EXPECT_FALSE(state.value("use_pending", false));
+            EXPECT_EQ(BtActStatus.action_on, 0);
+            EXPECT_EQ(activeItem.model[8], -1);
+            if (overlap_case) {
+                EXPECT_TRUE(overlapped);
+                EXPECT_TRUE(saw_aim);
+            }
+            verified = true;
+            GameRequestStop();
+        }
+    }
     if (!queued && state.value("ready", false)) {
         bool all_ready = state["slots"].size() == 3;
         for (const auto &slot : state["slots"]) {
@@ -62,9 +104,15 @@ void QuickItemPump() {
             for (const auto &action : mods::Scripts().Actions("audit.quick")) {
                 if (action.id == "select" && action.available) {
                     // Native dungeon initialization may reset the town gauges.
-                    UserStatus->hp[0] = UserStatus->next_hp[0] = 10;
+                    UserStatus->hp[0] = UserStatus->next_hp[0] = overlap_case ? UserStatus->max_hp[0] : 10;
                     UserStatus->life_step[0] = 0;
                     UserStatus->water_now[0] = 10;
+                    if (throw_case) {
+                        InputScript neutral;
+                        std::string neutral_error;
+                        ASSERT_TRUE(InputScriptParse("0\n", neutral, neutral_error));
+                        InputScriptInstall(std::move(neutral));
+                    }
                     std::string error;
                     queued = mods::Scripts().QueueAction("audit.quick", "select", error);
                     EXPECT_TRUE(queued) << error;
@@ -72,7 +120,7 @@ void QuickItemPump() {
             }
         }
     }
-    if (queued) {
+    if (queued && !throw_case) {
         const auto saved = nlohmann::json::parse(mods::Scripts().SaveState());
         const auto values = saved.at("mods").at("audit.quick").value("values", nlohmann::json::object());
         if (values.value("verified", false)) {
@@ -94,13 +142,17 @@ void QuickItemPump() {
     }
 }
 
-TEST(ModQuickItemsRetail, SharedActionSelectsAndUsesNativeWaterFoodAndFeather) {
+void RunQuickAudit(bool throwing, bool physical_overlap) {
     const char *data = std::getenv("DC_DATA");
     const char *audit = std::getenv("DC_QUICK_ITEMS_AUDIT");
     if (!data || !audit || !*audit) {
         GTEST_SKIP() << "Run alone with DC_DATA and DC_QUICK_ITEMS_AUDIT (disposable directory)";
     }
     transitioned = queued = verified = false;
+    throw_case = throwing;
+    overlap_case = physical_overlap;
+    overlapped = saw_projectile = saw_aim = false;
+    consumed_frame = -1;
     last_state.clear();
     const std::filesystem::path root = audit;
     std::filesystem::create_directories(root / "mods/audit.quick");
@@ -128,6 +180,44 @@ return {on_tick=function()
  elseif phase==7 and not state.use_pending then chronicle.set('verified',true) end
 end}
 )";
+    if (throw_case) {
+        std::ofstream(root / "mods/audit.quick/main.lua") << R"(
+local armed=false
+local requested=false
+assert(chronicle.action('select','Throw a stone','Request exactly one native quick-slot throw.',function() armed=true end))
+return {on_tick=function()
+ if not armed or requested then return end
+ local state=assert(chronicle.call('items.quick_slots'))
+ if not state.ready then return end
+ assert(chronicle.call('items.quick_slot_use',{slot=1}))
+ requested=true
+end}
+)";
+    }
+    if (overlap_case) {
+        std::ofstream(root / "mods/audit.quick/main.lua") << R"(
+local armed=false
+local phase=0
+local ticks=0
+assert(chronicle.action('select','Overlap held input','Hold Square on ineffective bread, then request a stone throw.',function() armed=true end))
+return {on_tick=function()
+ if not armed or phase==2 then return end
+ local state=assert(chronicle.call('items.quick_slots'))
+ if not state.ready then return end
+ if phase==0 then
+  assert(chronicle.call('items.quick_slot_select',{slot=2}))
+  chronicle.set('hold_ready',true)
+  phase=1
+ else
+  ticks=ticks+1
+  if ticks==10 then
+   assert(chronicle.call('items.quick_slot_use',{slot=1}))
+   phase=2
+  end
+ end
+end}
+)";
+    }
     PathsSetDataRoot(data);
     PathsSetSaveRoot(root);
     ConfigLoad();
@@ -158,4 +248,10 @@ end}
         ADD_FAILURE() << diagnostic;
     }
 }
+
+TEST(ModQuickItemsRetail, SharedActionSelectsAndUsesNativeWaterFoodAndFeather) { RunQuickAudit(false, false); }
+
+TEST(ModQuickItemsRetail, NativeThrowConsumesOneItemAndCreatesAProjectile) { RunQuickAudit(true, false); }
+
+TEST(ModQuickItemsRetail, PhysicalSquareHoldAimsAndReleasesWithoutDuplicateUse) { RunQuickAudit(true, true); }
 } // namespace

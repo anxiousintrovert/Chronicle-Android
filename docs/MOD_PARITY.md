@@ -16,7 +16,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | In-game management | Shared menu framework, enable/disable, restart preview, reasons, quest progress, errors/logs, permission display, native trust confirmation, owned Lua/native action lists with queued execution/results | Richer journal/skills UI and custom controls |
 | Lua and host calls | Isolated bounded Lua, owned tick/map/floor/gameplay/save-loaded listeners, declared-dependency query/transactional command exports, owned save state/resources, operation discovery, permission and required-operation checks, queued atomic writes; package-owned deferred custom events | More native events |
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
-| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and thrown-item/overlapping-input retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
+| Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | World/floor/restriction and dungeon progress snapshots; story/map/init flag transactions; vanilla generation unchanged | transitions, owned layout/population/loot/floor-rule overrides, back-floor requests, extra floors |
 | Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; unchanged retail capacity; active-enemy sphere searches and transactional one-shot movement intent | Spawn/despawn, spawn-time tuning and deterministic damage modifiers |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection; loaded retail element inspection and transactional enable/disable with prerequisites | Placement/Atla/satisfaction integration |
@@ -1221,3 +1221,27 @@ Validation receipt: Clang 23.1.2 Windows Release builds passed. Full suite:
 optional PAL water/food/feather shared-action test passed separately in 9.331 s.
 All 18 Python checks and all 3,840 empty/disabled seed comparisons passed.
 CLI discovery includes items.quick_slot_use. PS2 files remain unchanged.
+
+### Native throw and physical-input overlap validation
+
+Two additional optional retail scenarios now exercise the same shared-manager
+Lua quick-slot use API with a native-loaded Stone slot containing two copies.
+The mod-only request produces a native projectile, consumes exactly one copy,
+returns to idle, and does not consume another copy during 90 further frames.
+The second scenario first selects ineffective food at full HP and establishes a
+physical Square hold before requesting the stone slot. It observes native aim
+motion, releases physical Square, then verifies the same single consumption,
+projectile, retired hand model and no replay. A late press after request dispatch
+was not valid evidence of aiming; the final fixture establishes the hold first.
+
+This confirms that the existing native aiming routine reads physical input:
+without a hold it advances directly into the throw animation, while a physical
+hold preserves aiming until release. No engine adjustment was needed. The tests
+cover Toan and Stone, not all throwables, lock-on targets or other characters.
+
+Validation: Clang 23.1.2 rebuilt the test executable. The mod-only throw passed
+in 9.157 s, held-input overlap in 9.933 s, and the refactored water/food/feather
+scenario in 9.717 s, each in its own process/disposable save directory. All six
+quick-item unit tests passed. This commit changes tests and documentation only;
+PS2 and engine files are unchanged. The prior full-suite/seed receipt remains
+applicable to the unchanged engine, not a newly repeated full-suite claim.

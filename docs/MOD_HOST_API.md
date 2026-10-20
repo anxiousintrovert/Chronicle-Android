@@ -1341,6 +1341,14 @@ An ineffective or blocked action may consume nothing. In particular, native
 throwing can enter aiming and still require ordinary player input to finish.
 This API does not automate targeting. Acceptance must not be treated as success.
 
+For the native throw path, aiming still reads the player's physical Square hold.
+Without that hold, a mod request proceeds into the ordinary throw animation;
+with Square held, the player can aim and release to throw. The request does not
+replace physical aiming input. Retail tests cover one Toan stone throw both
+without physical input and with an overlapping hold/release, verifying a native
+projectile, exactly one consumed stone, and no replay over the next 90 frames.
+Other throwable types and playable characters still require runtime coverage.
+
 `items.quick_slots` also reports `use_pending` and, while pending, `use_owner`
 and `use_slot`. A cleared request is not a consumption receipt: drinking may
 already be running under native control. Inspect inventory/effect state to
