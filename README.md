@@ -24,6 +24,7 @@ Gameplay APIs are experimental; full NG+, new native content registries, and
 foreign-format importers remain planned work.
 
 - [Install mods and use the manager](docs/MODS.md)
+- [Windows beta testing procedure](docs/MOD_BETA_TESTING.md)
 - [Planned framework features](docs/MOD_ROADMAP.md)
 - [Every manifest field and package format](docs/MOD_FORMAT.md)
 - [Create a mod: Lua API, lifecycle, testing, distribution, saves](docs/MOD_AUTHORING.md)

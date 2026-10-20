@@ -31,7 +31,7 @@ are deferred. Existing internal actor queue groundwork is not a public API.
 | Texture acceptance | Same-size replacement, full-resolution replacement and 4096x4096 source upload; disabled/conflicting fallback | Windows PAL evidence exists; rerun against the beta candidate and record its exact commit |
 | Regression | Clang game/test builds, focused/full native tests, author-tool tests, PS2 baseline and unchanged upstream renderer pin | Prior runs exist; record fresh results for the candidate, including skips |
 | Distribution | Reproducible Windows Clang build, required runtime DLLs, license notices, checksums and source commit | Packaging and clean launch validation are pending; never include disc/extracted assets, saves, profiles or enabled gameplay mods |
-| Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | Author/API docs exist; beta-specific guide and candidate limitations are pending |
+| Tester guide | Setup, backup/test-save procedure, package format, enable/restart/conflict workflow, known limitations and bug report evidence | [Tester procedure](MOD_BETA_TESTING.md) documents setup and acceptance; candidate-specific results and limitations remain pending |
 
 Do not label a candidate release-ready solely because unit tests pass. Record
 normal-input, runtime-injected and source-only evidence distinctly. Windows beta
