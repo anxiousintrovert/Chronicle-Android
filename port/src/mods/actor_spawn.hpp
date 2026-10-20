@@ -16,6 +16,13 @@ bool ValidateActorPlacement(const CDungeonMap &map, std::span<const ITEM_FREE_AR
 bool ValidateActorObstructions(const CDungeonMap &map, CMonstorUnit &unit,
                                std::array<float, 3> position, float radius,
                                std::array<float, 3> player_position, float player_radius, std::string &error);
+struct ActorSpawnTuning {
+    std::optional<int> max_hp, defense, reward_exp, reward_money;
+    std::optional<std::array<float, 3>> rotation;
+};
+// Parse optional stats/rotation without changing output on failure.
+std::string ParseActorSpawnTuning(const nlohmann::json &arguments, ActorSpawnTuning &output);
+std::string ValidateActorSpawnTuning(const ActorSpawnTuning &tuning);
 struct LoadedActorSpawnPlan { int slot; int model; std::array<float, 3> position; };
 // Read-only prerequisites for a loaded retail model. This does not validate a
 // custom compiled script, floor geometry, or gameplay transition readiness.
@@ -29,5 +36,5 @@ std::optional<EntityHandles::Handle> CreateLoadedActor(
     CMonstorUnit &unit, const CDungeonMap &map, std::span<const ITEM_FREE_AREA> areas,
     ActorOwners &owners, std::string_view owner, std::string_view definition,
     int model, std::array<float, 3> position, std::array<float, 3> player_position,
-    float player_radius, std::string &error);
+    float player_radius, std::string &error, const ActorSpawnTuning &tuning = {});
 }

@@ -122,11 +122,29 @@ TEST(ModActorSpawn, NativeCreationOwnershipRetirementAndReuseUseFreshIdentities)
     ASSERT_TRUE(owners.Find(handles, *first)); EXPECT_EQ(owners.Find(handles, *first)->owner, "alpha");
     EXPECT_TRUE(mods::RetireOwnedActor(unit.get(), owners, *first, "alpha", nullptr, nullptr, -1, -1, -1, error)) << error;
     EXPECT_EQ(unit->alive_count, 0); EXPECT_FALSE(handles.Resolve(*first));
-    const auto second = spawn(); ASSERT_TRUE(second) << error;
+    const auto model_before = unit->model[0];
+    mods::ActorSpawnTuning tuning;
+    tuning.max_hp = 50; tuning.defense = 12; tuning.reward_exp = 23; tuning.reward_money = 24;
+    tuning.rotation = std::array<float, 3>{0, 0.75f, 0};
+    const auto second = mods::CreateLoadedActor(*unit, *map, areas, owners, "alpha", "guard", 0,
+        {0, 0, 0}, {1000, 0, 1000}, 13, error, tuning); ASSERT_TRUE(second) << error;
+    EXPECT_EQ(unit->monster[0].hp, 50); EXPECT_EQ(unit->monster[0].max_hp, 50);
+    EXPECT_EQ(unit->monster[0].defense, 12); EXPECT_EQ(unit->monster[0].exp, 23); EXPECT_EQ(unit->monster[0].money, 24);
+    EXPECT_FLOAT_EQ(unit->chara[0][0].rotation.y, 0.75f);
+    EXPECT_EQ(std::memcmp(&unit->model[0], &model_before, sizeof(model_before)), 0);
     EXPECT_NE(*second, *first); EXPECT_EQ(handles.Resolve(*second), 0);
     EXPECT_EQ(owners.Size(), 1); EXPECT_EQ(unit->alive_count, 1);
     EXPECT_FALSE(owners.Find(handles, *first));
     ASSERT_TRUE(mods::RetireOwnedActor(unit.get(), owners, *second, "alpha", nullptr, nullptr, -1, -1, -1, error)) << error;
+    tuning.defense = 32768;
+    EXPECT_FALSE(mods::CreateLoadedActor(*unit, *map, areas, owners, "alpha", "guard", 0,
+        {0, 0, 0}, {1000, 0, 1000}, 13, error, tuning));
+    EXPECT_EQ(unit->alive_count, 0); EXPECT_EQ(owners.Size(), 0); EXPECT_EQ(handles.Get(0), 0);
+    const auto third = spawn(); ASSERT_TRUE(third) << error;
+    EXPECT_EQ(unit->monster[0].hp, 25); EXPECT_EQ(unit->monster[0].defense, model_before.defense);
+    EXPECT_EQ(unit->monster[0].exp, model_before.exp); EXPECT_EQ(unit->monster[0].money, model_before.money);
+    EXPECT_FLOAT_EQ(unit->chara[0][0].rotation.y, 0);
+    ASSERT_TRUE(mods::RetireOwnedActor(unit.get(), owners, *third, "alpha", nullptr, nullptr, -1, -1, -1, error));
     unit->script[0] = nullptr; unit->base_chara[0][0].frame = nullptr;
 }
 
@@ -171,4 +189,26 @@ TEST(ModActorSpawn, ModelQueryReportsReadinessWithoutTrackingOrNativeWrites) {
     const auto *op = mods::FindOperation("entities.models"); ASSERT_NE(op, nullptr);
     EXPECT_FALSE(op->writes); EXPECT_EQ(op->permission, "game.read");
     mods::StopTrackingEntities(); unit->script[0] = nullptr; unit->base_chara[0][0].frame = nullptr;
+}
+
+TEST(ModActorSpawn, TuningSchemaIsBoundedAndRejectedParsingPreservesOutput) {
+    using Json = nlohmann::json;
+    mods::ActorSpawnTuning output; output.max_hp = 77;
+    for (const auto &stats : std::vector<Json>{
+        Json::object(), {{"hp", 0}}, {{"max_hp", 0}}, {{"max_hp", 1000001}},
+        {{"defense", 32768}}, {{"reward_exp", -1}}, {{"reward_exp", 32768}},
+        {{"reward_money", 2147483648ULL}}, {{"reward_money", 1.5}}, {{"defense", true}}}) {
+        EXPECT_FALSE(mods::ParseActorSpawnTuning({{"stats", stats}}, output).empty()); EXPECT_EQ(output.max_hp, 77);
+    }
+    for (const auto &rotation : std::vector<Json>{Json::array(), {0, 0}, {0, 10001, 0}, {0, true, 0}, {0, std::numeric_limits<double>::quiet_NaN(), 0}}) {
+        EXPECT_FALSE(mods::ParseActorSpawnTuning({{"rotation", rotation}}, output).empty()); EXPECT_EQ(output.max_hp, 77);
+    }
+    Json request = {{"model", 0}, {"position", {0, 0, 0}}, {"stats", {{"max_hp", 1000000}, {"defense", 32767}, {"reward_exp", 0}, {"reward_money", 2147483647}}}, {"rotation", {-10000, 0, 10000}}};
+    EXPECT_TRUE(mods::ValidateOperation("entities.spawn_check", request).empty());
+    request["id"] = "guard"; EXPECT_TRUE(mods::ValidateOperation("entities.spawn", request).empty());
+    ASSERT_TRUE(mods::ParseActorSpawnTuning(request, output).empty());
+    EXPECT_EQ(output.max_hp, 1000000); EXPECT_EQ(output.reward_money, 2147483647);
+    EXPECT_TRUE(mods::Supports("entities.spawn_tuning.v1"));
+    EXPECT_TRUE(mods::ParseActorSpawnTuning(Json::object(), output).empty());
+    EXPECT_FALSE(output.max_hp); EXPECT_FALSE(output.rotation);
 }

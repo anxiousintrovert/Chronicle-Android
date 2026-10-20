@@ -348,8 +348,8 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false, bool actor_spawn = false, bool actor_fail = false, bool actor_leave = false) {
-    actor_spawn = actor_spawn || actor_fail || actor_leave;
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false, bool actor_models = false, bool actor_spawn = false, bool actor_fail = false, bool actor_leave = false, bool actor_tuning = false) {
+    actor_spawn = actor_spawn || actor_fail || actor_leave || actor_tuning;
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
@@ -436,6 +436,24 @@ end}
   chronicle.set('actor_spawn_verified',true)
  end
 )");
+        if (actor_tuning) {
+            for (const std::string original : {"{model=model,position=point}", "{id='probe',model=model,position=point}"}) {
+                const auto at = source.find(original); ASSERT_NE(at, std::string::npos);
+                std::string replacement = original; replacement.pop_back();
+                replacement += ",stats={max_hp=777,defense=37,reward_exp=23,reward_money=41},rotation={0,0.5,0}}";
+                source.replace(at, original.size(), replacement);
+            }
+            const auto save_at = source.find("  local index=chronicle.get('actor_scan')"); ASSERT_NE(save_at, std::string::npos);
+            source.insert(save_at, "  chronicle.set('actor_native_hp',models.models[model+1].max_hp)\n  chronicle.set('actor_model',model)\n");
+            const auto verify_at = source.find("  chronicle.set('actor_handle',handle)"); ASSERT_NE(verify_at, std::string::npos);
+            source.insert(verify_at, R"(
+  local tuned=assert(chronicle.call('entities.get',{entity=handle}))
+  assert(tuned.hp==777 and tuned.max_hp==777 and tuned.defense==37)
+  assert(tuned.reward_exp==23 and tuned.reward_money==41)
+  local model=chronicle.get('actor_model')
+  assert(chronicle.call('entities.models').models[model+1].max_hp==chronicle.get('actor_native_hp'))
+)");
+        }
         if (actor_leave) {
             const std::string despawn = "  assert(chronicle.call('entities.despawn',{entity=handle}))";
             const auto at = source.find(despawn); ASSERT_NE(at, std::string::npos);
@@ -470,6 +488,7 @@ end}
         std::ifstream manifest_input(manifest_path); auto manifest = nlohmann::json::parse(manifest_input); manifest_input.close();
         for (const auto *op : {"entities.models", "entities.spawn_check", "entities.owned", "entities.spawn", "entities.despawn", "entities.get"})
             manifest["requires_operations"].push_back(op);
+        if (actor_tuning) manifest["requires_capabilities"].push_back("entities.spawn_tuning.v1");
         std::ofstream(manifest_path) << manifest.dump();
     }
     if (actor_models) {
@@ -980,3 +999,5 @@ TEST(ModBackFloorRetail, ActorSpawnDespawnThroughSharedActionPreservesBackTransi
 TEST(ModBackFloorRetail, ActorOwnerFailureCleansUpBeforeBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
 
 TEST(ModBackFloorRetail, ActorLifetimeEndsAtNativeBackFloorReset) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, ActorSpawnTuningPreservesLoadedTemplateAndBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }

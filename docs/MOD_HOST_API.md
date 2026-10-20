@@ -2169,3 +2169,39 @@ The `actors` author smoke suite covers model inspection, explicit spawn/despawn,
 a deliberately failed owner followed by automatic retirement, and an actor left
 alive across native back-floor reset. All run through shared-manager actions;
 no example gameplay package is installed or enabled by these APIs.
+
+
+### Optional spawn stats and initial rotation
+
+Packages using these fields should declare `entities.spawn_tuning.v1` in
+`requires_capabilities`, plus their required actor operations and permissions.
+`entities.spawn` and `entities.spawn_check` accept optional `stats` and `rotation`:
+
+```lua
+local request = {
+  model = 0, position = {480, 0, 640},
+  stats = {max_hp = 777, defense = 37, reward_exp = 23, reward_money = 41},
+  rotation = {0, 0.5, 0}
+}
+local check = assert(chronicle.call('entities.spawn_check', request))
+if check.ready then
+  request.id = 'guard'
+  assert(chronicle.call('entities.spawn', request))
+end
+```
+
+The example coordinates are illustrative; inspect loaded models and check an
+actual position on the current floor. Stats must be a nonempty object containing
+only integer `max_hp` (1..1000000), `defense` (0..32767), `reward_exp` (0..32767)
+and/or `reward_money` (0..2147483647). Rotation is three finite angles in radians,
+each within +/-10000. Unknown fields, floats in integer fields and invalid values
+reject before native creation. Check accepts the same optional fields but no `id`.
+
+Explicit values apply to the newly created actor after native initialization.
+Setting `max_hp` starts a living actor at that full health; it does not resurrect
+an actor whose initialization ended its life. Omitted stats retain native values;
+omitted rotation retains native initialization's result. Rotation is an initial
+orientation, not an AI lock. The shared loaded model's stats, existing actors and
+subsequent untuned spawns are unchanged. These values become this actor's baseline
+for later owned stat overrides and restoration. No persistent gameplay tuning
+or custom content registration is installed.

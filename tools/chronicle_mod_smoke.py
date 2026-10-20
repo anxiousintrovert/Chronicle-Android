@@ -13,7 +13,7 @@ import time
 import xml.etree.ElementTree as ET
 
 SUITES = {
-    'actors': ['ActorModelsThroughSharedActionPreservesBackTransition', 'ActorSpawnDespawnThroughSharedActionPreservesBackTransition', 'ActorOwnerFailureCleansUpBeforeBackTransition', 'ActorLifetimeEndsAtNativeBackFloorReset'],
+    'actors': ['ActorModelsThroughSharedActionPreservesBackTransition', 'ActorSpawnDespawnThroughSharedActionPreservesBackTransition', 'ActorOwnerFailureCleansUpBeforeBackTransition', 'ActorLifetimeEndsAtNativeBackFloorReset', 'ActorSpawnTuningPreservesLoadedTemplateAndBackTransition'],
     'audio': ['RetailSoundThroughSharedActionPreservesBackTransition', 'BgmStopThroughSharedActionPreservesBackTransition', 'BgmPlayThroughSharedActionPreservesBackTransition', 'BgmLoadThroughSharedActionPreservesBackTransition', 'MusicReplacementThroughSharedActionPreservesBackTransition'],
     'retail': ['SharedActionReachesBackFloorThroughNativeScriptBoundary', 'WiseOwlTransport',
                'ShipwreckTransport', 'TempleTransport', 'MoonSeaTransport', 'GalleryTransport', 'DemonShaftTransport'],

@@ -18,7 +18,7 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Player / party | Joined/active stats and status duration reads; health, thirst, capacities and defense writes; active-player retail status application/removal; deferred native dungeon character switching with readiness/rejection reasons and full resource reload; owned town body selection and restoration; nine owned dungeon player tuning controls; one-shot native invincibility and combat-timer readback | Broader town interaction and player tuning scenario validation; recruitment remains a separate extension (the pinned reference does not bind it for Chronicle) |
 | Inventory / weapons / economy | Native definition/bag/quick-slot/attachment reads; native quick-slot readiness, transactional selection and bounded native action requests; bounded retail item/attachment grant and removal, weapon grants; ABS/synthesis points and WHP writes; native build-up eligibility queries, transactional attachment/progression APIs with native equipped-cache refresh where no new model/effect is needed; unequipped status-break; transactional town weapon loadouts; deterministic retail healing/water/cure item use; wallet/fishing transactions | Custom item/weapon registration belongs to contributor; broader item effects and all-character/item-variant retail validation; live dungeon weapon equip, active model-changing build-up, Ruby effect-form resource reloads and equipped status-break |
 | World / dungeon | Owned monster rare/steal loot definitions with per-field conflicts and restoration; owned weighted front/back small/weapon chest pools; world/floor/restriction and dungeon progress snapshots; transactional saved restriction rules with explicit live application; story/map/init flag transactions; native settlement travel, dungeon entry with optional floor selection and native back-floor transport through deferred owner-bound requests; owned future-load dungeon layouts and 2..256 monster requests with conflict/rejection/actual-placement reporting; vanilla generation unchanged | Registered-map and broader floor transitions, broader floor-rule overrides and chest capacity, extra floors |
-| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with placement checks and runtime cleanup | Spawn-time tuning, deterministic damage modifiers and broader actor lifecycle/platform scenarios |
+| Entities / combat | Lazy generation-checked live enemy list/get; native combat counts; transactional damage/healing and slow/stop timers; owned live stats and model/shadow scale with conflict detection and cleanup; queued native hit/death dispatch; port-side spawn/clear identity notifications; retail active limits by default with explicit population expansion to 256; active-enemy sphere searches and transactional one-shot movement intent; loaded-model owned spawn/despawn with optional initial stats/rotation, placement checks and runtime cleanup | Deterministic damage modifiers and broader actor lifecycle/platform scenarios |
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
@@ -3412,3 +3412,30 @@ PS2 diff remains empty. Native dying/event-linked cleanup may wait for floor
 reset; broader boss/model/platform/exit scenarios remain to validate. Custom
 registered models, spawn-time tuning and deterministic damage modifiers remain
 outstanding, as do the other capability gaps listed in the matrix.
+
+
+### Spawn-time stats and rotation (2026-10-20)
+
+The pinned reference's Chronicle SpawnCharacter applies health, defense, XP,
+money and rotation after native initialization. The owned loaded-model spawn
+API now accepts optional stats (max_hp, defense, reward_exp, reward_money) and
+initial rotation with matching native-safe bounds. Spawn-check validates those
+fields too. Invalid fields reject before creation; omitted values preserve native
+initialization. Explicit health tuning does not resurrect an initialization-dead
+actor. No shared MONSTOR_MODEL stats or future native spawn templates are changed.
+Registered character/model definitions remain a separate missing capability.
+
+Added entities.spawn_tuning.v1 to the host and author CLI capability catalogs so
+packages using the optional fields can require support before loading. Public
+operation count remains 140. Native plugin structures are unchanged.
+
+Clang 23.1.2 game/test builds and 33 focused tests passed. Native creation tests
+cover tuned values/rotation, rejection without allocation of an actor identity,
+byte-preserved template stats and subsequent untuned slot reuse. All 38 Python
+tool tests passed. Five PAL actor scenarios passed, including the new shared-menu
+tuned spawn with live stat readback, unchanged loaded-template HP, despawn and
+native back-floor transport. Evidence:
+actor-tuning-807923fb5a4345fb8cc2b35167f4ec3b/report.json in the local framework
+expansion evidence directory. The author runner now contains 43 scenarios.
+PS2 diff is empty. Deterministic damage modifiers, registered content and the
+other matrix gaps remain outstanding; broader platform coverage is unverified.

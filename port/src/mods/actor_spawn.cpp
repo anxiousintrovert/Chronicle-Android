@@ -43,8 +43,9 @@ std::optional<EntityHandles::Handle> CreateLoadedActor(
     CMonstorUnit &unit, const CDungeonMap &map, std::span<const ITEM_FREE_AREA> areas,
     ActorOwners &owners, std::string_view owner, std::string_view definition,
     int model, std::array<float, 3> position, std::array<float, 3> player_position,
-    float player_radius, std::string &error) {
+    float player_radius, std::string &error, const ActorSpawnTuning &tuning) {
     const auto fail = [&](const char *reason) -> std::optional<EntityHandles::Handle> { error = reason; return {}; };
+    error = ValidateActorSpawnTuning(tuning); if (!error.empty()) return {};
     auto *handles = TrackedEntities(&unit);
     if (!handles) return fail("actor identity tracking is unavailable");
     const auto plan = PlanLoadedActorSpawn(&unit, model, position, error);
@@ -69,6 +70,16 @@ std::optional<EntityHandles::Handle> CreateLoadedActor(
     const auto handle = handles->Get(plan->slot);
     if (!owners.Publish(*handles, handle, std::move(*reservation)))
         throw std::logic_error("native actor creation violated its ownership reservation");
+    auto &actor = unit.monster[plan->slot];
+    if (tuning.max_hp) {
+        actor.max_hp = *tuning.max_hp;
+        // Do not resurrect an actor whose native initialization ended its life.
+        if ((actor.state == 1 || actor.state == 2) && actor.hp > 0) actor.hp = *tuning.max_hp;
+    }
+    if (tuning.defense) actor.defense = static_cast<short>(*tuning.defense);
+    if (tuning.reward_exp) actor.exp = *tuning.reward_exp;
+    if (tuning.reward_money) actor.money = *tuning.reward_money;
+    if (tuning.rotation) unit.chara[plan->slot][0].SetRotation((*tuning.rotation)[0], (*tuning.rotation)[1], (*tuning.rotation)[2]);
     error.clear(); return handle;
 }
 }
@@ -97,5 +108,51 @@ nlohmann::json ReadLoadedActorModels(const CMonstorUnit *unit) {
             {"resources_ready", plan.has_value() && reason.empty()}, {"reason", reason}});
     }
     return result;
+}
+}
+
+namespace mods {
+std::string ValidateActorSpawnTuning(const ActorSpawnTuning &tuning) {
+    if (tuning.max_hp && (*tuning.max_hp < 1 || *tuning.max_hp > 1000000)) return "spawn max_hp must be 1..1000000";
+    if (tuning.defense && (*tuning.defense < 0 || *tuning.defense > 32767)) return "spawn defense must be 0..32767";
+    if (tuning.reward_exp && (*tuning.reward_exp < 0 || *tuning.reward_exp > 32767)) return "spawn reward_exp must be 0..32767";
+    if (tuning.reward_money && *tuning.reward_money < 0) return "spawn reward_money must be 0..2147483647";
+    if (tuning.rotation) for (const auto axis : *tuning.rotation)
+        if (!std::isfinite(axis) || std::abs(axis) > 10000) return "spawn rotation must be finite radians within +/-10000";
+    return {};
+}
+std::string ParseActorSpawnTuning(const nlohmann::json &arguments, ActorSpawnTuning &output) {
+    if (!arguments.is_object()) return "actor arguments must be an object";
+    ActorSpawnTuning tuning;
+    if (arguments.contains("stats")) {
+        const auto &stats = arguments.at("stats");
+        if (!stats.is_object() || stats.empty()) return "spawn stats must be a nonempty object";
+        for (const auto &[key, value] : stats.items()) {
+            std::optional<int> *destination = nullptr;
+            int minimum = 0, maximum = 32767;
+            if (key == "max_hp") { destination = &tuning.max_hp; minimum = 1; maximum = 1000000; }
+            else if (key == "defense") destination = &tuning.defense;
+            else if (key == "reward_exp") destination = &tuning.reward_exp;
+            else if (key == "reward_money") { destination = &tuning.reward_money; maximum = 2147483647; }
+            else return "unsupported spawn stat: " + key;
+            if (!value.is_number_integer() || value.get<double>() < minimum || value.get<double>() > maximum)
+                return "spawn stat is not an integer within its allowed range: " + key;
+            *destination = value.get<int>();
+        }
+    }
+    if (arguments.contains("rotation")) {
+        const auto &rotation = arguments.at("rotation");
+        if (!rotation.is_array() || rotation.size() != 3) return "spawn rotation must be [x,y,z] radians";
+        std::array<float, 3> values;
+        for (unsigned i = 0; i < 3; ++i) {
+            if (!rotation[i].is_number() || !std::isfinite(rotation[i].get<double>()) || std::abs(rotation[i].get<double>()) > 10000)
+                return "spawn rotation must be finite radians within +/-10000";
+            values[i] = rotation[i].get<float>();
+        }
+        tuning.rotation = values;
+    }
+    const auto error = ValidateActorSpawnTuning(tuning);
+    if (!error.empty()) return error;
+    output = tuning; return {};
 }
 }

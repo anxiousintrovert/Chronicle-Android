@@ -120,6 +120,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `menu.native.v1` | Optional ABI 2 native menu descriptor; actions share the manager, limits and transaction rules with Lua actions |
 | `resources.read.v1` | Owned startup-cached package resources; requires `resources.read` |
 | `logging.v1` | Bounded per-session diagnostics |
+| `entities.spawn_tuning.v1` | Optional bounded stats and initial rotation for owned loaded-model spawning |
 | `host.calls.v1` | Catalogued, permission-checked native queries and transactional writes |
 | `plugins.native.v1` | Opt-in Chronicle C ABI 1 plugins; not a MoonMod ABI compatibility claim |
 | `plugins.native.v2` | Separate C ABI 2 with owned lifecycle subscriptions and scalar save values; ABI 1 remains supported |

@@ -63,7 +63,13 @@ std::string ValidateActorOperation(std::string_view operation, const Json &a) {
         return a.size() == 1 && a.contains("entity") && Handle(a["entity"]) ? "" : "provide a canonical entity handle string";
     const bool spawn = operation == "entities.spawn";
     if (!spawn && operation != "entities.spawn_check") return "unknown actor operation";
-    if (a.size() != (spawn ? 3 : 2) || !a.contains("model") || !a["model"].is_number_integer() ||
+    for (const auto &[key, value] : a.items())
+        if (key != "model" && key != "position" && key != "stats" && key != "rotation" && !(spawn && key == "id"))
+            return "unsupported actor argument: " + key;
+    ActorSpawnTuning tuning;
+    const auto tuning_error = ParseActorSpawnTuning(a, tuning);
+    if (!tuning_error.empty()) return tuning_error;
+    if (!a.contains("model") || !a["model"].is_number_integer() ||
         a["model"].get<double>() < 0 || a["model"].get<double>() > 8 || !a.contains("position") ||
         !a["position"].is_array() || a["position"].size() != 3) return "provide model 0..8 and position [x,y,z]";
     for (const auto &axis : a["position"])
@@ -116,9 +122,11 @@ bool ApplyActorCommands(const std::vector<GameCommand> &commands, int money, std
         for (const auto &[handle, record] : owners.Snapshot()) if (record.owner == command.owner && record.definition == id) {
             error = "actor id is already owned by this package"; return false;
         }
+        ActorSpawnTuning tuning;
+        error = ParseActorSpawnTuning(command.arguments, tuning); if (!error.empty()) return false;
         return CreateLoadedActor(*NowMonstorUnit, *NowDngMap, LoadedActorPlacementAreas(selectMapNo), owners,
             command.owner, id, command.arguments.at("model").get<int>(), command.arguments.at("position").get<std::array<float, 3>>(),
-            PlayerPosition(), 20, error).has_value();
+            PlayerPosition(), 20, error, tuning).has_value();
     }
     if (!HasBoundActorOwnership(NowMonstorUnit)) { error = "no owned actors on this floor"; return false; }
     auto &owners = BindActorOwnership(*NowMonstorUnit, Scripts().Epoch());

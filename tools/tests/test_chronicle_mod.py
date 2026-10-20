@@ -114,6 +114,9 @@ class AuthorTools(unittest.TestCase):
             tool.validate(denied)
         ready = self.package('test.ready', requires_operations=['story.flag_set'], permissions=['game.write'])
         self.assertEqual(tool.validate(ready)['id'], 'test.ready')
+        tuned = self.package('test.tuned', requires_operations=['entities.spawn'],
+                             requires_capabilities=['entities.spawn_tuning.v1'], permissions=['game.write'])
+        self.assertEqual(tool.validate(tuned)['id'], 'test.tuned')
 
     def test_seed_comparison_rejects_rng_differences_and_truncation(self):
         baseline, candidate = self.root / 'baseline.jsonl', self.root / 'candidate.jsonl'
