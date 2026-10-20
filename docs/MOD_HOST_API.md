@@ -2077,3 +2077,9 @@ operations work through the shared runtime host boundary for Lua/native calls;
 they cannot be mixed with other engine writes or currency changes in a callback.
 Music replacements take precedence over the user's soundtrack mapping while
 owned; clearing restores the fallback captured at that sequence start.
+
+Each `audio.state.music` entry also exposes `bound_ports`: native port indices
+which selected this owner's sequence replacement at their last start. This is
+binding information, not a playing/audibility flag. Updating an existing mapping
+changes its registered `id` for the next start; an already bound stream can still
+be the previous asset until restarted or cleared. Scene cleanup clears bindings.

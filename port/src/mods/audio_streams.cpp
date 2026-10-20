@@ -207,8 +207,12 @@ nlohmann::json AudioStreams::State(std::string_view owner) const {
         result["voices"].push_back({{"handle", handle}, {"id", voice.id},
             {"playing", voice.channel->State() == audio::StreamState::Playing}, {"position", voice.channel->Position()}});
     result["music"] = nlohmann::json::array();
-    for (const auto &[sequence, music] : music_) if (music.owner == owner)
-        result["music"].push_back({{"sequence", sequence}, {"id", music.id}});
+    for (const auto &[sequence, music] : music_) if (music.owner == owner) {
+        auto ports = nlohmann::json::array();
+        for (const auto &[port, binding] : music_bindings_)
+            if (binding.owner == owner && binding.sequence == sequence) ports.push_back(port);
+        result["music"].push_back({{"sequence", sequence}, {"id", music.id}, {"bound_ports", std::move(ports)}});
+    }
     return result;
 }
 }

@@ -22,9 +22,9 @@ tools. It does not expose unimplemented engine hooks as successful no-ops.
 | Shops / Georama | Owned retail shop stock and shared base prices with conflict detection and conditional restoration; saved plot/placement/request inspection, transactional request completion with loaded-cache synchronization, derived satisfaction readback, native Atla inspection/atomic collection, and loaded retail placement/removal; loaded retail element inspection and transactional enable/disable with prerequisites | Native condition/reward services; broader placement/Atla retail scenarios |
 | Content / assets | Same-size compatible existing asset replacements and package resource reads | Contributor-owned custom item/weapon registration; registered characters/models/animations/maps, structural validation/conversion, native allocation contracts |
 | Quests / dialogue / skills | Declared owned objectives, scripted progress/rewards, persisted scalar state | Dialogue trees, native quest events, skill trees, native script interception |
-| Rendering / audio | Bounded owned WAV/FLAC/Ogg playback through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
+| Rendering / audio | Bounded owned WAV/FLAC/Ogg playback, retail SE dispatch, validated native BGM load/play/stop/state and owned sequence replacements through shared host calls and manager actions; owned front/back lighting and view-scale controls, dungeon camera inspection and bounded owned orbit writes with conditional cleanup, enemy model/shadow scale and temporary minimap reveals on explicit request; no timing changes | Owned overlays, broader camera and audio controls; broader lighting gameplay/platform validation |
 | Native plugins | Own C ABI 1 and separate ABI 2; SHA-256 approval binding, separate trust+enable, shared host calls/logging/ticks; ABI 2 observed lifecycle/custom events, owned scalar save values and optional shared-manager actions; Lua/native dependency queries and commands | Native-ready events, broader host domains; Linux/macOS/Android verification |
-| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
+| Author tooling | new/check/inspect/check-set/pack/install/capabilities/apis/compare-seeds CLI; isolated retail/population/chests/lifecycle/georama/rendering/audio smoke runner with per-scenario evidence; standalone Clang ABI 1 and ABI 2 examples | Engine content editors/converters, rich runtime inspection, broader automated retail scenario coverage |
 | Saves | Existing namespaced mod trailer, atomic file writes and exact package/version checks | Schema migrations, independent save branching, full NG+ transfer/recruitment/reset services |
 
 Chronicle Two-specific systems (photography, inventions, Ridepod, monster badges,
@@ -3132,3 +3132,23 @@ gaps in the ledger.
 
 Validation: Clang 23.1.2 builds; 882 native tests passed, 97 skipped,
 one disabled; all 38 Python checks passed. PS2 diff remains empty.
+
+
+### Owned music PAL replay and author tooling (2026-10-20)
+
+The audio smoke suite now contains five scenarios (38 default scenarios). The
+new replay declares a FLAC package asset, arms through the shared menu, registers
+the currently loaded sequence, restarts its native track and confirms port zero
+selected the owned replacement. It clears the mapping, verifies playing state
+and completes native back-floor travel without mod diagnostics. This tests actual
+native-to-runtime selection, rather than just an isolated registry lookup.
+
+The read-only audio.state.music bound_ports field makes selection inspectable;
+it is not an audibility/playing claim and does not promise a mapping update has
+already replaced a previously bound asset. PCM output/restoration remains covered
+by the separate mixer tests. Physical-device listening remains unverified.
+
+Validation: Clang 23.1.2 builds, all five PAL audio scenarios, 12 focused
+runtime/audio tests and all 38 Python checks passed. PAL evidence is
+music-replace-2f9f8ffa1afa404e96d5a76aafae83b0/report.json in the local framework
+expansion evidence folder. PS2 diff remains empty. Public operations stay 135.

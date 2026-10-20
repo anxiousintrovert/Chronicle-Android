@@ -223,6 +223,7 @@ TEST(ModAudioStreams, MusicReplacementConflictsCleanupAndNativeSupersession) {
     mixer.SetVolume(0, audio::kFullPortVolume);
     mixer.SetStream(0, streams.BindMusic(0, "test_a.sq", fallback));
     mixer.Play(0);
+    EXPECT_EQ(streams.State("a")["music"][0]["bound_ports"], nlohmann::json::array({0}));
     for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.25f, 0.00001f);
     ASSERT_TRUE(streams.ClearMusic("a", "test_a.sq", error));
     for (float sample : Render(mixer)) EXPECT_NEAR(sample, 0.125f, 0.00001f);

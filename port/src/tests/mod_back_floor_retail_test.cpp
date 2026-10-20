@@ -23,6 +23,7 @@
 #include "gamemode.hpp"
 #include "gfx/gfx.hpp"
 #include "gfx_fixture.hpp"
+#include "mod_audio_decode_fixture.hpp"
 #include "main.hpp"
 #include "itemdata.hpp"
 #include "mods/back_floor.hpp"
@@ -345,7 +346,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false, bool chest = false, bool atla = false, bool camera = false, bool camera_write = false, bool lighting = false, bool lighting_write = false, bool retail_sound = false, bool bgm_stop = false, bool bgm_play = false, bool bgm_load = false, bool music_replace = false) {
     audit_lighting_write = lighting_write; lighting_red = {-1, -1, -1};
     audit_camera_write = camera_write; camera_applied = camera_released = false;
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
@@ -387,6 +388,44 @@ return {on_tick=function()
  requested=true
 end}
 )";
+    if (music_replace) {
+        const auto manifest_path = root / "mods/audit.back/mod.json";
+        std::ifstream input(manifest_path); auto manifest = nlohmann::json::parse(input); input.close();
+        manifest["audio"] = {{"tone", "tone.flac"}};
+        manifest["permissions"].push_back("resources.read");
+        for (const auto *operation : {"audio.music_set", "audio.music_clear", "audio.state", "audio.bgm_play", "audio.bgm_state"})
+            manifest["requires_operations"].push_back(operation);
+        std::ofstream(manifest_path) << manifest.dump();
+        std::ofstream audio(root / "mods/audit.back/tone.flac", std::ios::binary);
+        audio.write(reinterpret_cast<const char *>(kAudioFlac), sizeof(kAudioFlac)); audio.close();
+        const auto script_path = root / "mods/audit.back/main.lua";
+        std::ifstream input_script(script_path);
+        std::string source((std::istreambuf_iterator<char>(input_script)), {}); input_script.close();
+        const auto where = source.find(" assert(chronicle.call('dungeon.back_floor_enter'))");
+        ASSERT_NE(where, std::string::npos);
+        source.insert(where, R"(
+ local phase=chronicle.get('music_phase') or 0
+ local music=assert(chronicle.call('audio.bgm_state'))
+ local owned=assert(chronicle.call('audio.state'))
+ if phase==0 then
+  assert(music.playing and #music.tracks>0 and music.tracks[1].ready)
+  chronicle.set('music_sequence',music.tracks[1].name)
+  assert(chronicle.call('audio.music_set',{sequence=music.tracks[1].name,id='tone'}))
+ elseif phase==1 then
+  assert(#owned.music==1 and #owned.music[1].bound_ports==0)
+  assert(chronicle.call('audio.bgm_play',{track=0}))
+ elseif phase==2 then
+  assert(music.playing and #owned.music==1)
+  assert(#owned.music[1].bound_ports==1 and owned.music[1].bound_ports[1]==0)
+  assert(chronicle.call('audio.music_clear',{sequence=chronicle.get('music_sequence')}))
+ else
+  assert(#owned.music==0 and music.playing)
+  chronicle.set('music_verified',true)
+ end
+ if phase<3 then chronicle.set('music_phase',phase+1) return end
+)");
+        std::ofstream(script_path) << source;
+    }
     if (managed) {
         const auto    script_path = root / "mods/audit.back/main.lua";
         std::ifstream input_script(script_path);
@@ -674,6 +713,10 @@ end}
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("bgm_verified"), true);
     }
+    if (music_replace) {
+        const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
+        EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("music_verified"), true);
+    }
     if (bgm_load) {
         const auto state = nlohmann::json::parse(mods::Scripts().SaveState());
         EXPECT_EQ(state.at("mods").at("audit.back").at("values").at("new_bgm_verified"), true);
@@ -793,3 +836,5 @@ TEST(ModBackFloorRetail, BgmStopThroughSharedActionPreservesBackTransition) { Ru
 TEST(ModBackFloorRetail, BgmPlayThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, true); }
 
 TEST(ModBackFloorRetail, BgmLoadThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, true); }
+
+TEST(ModBackFloorRetail, MusicReplacementThroughSharedActionPreservesBackTransition) { RunBackAudit(0, false, 6, false, 5, 0, false, false, false, false, false, false, false, false, false, false, false, false, false, true); }
