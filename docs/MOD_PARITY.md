@@ -2028,7 +2028,7 @@ except map memory size. PS2 source is unchanged; other platforms unverified.
 
 ### Owned native-slot population requests
 
-Owned layouts accept optional monsters (1-15). The request is stored on the
+Owned layouts accept optional monsters (2-15; Forest minimum 3). The request is stored on the
 generated map, survives copying/back-floor entry and clears on initialization.
 Only positive random-model placement calls use it; model-specific and zero
 counts preserve native behavior. Placement selection, spacing and key assignment
@@ -2046,3 +2046,19 @@ Validation: Clang 23.1.2 game/test builds; 797 tests passed, 57 skipped,
 one disabled; 29 Python checks passed. Both 3,840-case empty/disabled
 exports match pinned upstream except map memory size. PS2 source unchanged.
 Other platforms and broader seed/key-route coverage remain unverified.
+
+
+### Population key-carrier minimums
+
+Native SetKey skips assignment with one or fewer monsters; Wise Owl needs
+three separate key carriers. The host now rejects one-monster requests and
+Forest requests below three. The preparation boundary also rejects the
+invalid Forest setting before publishing anything. Minimum Cave (two) and
+Forest (three) PAL replays verified the required key carriers and back-floor
+travel. All seven managed-layout replays now assert their front-floor keys.
+This is first-floor seed evidence, not proof of every placement or route.
+
+Clang 23.1.2 game/test builds pass: 797 passed, 59 skipped, one disabled.
+All 29 Python checks pass. Empty/disabled 3,840-case seed exports retain
+their hashes and differ from pinned upstream only in map memory size.
+PS2 source remains unchanged; other platforms remain unverified.

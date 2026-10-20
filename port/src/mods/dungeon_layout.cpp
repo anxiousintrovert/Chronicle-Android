@@ -61,8 +61,11 @@ std::string ValidateLayout(std::string_view op, const Json &a) {
     if (a.contains("chests") && (!a["chests"].is_number_integer() || a["chests"].get<double>() < 2 || a["chests"].get<double>() > 24)) {
         return "chests must be in 2..24";
     }
-    if (a.contains("monsters") && (!a["monsters"].is_number_integer() || a["monsters"].get<double>() < 1 || a["monsters"].get<double>() > 15)) {
-        return "monsters must be in 1..15";
+    if (a.contains("monsters") && (!a["monsters"].is_number_integer() || a["monsters"].get<double>() < 2 || a["monsters"].get<double>() > 15)) {
+        return "monsters must be in 2..15";
+    }
+    if (a.contains("monsters") && a["dungeon"] == 1 && a["monsters"].get<int>() < 3) {
+        return "Wise Owl Forest requires at least three key carriers";
     }
     for (const auto &[field, bounds] : std::map<std::string, std::pair<int, int>>{
              {"rooms",    {2, 64}},

@@ -1512,7 +1512,9 @@ range. Exhaustion or bounded placement failure rejects the staged layout and
 falls back to retail generation. Larger capacity and chest loot overrides
 remain separate work.
 
-An optional `monsters=5` requests 1–15 placement attempts on each floor.
+An optional `monsters=5` requests 2–15 placement attempts on each floor
+(at least three for Wise Owl Forest's three keys). One monster would bypass
+native key assignment and is rejected.
 Omission keeps native counts. The setting survives on the generated map for
 back-floor entry and is cleared by map initialization. It applies only to
 ordinary random-model placement with a positive native count; explicit-model

@@ -34,6 +34,9 @@ PreparedMaps PrepareMaps(const CDungeonMap &model, const CDungeonEventMan &event
         model.map_type != 1 || status.cur_floor < 0 || status.cur_floor >= maxFloorTbl__3[selectMapNo]) {
         throw std::runtime_error("custom floor preparation requires loaded procedural resources and current save");
     }
+    if (selectMapNo == 1 && layout.monsters != 0 && layout.monsters < 3) {
+        throw std::runtime_error("Wise Owl Forest requires at least three key carriers");
+    }
     PreparedMaps result;
     result.front = std::make_unique<CDungeonMap>(model);
     result.status = std::make_unique<CDngStatusData>(status);

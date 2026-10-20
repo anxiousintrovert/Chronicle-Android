@@ -19,6 +19,7 @@
 #include "gfx/gfx.hpp"
 #include "gfx_fixture.hpp"
 #include "main.hpp"
+#include "itemdata.hpp"
 #include "mods/back_floor.hpp"
 #include "mods/dungeon_layout.hpp"
 #include "monstorunit.hpp"
@@ -36,6 +37,7 @@ namespace {
 bool               queued = false, arrived = false;
 bool               expected_expanded = false, road_captured = false;
 int                expected_rooms = 6;
+int                expected_monsters = 5;
 bool               managed_layout = false;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
@@ -81,8 +83,19 @@ void BackPump() {
                     EXPECT_EQ(state["last_build"]["state"], expected_expanded ? "applied" : "rejected") << state.dump();
                     if (expected_expanded) {
                         EXPECT_EQ(state["requested"]["chests"], 12);
-                        EXPECT_EQ(state["requested"]["monsters"], 5);
-                        EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), 5);
+                        EXPECT_EQ(state["requested"]["monsters"], expected_monsters);
+                        EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
+                        const std::array<int, 7> keys{ITEM_DRAN_S_CREST, ITEM_SHINY_STONE, ITEM_HOOK, ITEM_KING_S_SLATE, ITEM_GUN_POWDER, ITEM_CLOCK_HANDS, ITEM_BLACK_KNIGHT_CREST};
+                        auto has_carrier = [](int key) {
+                            return std::ranges::any_of(NowMonstorUnit->monster, [key](const auto &actor) {
+                                return actor.state != -1 && actor.drops_items && actor.drop_item == key;
+                            });
+                        };
+                        EXPECT_TRUE(has_carrier(keys[selectMapNo]));
+                        if (selectMapNo == 1) {
+                            EXPECT_TRUE(has_carrier(ITEM_RED_BERRY));
+                            EXPECT_TRUE(has_carrier(ITEM_POINTY_CHESTNUT));
+                        }
                         EXPECT_GE(MainDungeonMap.box_num, 12);
                         EXPECT_GE(UraDungeonMap.box_num, 12);
                         EXPECT_EQ(state["last_build"]["front_chests"], MainDungeonMap.box_num);
@@ -113,6 +126,9 @@ void BackPump() {
                         EXPECT_GT(staged.front->room_num, 16);
                         EXPECT_GT(staged.back->room_num, 16);
                         EXPECT_THROW(chronicle::dungeon::PrepareMaps(MainDungeonMap, DngEventMan, *SaveData->GetDngStatus(), {2, 8, 6, 6}), std::runtime_error);
+                        if (selectMapNo == 1) {
+                            EXPECT_THROW(chronicle::dungeon::PrepareMaps(MainDungeonMap, DngEventMan, *SaveData->GetDngStatus(), {64, 46, 3, 6, 12, 2}), std::runtime_error);
+                        }
                         auto invalid = std::make_unique<CDungeonEventMan>(DngEventMan);
                         invalid->slot[0].enabled = 1;
                         invalid->slot[0].parts_id = 0;
@@ -149,7 +165,7 @@ void BackPump() {
         maximum_stable = std::max(maximum_stable, stable);
         if (stable >= 90) {
             if (managed_layout && expected_expanded) {
-                EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), 5);
+                EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
             }
             if (expected_expanded) {
                 float pos[4]{};
@@ -183,7 +199,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -195,6 +211,7 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool manage
     expected_expanded = expanded;
     managed_layout = managed;
     expected_rooms = rooms;
+    expected_monsters = monsters;
     road_captured = false;
     stable = maximum_stable = 0;
     input_released = false;
@@ -219,7 +236,7 @@ end}
         std::ifstream input_script(script_path);
         std::string   source((std::istreambuf_iterator<char>(input_script)), {});
         input_script.close();
-        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12,monsters=5" : ",area=8,room_min=6,room_max=6";
+        const std::string dimensions = expanded ? ",area=46,room_min=3,room_max=6,chests=12,monsters=" + std::to_string(monsters) : ",area=8,room_min=6,room_max=6";
         const std::string init = "return {on_game_enter=function() assert(chronicle.call('dungeon.layout_set',{dungeon=" + std::to_string(dungeon) + ",rooms=" + std::to_string(rooms) + dimensions + "})) end,on_tick=";
         source.replace(source.find("return {on_tick="), std::string("return {on_tick=").size(), init);
         std::ofstream(script_path) << source;
@@ -309,4 +326,6 @@ TEST(ModBackFloorRetail, ManagedMoonSeaLayout) { RunBackAudit(4, true, 64, true)
 TEST(ModBackFloorRetail, ManagedGalleryLayout) { RunBackAudit(5, true, 64, true); }
 TEST(ModBackFloorRetail, ManagedDemonShaftLayout) { RunBackAudit(6, true, 64, true); }
 TEST(ModBackFloorRetail, RejectedManagedLayoutUsesRetail) { RunBackAudit(0, false, 2, true); }
+TEST(ModBackFloorRetail, MinimumCavePopulation) { RunBackAudit(0, true, 64, true, 2); }
+TEST(ModBackFloorRetail, MinimumForestPopulation) { RunBackAudit(1, true, 64, true, 3); }
 } // namespace

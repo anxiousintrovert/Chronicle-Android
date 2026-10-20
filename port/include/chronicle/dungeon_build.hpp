@@ -26,7 +26,7 @@ public:
             layout.room_min < 3 || layout.room_max > 6 ||
             layout.room_min > layout.room_max ||
             (layout.chests != 0 && (layout.chests < 2 || layout.chests > 24)) ||
-            layout.monsters < 0 || layout.monsters > 15) {
+            (layout.monsters != 0 && (layout.monsters < 2 || layout.monsters > 15))) {
             throw std::invalid_argument("invalid dungeon layout dimensions");
         }
         requested_build = &layout_;

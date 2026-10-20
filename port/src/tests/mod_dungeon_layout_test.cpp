@@ -89,6 +89,15 @@ TEST_F(ModDungeonLayout, ValidationAndOwnerRetirement) {
     EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
     a["monsters"] = 0;
     EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    a["monsters"] = 1;
+    EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    a["monsters"] = 2;
+    EXPECT_TRUE(mods::ValidateOperation(command.operation, a).empty());
+    a["dungeon"] = 1;
+    EXPECT_FALSE(mods::ValidateOperation(command.operation, a).empty());
+    a["monsters"] = 3;
+    EXPECT_TRUE(mods::ValidateOperation(command.operation, a).empty());
+    a["dungeon"] = 0;
     a["monsters"] = 5;
     EXPECT_TRUE(mods::ValidateOperation(command.operation, a).empty());
     command.arguments = a;
