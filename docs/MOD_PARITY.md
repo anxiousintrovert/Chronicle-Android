@@ -2400,3 +2400,27 @@ Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 70 skipped,
 and maximum-population transition PAL replays pass. Both 3,840-case seed
 exports retain prior hashes and differ from pinned upstream only by map
 storage size. PS2 unchanged; other platforms unverified.
+
+
+### Native population outcome reporting (2026-10-20)
+
+Owned layout readback now separates map-generation success from native
+monster placement. last_build.population_front and population_back report
+requested, placed, state (applied/partial) and reason after their placement
+calls. The hook records the change in native alive_count rather than
+assuming all attempts succeeded. It only publishes for the matching applied
+claim, runtime epoch, explicit population setting and current floor.
+Default maps have no reporting call; missing fields mean not yet reported.
+
+A fresh PAL test fills all active slots, attempts more native placement and
+verifies partial/zero-added with an explanation. Normal managed front/back
+placement reports applied with the actual count; the back-floor transition
+remains usable after the partial result. MOD_HOST_API documents the fields.
+Public counts remain capped at fifteen pending high-request preflight
+failure fallback and public-path testing. Full coverage remains unfinished.
+
+Clang 23.1.2 Windows game/test builds pass: 820 tests passed, 71 skipped,
+1 disabled; 29 Python checks pass. Partial-placement, retail Cave, managed
+Forest and maximum-population transition PAL replays pass. Both 3,840-case
+seed exports retain prior hashes and differ from pinned upstream only by
+map storage size. PS2 unchanged; other platforms unverified.

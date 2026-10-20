@@ -1583,6 +1583,21 @@
           "old": "if (nearby < 3) {",
           "new": "if (nearby < chronicle::monsters::PlacementNeighborLimit(count, SlotLimit())) {",
           "count": 1
+        },
+        {
+          "old": "#include \"chronicle/monster_collision.hpp\"",
+          "new": "#include \"chronicle/monster_collision.hpp\"\n#include \"chronicle/mod_dungeon_layout.hpp\"",
+          "count": 1
+        },
+        {
+          "old": "    if (map) count = map->PopulationCount(count, model_no);",
+          "new": "    if (map) count = map->PopulationCount(count, model_no);\n    const int population_before = alive_count;",
+          "count": 1
+        },
+        {
+          "old": "    SetKey();\n}",
+          "new": "    SetKey();\n    if (map && map->port_monster_count > 0 && model_no == -1) {\n        mods::RecordOwnedPopulation(map, count, alive_count - population_before);\n    }\n}",
+          "count": 1
         }
       ]
     },

@@ -8,6 +8,7 @@
 #include "chronicle/dungeon_prepare.hpp"
 #include "chronicle/dungeon_transport.hpp"
 #include "chronicle/random_state.hpp"
+#include "chronicle/mod_dungeon_layout.hpp"
 #include "dun/gameloop.hpp"
 #include "randomitem.hpp"
 #include "savedata.hpp"
@@ -41,6 +42,24 @@ void ResetEvents(CDungeonEventMan &manager) {
 } // namespace
 
 bool HasOwnedLayouts() { return !claims.empty(); }
+
+void RecordOwnedPopulation(CDungeonMap *map, int requested, int placed) {
+    if (claims.empty() || !map || !UserStatus || requested <= 0 ||
+        requested != map->port_monster_count || (map != &MainDungeonMap && map != &UraDungeonMap)) return;
+    auto found = claims.find(selectMapNo);
+    if (found == claims.end()) return;
+    auto &claim = found->second;
+    if (claim.epoch != Scripts().Epoch() || claim.layout.monsters != requested ||
+        claim.result.value("state", "") != "applied" ||
+        claim.result.value("floor", -1) != UserStatus->cur_floor) return;
+    placed = std::clamp(placed, 0, requested);
+    claim.result[map == &MainDungeonMap ? "population_front" : "population_back"] = {
+        {"requested", requested},
+        {"placed", placed},
+        {"state", placed == requested ? "applied" : "partial"},
+        {"reason", placed == requested ? "" : "native placement did not place every requested monster"}
+    };
+}
 
 bool IsLayoutWrite(std::string_view op) { return op == "dungeon.layout_set" || op == "dungeon.layout_reset"; }
 

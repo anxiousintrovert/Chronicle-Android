@@ -49,6 +49,7 @@ bool               population_injected = false;
 bool               high_slot_seen = false;
 bool               quit_with_population = false;
 bool               fail_with_population = false;
+bool               audit_partial_population = false;
 std::uint64_t      population_frame = 0;
 int                stable = 0, maximum_stable = 0;
 bool               input_released = false;
@@ -130,6 +131,9 @@ void BackPump() {
                         EXPECT_EQ(state["requested"]["chests"], 12);
                         EXPECT_EQ(state["requested"]["monsters"], expected_monsters);
                         EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
+                        EXPECT_EQ(state["last_build"]["population_front"]["state"], "applied");
+                        EXPECT_EQ(state["last_build"]["population_front"]["requested"], expected_monsters);
+                        EXPECT_EQ(state["last_build"]["population_front"]["placed"], expected_monsters);
                         const std::array<int, 7> keys{ITEM_DRAN_S_CREST, ITEM_SHINY_STONE, ITEM_HOOK, ITEM_KING_S_SLATE, ITEM_GUN_POWDER, ITEM_CLOCK_HANDS, ITEM_BLACK_KNIGHT_CREST};
                         auto has_carrier = [](int key) {
                             return std::ranges::any_of(NowMonstorUnit->monster, [key](const auto &actor) {
@@ -158,6 +162,16 @@ void BackPump() {
                     NowDngMap->port_monster_count = 0;
                     NowMonstorUnit->ArrangementPos(NowDngMap, audit_population, -1, 0);
                     NowDngMap->port_monster_count = requested;
+                    if (audit_partial_population) {
+                        // All active slots are occupied; native placement cannot
+                        // construct another actor even where the terrain fits.
+                        NowMonstorUnit->ArrangementPos(NowDngMap, requested, -1, 0);
+                        const auto report = mods::ReadLayout({{"dungeon", selectMapNo}})["last_build"]["population_front"];
+                        EXPECT_EQ(report["state"], "partial");
+                        EXPECT_EQ(report["requested"], requested);
+                        EXPECT_EQ(report["placed"], 0);
+                        EXPECT_FALSE(report["reason"].get<std::string>().empty());
+                    }
                     EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), audit_population);
                     EXPECT_EQ(NowMonstorUnit->SlotLimit(), unsigned(audit_population));
                     EXPECT_GT(NowColData->HitLimit(), 96u);
@@ -232,6 +246,10 @@ void BackPump() {
             ASSERT_NO_THROW(AuditMonsterTerrain());
             if (managed_layout && expected_expanded) {
                 EXPECT_EQ(NowMonstorUnit->GetMonstorNum(), expected_monsters);
+                const auto report = mods::ReadLayout({{"dungeon", selectMapNo}})["last_build"]["population_back"];
+                EXPECT_EQ(report["state"], "applied");
+                EXPECT_EQ(report["requested"], expected_monsters);
+                EXPECT_EQ(report["placed"], expected_monsters);
             }
             if (audit_population) {
                 EXPECT_TRUE(population_injected);
@@ -272,7 +290,7 @@ void BackPump() {
     }
 }
 
-void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false) {
+void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool managed = false, int monsters = 5, int population = 0, bool quit = false, bool fail = false, bool partial = false) {
     if (expanded && !std::getenv("DC_EXPANDED_BACK_FLOOR_AUDIT")) {
         GTEST_SKIP() << "Requires explicit expanded-floor audit opt-in";
     }
@@ -286,6 +304,7 @@ void RunBackAudit(int dungeon, bool expanded = false, int rooms = 6, bool manage
     audit_population = population;
     quit_with_population = quit;
     fail_with_population = fail;
+    audit_partial_population = partial;
     population_injected = false;
     high_slot_seen = false;
     population_frame = 0;
@@ -437,4 +456,5 @@ TEST(ModBackFloorRetail, MaximumGalleryPopulation) { RunBackAudit(5, true, 64, t
 TEST(ModBackFloorRetail, MaximumDemonShaftPopulation) { RunBackAudit(6, true, 64, true, 5, 256); }
 TEST(ModBackFloorRetail, QuitWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true); }
 TEST(ModBackFloorRetail, ExceptionWithMaximumPopulation) { RunBackAudit(0, true, 64, true, 5, 256, true, true); }
+TEST(ModBackFloorRetail, PartialPopulationIsReported) { RunBackAudit(0, true, 64, true, 5, 32, false, false, true); }
 } // namespace

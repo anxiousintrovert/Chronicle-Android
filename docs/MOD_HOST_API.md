@@ -1524,8 +1524,8 @@ request is not a guarantee that every attempted placement succeeds.
 The active limit remains sixteen monster slots. Paired native storage now
 reserves 256 slots, and an internal helper can allocate their scripts on demand.
 Per-unit lifecycle and iteration can now address the additional storage
-internally. Larger public requests still require load-boundary activation/reset,
-external consumer checks, resource budgets and high-population gameplay validation.
+internally. Internal 256-actor floor, transition and quit tests pass; larger
+public requests and their failure handling remain under integration.
 
 `dungeon.layout_get {dungeon=0}` (`game.read`) returns `enabled`, `owner`,
 `scope="future_floor_loads"`, `requested`, and `last_build`. The latter is
@@ -1534,6 +1534,15 @@ external consumer checks, resource budgets and high-population gameplay validati
 that a later floor can be built. Rejected preparation restores generation state
 and falls back to native retail generation. Reported chest counts include
 preexisting generation chests.
+
+After native monster placement, an applied build also reports
+`population_front` and, once visited, `population_back`. Each contains
+`requested`, `placed`, `state` (`"applied"` or `"partial"`) and `reason`.
+For example, `{requested=5,placed=3,state="partial",reason="native placement did not place every requested monster"}`
+means the map was built but only three actors were added by that placement call.
+This result is separate from layout generation success. Missing population
+fields mean placement has not been reported; they do not mean zero monsters.
+Reports are scoped to the matching applied claim, runtime epoch and floor.
 
 `dungeon.layout_reset {dungeon=0}` (`game.write`) removes the caller's claim.
 Owner retirement or runtime reset also removes claims. Existing loaded floors
