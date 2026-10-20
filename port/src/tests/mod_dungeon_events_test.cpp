@@ -4,8 +4,11 @@
 #include <memory>
 #include <vector>
 
+#include "chronicle/dungeon_events.hpp"
+#include "dun/gameloop.hpp"
 #include "dungeoneventman.hpp"
 #include "dungeonmap.hpp"
+#include "dungeonparts.hpp"
 #include "frame.hpp"
 #include "framevu1.hpp"
 
@@ -140,4 +143,55 @@ TEST(ModDungeonEvents, PlacedAllocationExhaustionDoesNotChangeMap) {
     std::memcpy(before.data(), static_cast<const void *>(map.get()), before.size());
     EXPECT_THROW(map->SetAtraBoll(pos, 0), std::runtime_error);
     EXPECT_EQ(std::memcmp(static_cast<const void *>(map.get()), before.data(), before.size()), 0);
+}
+
+TEST(ModDungeonEvents, ExpandedPlacementFindsFarGeometryAndRejectsEmptyMapWithoutRngOrOutputChanges) {
+    auto map = std::make_unique<CDungeonMap>();
+    map->port_grid_extent = 48;
+    for (auto &cell : map->cells) {
+        cell.parts_no = MAP_PARTS_NONE;
+    }
+    selectMapNo = 0;
+    float position[4]{1, 2, 3, 4};
+    srand(19);
+    const int next = rand();
+    srand(19);
+    EXPECT_THROW(SearchMapPutArea(*map, position), std::runtime_error);
+    EXPECT_EQ(rand(), next);
+    EXPECT_FLOAT_EQ(position[0], 1);
+    EXPECT_FLOAT_EQ(position[3], 4);
+    const auto &definition = ItemFreeAreaAll[0][0];
+    ASSERT_GT(definition.rect_num, 0);
+    map->cells[46 + 46 * 48].parts_no = definition.parts_no;
+    for (int seed = 0; seed < 64; ++seed) {
+        srand(seed);
+        EXPECT_GT(SearchMapPutArea(*map, position), 0);
+        EXPECT_GT(position[0], 7000);
+        EXPECT_GT(position[2], 7000);
+        EXPECT_FLOAT_EQ(position[3], 1);
+    }
+    for (auto &cell : map->cells) {
+        cell.parts_no = definition.parts_no;
+    }
+    bool beyond_prefix = false;
+    for (int seed = 0; seed < 32; ++seed) {
+        srand(seed);
+        EXPECT_GT(SearchMapPutArea(*map, position), 196);
+        beyond_prefix |= position[2] > 20 * 160.0f;
+    }
+    EXPECT_TRUE(beyond_prefix);
+    for (auto &cell : map->cells) {
+        cell.parts_no = MAP_PARTS_NONE;
+    }
+    map->cells[46 + 46 * 48].parts_no = MAP_PARTS_NONE;
+    map->cells[3 + 3 * 48].parts_no = definition.parts_no;
+    map->port_grid_extent = 20;
+    float expected[4];
+    srand(24);
+    int       count = SearchiDoPutArea(map->cells, 0, 0, 20, 20, expected);
+    const int after = rand();
+    srand(24);
+    EXPECT_EQ(SearchMapPutArea(*map, position), count);
+    EXPECT_EQ(std::memcmp(expected, position, sizeof(expected)), 0);
+    EXPECT_EQ(rand(), after);
 }

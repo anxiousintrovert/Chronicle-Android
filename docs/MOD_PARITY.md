@@ -1874,3 +1874,31 @@ Validation: Clang 23.1.2 Windows game/test builds and the full suite pass
 (788 passed, 34 skipped, 1 disabled). All 29 Python checks pass. Empty and
 disabled 3,840-case seed exports retain their previous hashes and match pinned
 upstream except for map memory size. No PS2 originals changed.
+
+
+### Expanded object placement
+
+Chest/trap/Atla generation and enemy arrangement now select placement geometry
+across the explicit map extent. Retail maps delegate to the original 20-cell
+sampler. Expanded maps sample uniformly from all native placement rectangles and
+apply their rotation and point bounds, avoiding the native sampler's
+196-rectangle whole-floor truncation and rounded out-of-range selection. Missing or invalid geometry is rejected
+before output/RNG changes. Expanded chest/Atla retries are bounded, Atla object
+capacity is checked, and custom Atla event origins are initialized from position.
+This does not increase population/object counts or expose a public layout API.
+A failed whole-floor build still requires staging and recovery before publication.
+
+Native tests cover far geometry, more than 196 candidates, empty-map rejection,
+and byte-identical retail output plus next-RNG state. Script inspection also
+confirmed that built-in transport routines use fixed road coordinates around
+X=3040, including camera, NPC and sound calls. Expanded transport remains
+unfinished: a diagnostic retail replay was stopped without a successful result;
+its test source and log are retained outside the repository. Full expanded-floor
+playthroughs are not validated by the sampler tests.
+
+Validation: Clang 23.1.2 Windows game/test builds pass, with 789 passing
+full-suite tests, 34 skips and 1 disabled benchmark. All 29 Python checks pass.
+Both 3,840-case no-mod/disabled exports retain their previous hashes and match
+pinned upstream except for map memory size. Protected PS2 files are unchanged.
+All seven separate PAL retail back-floor scenarios also passed with the
+placement wrapper; this does not validate expanded-floor transport.
