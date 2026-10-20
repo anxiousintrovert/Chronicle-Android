@@ -2833,3 +2833,21 @@ readiness or a reservation. A prior callback may change state; commands still
 revalidate at commit. Failed handlers roll back managed writes and stop their
 owner through the existing callback rules. No gameplay transition is performed
 by subscribing, and no-mod/no-subscriber execution makes no readiness query.
+
+## Abandon an unfinished quest
+
+Require `quests.abandon.v1` and `game.write`. `quests.abandon {id}` is shared by
+Lua and native plugins. It accepts only an owned dynamic quest declared with
+`explicit_start=true` that has started and is not complete. Active and failed
+quests can be abandoned. Manifest quests, automatic-start quests, unknown IDs,
+unstarted quests and completed quests reject the operation without changes.
+
+Abandonment clears that quest's aggregate/objective progress, start marker and
+failure reason, returning its status to `registered`. Its immutable definition,
+rewards specification and other quests are retained. Event progress stays off
+until a later explicit `quests.start`. Saved state reflects this registered state.
+The operation is transactional: a later callback/commit failure restores all prior
+progress. It grants no rewards, performs no refund and does not undo past world
+changes. Completed quests cannot be abandoned or restarted to replay rewards.
+Authors can expose an explicit abandon action through the shared menu; the core
+does not add automatic cancellation or a gameplay policy.

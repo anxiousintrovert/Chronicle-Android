@@ -87,6 +87,14 @@ static int tick(const ChronicleModHostV2 *host, void *state) {
                host->call(host->context,"skills.get","{\"tree\":\"combat\",\"id\":\"focus\"}",&result) && strstr(result,"\"rank\":1") &&
                host->state_set(host->context,"skill_read","true",&result);
     }
+    if (mode(host, "\"abandon\"")) {
+        if (*(int *)state != 1) return 1;
+        return host->call(host->context,"quests.register","{\"id\":\"cancel\",\"title\":\"Cancel\",\"description\":\"Native lifecycle\",\"goal\":2,\"explicit_start\":true}",&result) &&
+               host->call(host->context,"quests.start","{\"id\":\"cancel\"}",&result) &&
+               host->call(host->context,"quests.advance","{\"id\":\"cancel\",\"amount\":1}",&result) &&
+               host->call(host->context,"quests.abandon","{\"id\":\"cancel\"}",&result) && strstr(result,"\"status\":\"registered\"") &&
+               host->state_set(host->context,"abandoned","true",&result);
+    }
     if (mode(host, "\"quests\"")) {
         return host->call(host->context, "quests.list", "{}", &result) && strstr(result, "\"visit\"") &&
                host->call(host->context, "quests.get", "{\"id\":\"visit\"}", &result) && strstr(result, "\"goal\":2") &&

@@ -1096,6 +1096,13 @@ TEST_F(ModNativeV2, SharedQuestCallsRegisterAdvanceAndReadOwnedObjectives) {
     EXPECT_EQ(state["quest_objectives"]["multi"]["people"],2);
 }
 
+TEST_F(ModNativeV2, AbandonUsesSharedOwnedQuestLifecycle) {
+    LoadPlugin("abandon");runtime.Tick({2,0,0,true,0,1});ASSERT_TRUE(runtime.Diagnostics().empty());
+    const auto state=Json::parse(runtime.SaveState())["mods"]["test.native.v2"];
+    EXPECT_EQ(state["values"]["abandoned"],true);EXPECT_FALSE(state.contains("quests"));
+    ASSERT_EQ(runtime.Quests().size(),1u);EXPECT_EQ(runtime.Quests()[0].progress,0);
+}
+
 TEST_F(ModNativeV2, TransitionReadinessUsesNativeEventMaskAndSnapshot) {
     LoadPlugin("skills");int calls=0;
     mods::QueryGame query=[&](std::string_view op,const Json &){EXPECT_EQ(op,"world.transition_state");++calls;return Json{{"ready",true},{"reason",""}};};

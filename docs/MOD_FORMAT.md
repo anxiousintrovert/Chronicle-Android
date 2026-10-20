@@ -115,6 +115,7 @@ This is the format of a standalone, installable package; ship `main.lua` beside 
 | `skills.trees.v1` | Owned skill definitions, prerequisites, ranks and shared-manager browsing |
 | `quests.events.v1` | Owned objectives driven by existing map/floor/death events |
 | `quests.rewards.v1` | Transactional one-time quest currency/item/weapon rewards |
+| `quests.abandon.v1` | Cancel unfinished explicit-start dynamic quests and return to registered |
 | `quests.lifecycle.v1` | Opt-in explicit quest start and registered/active/completed status |
 | `quests.objectives.v1` | Dynamic quests with up to 16 independently tracked named objectives |
 | `quests.dynamic.v1` | Transactional registration and progression of owned saved objectives |

@@ -496,3 +496,45 @@ TEST_F(ModDynamicQuestRuntime, ShippedSignalPackagesRequireProviderAndPersistCom
     runtime.Tick(world);runtime.Tick(world);EXPECT_EQ(runtime.SaveState(),completed);
     EXPECT_EQ(runtime.Quests()[0].progress,1);EXPECT_TRUE(runtime.Diagnostics().empty());
 }
+
+TEST(ModDynamicQuests, AbandonClearsOnlyUnfinishedExplicitQuestAndPreservesDefinition) {
+    mods::Package package;Json state=Json::object();auto definition=MultiDefinition();definition["explicit_start"]=true;
+    mods::CallOwnedQuest(package,state,"quests.register",definition);
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.abandon",{{"id","multi"}}),std::runtime_error);
+    mods::CallOwnedQuest(package,state,"quests.start",{{"id","multi"}});
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective","supplies"},{"amount",1}});
+    mods::CallOwnedQuest(package,state,"quests.fail",{{"id","multi"},{"reason","Try again"}});
+    mods::CallOwnedQuest(package,state,"quests.register",Definition("other"));
+    mods::CallOwnedQuest(package,state,"quests.advance",{{"id","other"},{"amount",1}});
+    const auto definitions=state["quest_definitions"];
+    const auto status=mods::CallOwnedQuest(package,state,"quests.abandon",{{"id","multi"}});
+    EXPECT_EQ(status["status"],"registered");EXPECT_EQ(status["progress"],0);EXPECT_FALSE(status.contains("failure_reason"));
+    EXPECT_EQ(state["quest_definitions"],definitions);EXPECT_EQ(state["quests"]["other"],1);
+    EXPECT_FALSE(state.contains("quest_objectives"));EXPECT_FALSE(state.contains("quest_started"));EXPECT_FALSE(state.contains("quest_failed"));
+    EXPECT_NO_THROW(mods::QuestDefinitions(package,state));
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.abandon",{{"id","other"}}),std::runtime_error);
+    mods::CallOwnedQuest(package,state,"quests.start",{{"id","multi"}});
+    for(const auto *id:{"supplies","villagers"})mods::CallOwnedQuest(package,state,"quests.advance",{{"id","multi"},{"objective",id},{"amount",3}});
+    const auto complete=state;EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.abandon",{{"id","multi"}}),std::runtime_error);EXPECT_EQ(state,complete);
+    package.quests.push_back({"manifest","Title","Description",2,-1});
+    EXPECT_THROW(mods::CallOwnedQuest(package,state,"quests.abandon",{{"id","manifest"}}),std::runtime_error);
+}
+TEST_F(ModDynamicQuestRuntime, AbandonRollsBackWithCallbackAndRestoresAsRegistered) {
+    Add("test.mod",R"(assert(chronicle.action('abandon','Abandon','Restart later',function()
+        assert(chronicle.call('quests.abandon',{id='contract'}))
+        if chronicle.get('reject') then error('rollback') end
+    end));return {on_game_enter=function()
+        assert(chronicle.call('quests.register',{id='contract',title='Contract',description='Test',explicit_start=true,
+          objectives={{id='kills',title='Kills',goal=3,event='enemy_killed'}}}))
+    end})");Start();const mods::World world{2,0,0,true,0,1};runtime.Tick(world);
+    auto saved=Json::parse(runtime.SaveState());auto &state=saved["mods"]["test.mod"];
+    state["quest_started"]["contract"]=true;state["quests"]["contract"]=1;state["quest_objectives"]["contract"]["kills"]=1;
+    std::string error;ASSERT_TRUE(runtime.LoadState(saved.dump(),error))<<error;runtime.Tick(world);EXPECT_TRUE(runtime.WantsEnemyDeaths());
+    ASSERT_TRUE(runtime.QueueAction("test.mod","abandon",error));runtime.Tick(world);
+    EXPECT_FALSE(runtime.WantsEnemyDeaths());EXPECT_EQ(runtime.Quests()[0].progress,0);
+    const auto abandoned=runtime.SaveState();runtime.ResetState();ASSERT_TRUE(runtime.LoadState(abandoned,error));runtime.Tick(world);
+    EXPECT_EQ(runtime.SaveState(),abandoned);EXPECT_FALSE(runtime.WantsEnemyDeaths());
+    saved["mods"]["test.mod"]["values"]["reject"]=true;ASSERT_TRUE(runtime.LoadState(saved.dump(),error));runtime.Tick(world);
+    const auto before=runtime.SaveState();ASSERT_TRUE(runtime.QueueAction("test.mod","abandon",error));runtime.Tick(world);
+    EXPECT_EQ(runtime.SaveState(),before);EXPECT_FALSE(runtime.Diagnostics().empty());
+}

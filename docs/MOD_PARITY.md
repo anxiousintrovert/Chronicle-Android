@@ -9,7 +9,7 @@ documentation and Chronicle integration. Catalog names alone do not prove that
 the reference has a working native implementation of every operation.
 
 **Full capability parity has not been reached.** The initial expansion supplies
-a real host-call boundary, 155 implemented operations, native plugins and author
+a real host-call boundary, 156 implemented operations, native plugins and author
 tools. It does not expose unimplemented engine hooks as successful no-ops.
 
 | Area | Current Chronicle framework | Remaining coverage |
@@ -4279,3 +4279,22 @@ executes the shipped files, including denied prerequisite requests, deferred
 training, save/load and complete rank reset. All 81 Python author-tool tests pass,
 including starter validation and pack/install preservation. No engine or PS2
 source changed, and the upstream renderer pin remains untouched.
+
+## Explicit quest abandonment (2026-10-20)
+
+`quests.abandon.v1` adds the shared Lua/native `quests.abandon` write operation.
+Only started, unfinished explicit-start dynamic quests are eligible. It clears
+that quest's counters, start marker and failure reason, preserving definitions
+and unrelated state. Event progress remains inactive until restarted. Completed
+quests cannot be reset to replay rewards, and cancellation does not refund costs
+or reverse native world changes. Authors choose whether to expose a shared-menu
+action; no automatic gameplay policy or additional native hook is installed.
+
+Tests cover owner/type/lifecycle restrictions, objective/failure cleanup, saved
+registered state, event-demand cleanup, callback rollback and native ABI 2 calls.
+Broader branching/stage lifecycle remains planned rather than implied complete.
+
+Clang 23.1.2 game/test builds passed. Full regression: 1,060 passed, 107
+skipped, one disabled; all 81 Python author-tool tests passed. No PS2 files or
+upstream renderer changes. Validation is automated runtime/native-plugin coverage,
+not a new retail quest playthrough.

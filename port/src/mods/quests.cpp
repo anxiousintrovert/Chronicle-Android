@@ -70,7 +70,7 @@ std::string ValidateQuestOperation(std::string_view operation,const Json &a) {
     if(!a.is_object())return "quest arguments must be an object";
     if(operation=="quests.list")return a.empty()?"":"quests.list takes no arguments";
     if(!a.contains("id")||!Id(a["id"]))return "invalid quest id";
-    if(operation=="quests.get"||operation=="quests.start"||operation=="quests.resume")return a.size()==1?"":"provide only quest id";
+    if(operation=="quests.get"||operation=="quests.start"||operation=="quests.resume"||operation=="quests.abandon")return a.size()==1?"":"provide only quest id";
     if(operation=="quests.fail")return a.size()==2&&a.contains("reason")&&Text(a["reason"])?"":"quest failure requires id and a nonempty reason up to 256 bytes";
     if(operation=="quests.register") {
         const auto fields=4u+unsigned(a.contains("explicit_start"))+unsigned(a.contains("rewards"));
@@ -273,6 +273,15 @@ Json CallOwnedQuest(const Package &package,Json &state,std::string_view operatio
         } else {
             Require(Failed(id,state),"quest is not failed");staged["quest_failed"].erase(id);
             if(staged["quest_failed"].empty())staged.erase("quest_failed");
+        }
+        const auto result=Status(*found,staged);state.swap(staged);return result;
+    }
+    if(operation=="quests.abandon") {
+        Require(ExplicitStart(id,state),"abandon requires an owned explicit-start dynamic quest");
+        Require(Started(id,state)&&!Status(*found,state)["complete"].get<bool>(),"abandon requires a started incomplete quest");
+        auto staged=state;
+        for(const char *field:{"quests","quest_objectives","quest_started","quest_failed"})if(staged.contains(field)) {
+            staged[field].erase(id);if(staged[field].empty())staged.erase(field);
         }
         const auto result=Status(*found,staged);state.swap(staged);return result;
     }
